@@ -1,0 +1,10 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Personal seed data (name, contact details, work history)
+db/seed_personal.sql
+
+# Personal Claude Code overrides
+.claude/settings.local.json

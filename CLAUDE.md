@@ -15,6 +15,11 @@ Status: planning. The design lives in `docs/`; no application code yet. All plan
 - [docs/DATABASE.md](docs/DATABASE.md): every table, column, and relationship. Read before writing schema, migrations, or queries.
 - [docs/FRONTEND_CHECKS.md](docs/FRONTEND_CHECKS.md): rules the database doesn't enforce. Read before building anything that adds, suggests, or deletes data.
 
+## Project skills and hooks
+- `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
+- `/seed-resume`: translate an existing resume (PDF or pasted text) into INSERT statements in `db/seed_personal.sql` (gitignored).
+- Hooks in `.claude/settings.json`: a PreToolUse hook blocks access to `.env` files; a PostToolUse hook runs `ruff` on edited Python files and `tsc` on edited TypeScript files once those tools are installed.
+
 ## Conventions
 - The docs are the source of truth. When the design changes, update the relevant doc in the same change.
 - App-side checks are documented in two places on purpose: as a note under the table in DATABASE.md, and in FRONTEND_CHECKS.md. Add new ones to both.
