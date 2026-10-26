@@ -10,10 +10,10 @@ How the app turns a job posting url into a tailored resume and cover letter, and
 
 ## User flow
 1. **Enter the url.** The app extracts the job description as described above and saves it as a `job_posting` with the company and job title.
-2. **Choose a starting point.** The app suggests base resumes and earlier tailored resumes that fit the posting. The user can start from a copy of one of them, which keeps its sections and selections ready to adjust, or start fresh. Either way the result is saved as a new version linked to this posting, and the original is not changed.
+2. **Choose a starting point.** The app suggests base resumes and earlier tailored resumes that fit the posting. The user can start from a copy of one of them, which keeps its sections and selections ready to adjust, or start fresh. They also set the resume's headline, the job title shown under their name (the app suggests one based on the posting), and choose a tone set, if any. Either way the result is saved as a new version linked to this posting, and the original is not changed.
 3. **Choose sections.** The app suggests which sections to include and in what order. Usually that's all of them, but it may leave some out, such as freelance experience or projects, when they don't fit the job. The user can add, remove, or reorder sections.
 4. **Build each section.** Starting with the first selected section (usually the summary), the app suggests the content that belongs in that section:
-   - **Summary / narrative content:** which existing text to use
+   - **Summary / narrative content:** which existing sentences to use, and in what order
    - **Skills:** which skill categories and skills to include, and their order
    - **Experience:** which jobs to include and which bullet points for each
    - **Projects:** which projects to include, which of their skills to show, and which bullet points to use
@@ -26,9 +26,9 @@ How the app turns a job posting url into a tailored resume and cover letter, and
    - make their own edits or describe their own ideas for the app to work from
 
    The app moves to the next section once the user is happy with the current one, until every selected section is built.
-5. **Build the cover letter.** It follows the same steps: choose a starting point, choose sections, then choose and adjust the narrative content for each one.
+5. **Build the cover letter.** It's linked to the resume from step 4 and the same job posting, and its header matches that resume. It follows the same steps: choose a starting point, choose sections, then choose, order, and adjust the sentences for each one.
 6. **Review the whole thing.** The app reviews the finished resume and cover letter together. It checks how well they cover the job's keywords, and looks for repeated wording, inconsistencies, and anything that breaks the writing rules.
-7. **Output** the final text. The user can record the date they applied on the job posting.
+7. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export. The user can record the date they applied on the job posting.
 
 ## Base resumes
 Base resumes and cover letters aren't tied to a job posting. They're ongoing starting points the user keeps coming back to, such as a general tech resume or a teaching resume. The seeded data starts out as base resumes.
@@ -41,4 +41,4 @@ Suggestions are based on:
 - **Keyword matching:** skills, tools, qualifications, and values named in the posting, compared against the content in the database.
 - **AI judgment:** the same kind of review an AI does when asked in chat to tailor a resume. That includes relevance to the role, strength of results and impact, mirroring the posting's language where it's accurate, and order (strongest match first).
 
-Beyond choosing existing content, the app also suggests improvements, such as rewording a bullet point, reordering skills, or rephrasing part of the cover letter. When the user accepts a reworded or new bullet point, it's saved as a new `bullet_point` row linked to the same section, experience, or project, so it can be reused later. The original bullet stays in the library.
+Beyond choosing existing content, the app also suggests improvements, such as rewording a bullet point, reordering skills, or rephrasing part of the cover letter. When the user accepts a reworded or new bullet point, it's saved as a new `bullet_point` row linked to the same section, experience, or project. An accepted reworded or new sentence (in a summary or cover letter) is saved the same way, as a new `narrative_content` row linked to the same section. Either way the new row can be reused later, takes the original's place in the current resume or cover letter, and the original stays in the library.

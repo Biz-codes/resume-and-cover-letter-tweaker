@@ -1,23 +1,23 @@
 # Open Questions
 
-Decisions and gaps to resolve before coding starts. When one is answered, record the decision in the relevant doc and remove it from this list.
+Decisions and gaps to resolve before coding starts. When one is answered, record the decision in the relevant doc and mark it decided here with a link.
 
 ## Decisions (highest priority)
-1. **Tech stack:** the language and framework for the backend and the user interface. Postgres is already assumed (`SERIAL`, `NOW()`). Web app running locally, hosted site, or desktop app?
-2. **Single user?** The database has no users or accounts. That's fine if the app is only for its owner, but it's hard to add later.
-3. **AI provider:** which model and API to use, and how the API key is provided.
-4. **Output format:** plain text to copy and paste, or exported .docx or PDF files with a layout? Exported files need templates and formatting rules.
+1. ~~**Tech stack**~~: decided. See [TECH_STACK.md](TECH_STACK.md).
+2. ~~**Single user?**~~: decided. One account for now, with `account` and `account_id` in place for multiple accounts later. See [DATABASE.md](DATABASE.md).
+3. ~~**AI provider**~~: decided. Claude Opus 5.5 through the `anthropic` Python SDK. See [TECH_STACK.md](TECH_STACK.md).
+4. ~~**Output format**~~: decided. Plain text to copy and paste. See [APP_FLOW.md](APP_FLOW.md).
 
 ## Missing data
-5. **Header information:** there's nowhere to store name, email, phone, LinkedIn, or portfolio links. Every resume and cover letter needs these.
-6. **Cover letter details:** the date, the company's address, and the closing aren't modeled. They could belong on the cover letter or be filled in from the job posting.
-7. **Thin tables:**
-   - `project` has only a title. Probably needs a description, a link, and dates.
-   - `education` has no field of study or dates attended.
-   - `narrative_content` has no label, so different summaries would be hard to tell apart in a list.
-8. **Writing rules and tone rules:** [WRITING_RULES.md](WRITING_RULES.md) says these need storage, but the tables aren't designed yet.
+5. ~~**Header information**~~: decided. Name, contact details, and links on `account`, plus a `headline` on each resume. See [DATABASE.md](DATABASE.md).
+6. ~~**Cover letter details**~~: decided. No date, address, or closing fields. The header matches the linked resume through `cover_letter.resume_id`. See [DATABASE.md](DATABASE.md).
+7. ~~**Thin tables**~~: decided.
+   - ~~`project`~~: decided. Added optional `url` and `dates`. No description, since bullet points and skills cover it.
+   - ~~`education`~~: decided. Added an optional `details` column. `degree` includes the field of study, and `graduation` includes any honors.
+   - ~~`narrative_content`~~: decided. No label. Each row is usually one sentence, and sections group and order them.
+8. ~~**Writing rules and tone rules**~~: decided. `writing_rule`, `tone_set`, and `tone_rule` tables, plus an optional `tone_set_id` on `resume` and `cover_letter`. See [DATABASE.md](DATABASE.md).
 
 ## Risks to plan for
-9. **Job site scraping:** many sites (LinkedIn, Workday, Indeed) load content with JavaScript or block automated requests, so fetching the url won't always work. Plan a fallback where the user pastes in the job description text.
-10. **Section titles:** the app decides what a section holds from its free-text `title`. A `section_type` column (summary, skills, experience, projects, education, cover letter paragraph) would be more reliable, and titles could change without breaking anything.
-11. **Seed data format:** what form is the existing resume data in (.docx, PDF, text)? That decides whether to build an import step or enter it by hand.
+9. ~~**Job site scraping**~~: decided. If fetching fails, the user pastes in the job description text. See [TECH_STACK.md](TECH_STACK.md).
+10. ~~**Section titles**~~: decided. Titles are free-form names and never used for logic. Any content can go in any section; a library item's `section_id` is only its home section, used to rank suggestions. Five built-in sections can't be deleted or renamed. See [DATABASE.md](DATABASE.md).
+11. ~~**Seed data format**~~: decided. Existing resumes (PDF or pasted text) are translated into a SQL seed file of `INSERT` statements, kept out of git. See [DATABASE.md](DATABASE.md).
