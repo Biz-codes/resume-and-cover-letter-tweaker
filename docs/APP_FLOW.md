@@ -8,6 +8,8 @@ How the app turns a job posting url into a tailored resume and cover letter, and
 3. Pull out its text, including any description of the company, its mission, and its values. Those are used for the cover letter and for tone.
 4. Show the extracted text to the user so they can fix anything that was missed or picked up by mistake.
 
+If the page can't be fetched (many job sites block automated requests) or no job description is found, the app shows a box for pasting in the job description instead (`POSTING_FETCH_FAILED`, see [API_ERRORS.md](API_ERRORS.md)). If a Claude request fails at any step, the user's work so far is kept and they can retry (`AI_UNAVAILABLE`).
+
 ## User flow
 1. **Enter the url.** The app extracts the job description as described above and saves it as a `job_posting` with the company and job title.
 2. **Choose a starting point.** The app suggests base resumes and earlier tailored resumes that fit the posting. The user can start from a copy of one of them, which keeps its sections and selections ready to adjust, or start fresh. They also set the resume's headline, the job title shown under their name (the app suggests one based on the posting), and choose a tone set, if any. Either way the result is saved as a new version linked to this posting, and the original is not changed.
@@ -26,9 +28,17 @@ How the app turns a job posting url into a tailored resume and cover letter, and
    - make their own edits or describe their own ideas for the app to work from
 
    The app moves to the next section once the user is happy with the current one, until every selected section is built.
-5. **Build the cover letter.** It's linked to the resume from step 4 and the same job posting, and its header matches that resume. It follows the same steps: choose a starting point, choose sections, then choose, order, and adjust the sentences for each one.
+5. **Build the cover letter.** It's linked to the resume from step 4 and the same job posting, and its header matches that resume. It follows the same steps: choose a starting point, choose sections, then choose, order, and adjust each section's content (usually sentences, but any kind of content the user wants). The app sets the greeting ("Dear [company] Hiring Team,") and the sign-off ("Sincerely," and the user's name), and the user can change either.
 6. **Review the whole thing.** The app reviews the finished resume and cover letter together. It checks how well they cover the job's keywords, and looks for repeated wording, inconsistencies, and anything that breaks the writing rules.
-7. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export. The user can record the date they applied on the job posting.
+7. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export.
+
+   Plain-text layout:
+   - **Header:** name, then the headline, then contact details and links on one line separated by ` | `.
+   - **Resume sections:** the section title, then its content.
+   - **Skills:** one line per category, like `Category: skill, skill, skill`.
+   - **Experience:** `Job Title | Company | Location | Dates`, then its bullets. Projects and education follow the same pattern.
+   - **Bullets:** each starts with `- `.
+   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name. The user can record the date they applied on the job posting.
 
 ## Base resumes
 Base resumes and cover letters aren't tied to a job posting. They're ongoing starting points the user keeps coming back to, such as a general tech resume or a teaching resume. The seeded data starts out as base resumes.

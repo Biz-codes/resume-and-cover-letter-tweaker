@@ -19,7 +19,7 @@ The output goes in `db/seed_personal.sql`. That file is listed in `.gitignore` b
 - **Sections:** use the five built-in sections ("Summary", "Skills", "Experience", "Projects", "Education") where they fit. Create other sections as user sections with the resume's own heading, such as "Freelance and Consulting Experience".
 - **Every library item needs a `section_id`** (its home section).
 - **Summary** → `narrative_content`, one row per sentence.
-- **Skills** → `skill_category` and `skill`. Keep the resume's own grouping and order.
+- **Skills** → `skill_category` and `skill`. Keep the resume's own grouping and order. Skills the resume doesn't group go in the built-in "Other" category (id 1).
 - **Experience** → `experience` (`job_title`, `company`, `location`, `dates` as displayed), plus one `bullet_point` per bullet with `experience_id` set.
 - **Projects** → `project` (`project_title`, `url`, `dates`), plus `project_skill` for each skill listed, plus bullets with `project_id` set.
 - **Education** → `education` (`degree` with field of study, `institution`, `details`, `graduation` with honors).

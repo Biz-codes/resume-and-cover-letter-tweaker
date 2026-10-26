@@ -17,3 +17,4 @@ The app reads a job posting, then helps the user build a resume and cover letter
 - [Writing Rules](docs/WRITING_RULES.md): banned filler and AI-speak, and user-defined tone rules
 - [Database](docs/DATABASE.md): library tables, join tables, and delete behavior
 - [Front End Checks](docs/FRONTEND_CHECKS.md): rules the database doesn't enforce, which the app must handle
+- [API Errors](docs/API_ERRORS.md): error codes and how failures are handled
