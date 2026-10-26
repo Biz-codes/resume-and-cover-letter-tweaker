@@ -6,7 +6,7 @@ Purpose: replace tailoring resumes in AI chat with an app that saves every versi
 
 Guiding principle: the app and AI do most of the heavy lifting (extracting, matching, suggesting, rewording), but the user has final control. The app suggests and the user decides. Nothing is added, changed, saved over, or deleted without the user's approval.
 
-Status: planning. The design lives in `docs/`; no application code yet. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up.
+Status: design done, building next. The design lives in `docs/`; no application code yet. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up. **Start every build session with [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)**: work on the first unchecked item, check items off as they're done, and update this status line as phases finish.
 
 ## Which doc to read
 - [docs/TECH_STACK.md](docs/TECH_STACK.md): Python/FastAPI, Postgres 18 (Homebrew) with SQLAlchemy and Alembic, React/TypeScript with Vite, project layout, Claude Opus 5.5 through the `anthropic` SDK, running locally. Read before setting up or adding to the codebase, and before writing any Claude API code.
@@ -19,6 +19,7 @@ Status: planning. The design lives in `docs/`; no application code yet. All plan
 ## Project skills and hooks
 - `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
 - `/seed-resume`: translate an existing resume (PDF or pasted text) into INSERT statements in `db/seed_personal.sql` (gitignored).
+- **Suggest workflow improvements.** While working on the app, when a repeated task, a recurring mistake, or a manual step could be handled better by a new hook, skill, subagent, MCP server, or permission rule, suggest it to the user: say what it would do and why, in a sentence or two. Don't set it up without the user's approval.
 - Hooks in `.claude/settings.json`: a PreToolUse hook blocks access to `.env` files; a PostToolUse hook runs `ruff` on edited Python files and `tsc` on edited TypeScript files once those tools are installed.
 
 ## Conventions

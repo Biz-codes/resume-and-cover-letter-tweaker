@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook: lint or type-check a file right after Claude edits it.
 
-- .py files: `ruff check` (skipped if ruff isn't installed).
-- .ts/.tsx files: `tsc --noEmit` in the nearest folder with a tsconfig.json
-  (skipped if there's no tsconfig or no local TypeScript install).
+- .py files: `ruff check`, using ruff from the nearest .venv (e.g. backend/.venv)
+  or from PATH (skipped if ruff isn't installed).
+- .ts/.tsx files: `tsc -b` in the nearest folder with a tsconfig.json, which follows
+  Vite's project references (skipped if there's no tsconfig or no local TypeScript install).
 Problems exit with code 2 so Claude sees them and can fix them.
 """
 import json
@@ -20,6 +21,14 @@ def run(cmd, cwd=None):
         sys.exit(2)
 
 
+def find_ruff(path):
+    for folder in path.parents:
+        venv_ruff = folder / ".venv" / "bin" / "ruff"
+        if venv_ruff.exists():
+            return str(venv_ruff)
+    return shutil.which("ruff")
+
+
 def main():
     data = json.load(sys.stdin)
     file_path = data.get("tool_input", {}).get("file_path", "")
@@ -28,7 +37,7 @@ def main():
     path = Path(file_path)
 
     if path.suffix == ".py":
-        ruff = shutil.which("ruff")
+        ruff = find_ruff(path)
         if ruff:
             run([ruff, "check", str(path)])
 
@@ -37,7 +46,7 @@ def main():
             if (folder / "tsconfig.json").exists():
                 tsc = folder / "node_modules" / ".bin" / "tsc"
                 if tsc.exists():
-                    run([str(tsc), "--noEmit", "-p", str(folder)], cwd=folder)
+                    run([str(tsc), "-b"], cwd=folder)
                 return
 
 
