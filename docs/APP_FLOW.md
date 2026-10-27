@@ -11,26 +11,37 @@ How the app turns a job posting url into a tailored resume and cover letter, and
 If the page can't be fetched (many job sites block automated requests) or no job description is found, the app shows a box for pasting in the job description instead (`POSTING_FETCH_FAILED`, see [API_ERRORS.md](API_ERRORS.md)). If a Claude request fails at any step, the user's work so far is kept and they can retry (`AI_UNAVAILABLE`).
 
 ## User flow
-1. **Enter the url.** The app extracts the job description as described above and saves it as a `job_posting` with the company and job title.
-2. **Choose a starting point.** The app suggests base resumes and earlier tailored resumes that fit the posting. The user can start from a copy of one of them, which keeps its sections and selections ready to adjust, or start fresh. They also set the resume's headline, the job title shown under their name (the app suggests one based on the posting), and choose a tone set, if any. Either way the result is saved as a new version linked to this posting, and the original is not changed.
-3. **Choose sections.** The app suggests which sections to include and in what order. Usually that's all of them, but it may leave some out, such as freelance experience or projects, when they don't fit the job. The user can add, remove, or reorder sections.
-4. **Build each section.** Starting with the first selected section (usually the summary), the app suggests the content that belongs in that section:
+Everything for an application hangs off its job posting. A resume and a cover letter aren't linked to each other directly; both belong to the posting and share its header.
+
+1. **Create the job posting.** The user enters the url. The app extracts the job description as described above and saves it as a `job_posting` with the company and job title.
+2. **Choose the posting's header.** The app suggests a header: the user's name and contact details from their most recent header, with a headline (the job title shown under their name) based on the posting. The user accepts it, edits it, or picks another saved header. A changed headline or contact detail is saved as a new header, so earlier resumes and cover letters keep theirs. The choice is saved as the posting's header.
+3. **Start a resume or cover letter for the posting.** Either can come first. Each starts with the posting's header, and the user is asked to use it, edit it, or pick another saved header. The app suggests starting points that fit the posting: base versions and earlier tailored ones. The user can start from a copy of one of them, which keeps its sections and selections ready to adjust, or start fresh, and choose a tone set, if any. Either way the result is saved as a new version linked to this posting, and the original is not changed.
+4. **Choose sections.** Steps 4 and 5 work in whatever order the user likes (see "Working in any order" below). The app suggests which sections to include and in what order. Usually that's all of them, but it may leave some out, such as freelance experience or projects, when they don't fit the job. The user can add, remove, or reorder sections.
+5. **Build each section.** For whichever section the user is working on, the app suggests the content that belongs in it:
    - **Summary / narrative content:** which existing sentences to use, and in what order
    - **Skills:** which skill categories and skills to include, and their order
-   - **Experience:** which jobs to include and which bullet points for each
-   - **Projects:** which projects to include, which of their skills to show, and which bullet points to use
+   - **Experience:** which jobs to include and which bullet points for each, chosen from all the bullets listed under that job: the ones that best fit the posting, leaving out near-duplicates of each other
+   - **Projects:** which projects to include, which of their skills to show, and which bullet points to use, chosen the same way
    - **Education:** which entries to include
 
    For each suggestion the user can:
    - accept it
-   - review alternate existing bullet points for the same job or project and pick different ones
+   - swap a bullet for another one listed under the same job or project
+   - ask for a variation of a bullet, or write a new one; either is saved as a new bullet listed under that job or project
    - ask the app for further tweaks
    - make their own edits or describe their own ideas for the app to work from
 
-   The app moves to the next section once the user is happy with the current one, until every selected section is built.
-5. **Build the cover letter.** It's linked to the resume from step 4 and the same job posting, and its header matches that resume. It follows the same steps: choose a starting point, choose sections, then choose, order, and adjust each section's content (usually sentences, but any kind of content the user wants). The app sets the greeting ("Dear [company] Hiring Team,") and the sign-off ("Sincerely," and the user's name), and the user can change either.
-6. **Review the whole thing.** The app reviews the finished resume and cover letter together. It checks how well they cover the job's keywords, and looks for repeated wording, inconsistencies, and anything that breaks the writing rules.
-7. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export.
+   When the user moves on to another section, the app suggests content for it the same way.
+
+   **Working in any order.** The user decides how to build the resume, and can switch approaches at any time:
+   - lay out all the sections first, then go back and fill each one
+   - go section by section from the start, choosing content as each section is added
+   - add sections in any order, reorder them, and remove them at any point
+
+   Nothing is final until the user is done: any section's content, the section order, the header, and the tone set can all be changed until then. The cover letter works the same way. Once the user records the date they applied, the posting's resume and cover letter are locked as a record of what was sent; later changes go in a copy.
+6. **Build the cover letter.** It follows the same steps under the same posting: header, starting point, sections, then choose, order, and adjust each section's content (usually sentences, but any kind of content the user wants). Each paragraph is a section. When the user writes a new paragraph, the app suggests a short title from its content (e.g. "intro", "key technical demands"), reusing an existing section when the paragraph plays the same role. The user can change it. Titles are never printed in the letter. The app sets the greeting ("Dear [company] Hiring Team,") and the sign-off ("Sincerely," and the user's name), and the user can change either.
+7. **Review the whole thing.** The app reviews the posting's finished resume and cover letter together. It checks how well they cover the job's keywords, and looks for repeated wording, inconsistencies, and anything that breaks the writing rules.
+8. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export.
 
    Plain-text layout:
    - **Header:** name, then the headline, then contact details and links on one line separated by ` | `.
@@ -38,7 +49,7 @@ If the page can't be fetched (many job sites block automated requests) or no job
    - **Skills:** one line per category, like `Category: skill, skill, skill`.
    - **Experience:** `Job Title | Company | Location | Dates`, then its bullets. Projects and education follow the same pattern.
    - **Bullets:** each starts with `- `.
-   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name. The user can record the date they applied on the job posting.
+   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name (the letter's `signature_name`, or the header's `full_name` when that's empty). On the job posting, the user can record the date they applied, the date they were turned down or hired, and contacts such as the hiring manager or a referral. They can add interviews (date and notes), and link one interview to several of the company's postings when it covered more than one opening.
 
 ## Base resumes
 Base resumes and cover letters aren't tied to a job posting. They're ongoing starting points the user keeps coming back to, such as a general tech resume or a teaching resume. The seeded data starts out as base resumes.

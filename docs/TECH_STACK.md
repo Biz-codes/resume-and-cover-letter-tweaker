@@ -18,9 +18,23 @@
 ## Project layout and tooling
 - `backend/`: FastAPI app, SQLAlchemy models, Alembic migrations, tests. Python packages in a `venv` installed with pip.
 - `frontend/`: Vite + React + TypeScript app.
-- `db/`: seed SQL files (`seed_defaults.sql` committed, `seed_personal.sql` gitignored).
+- `db/`: seed SQL files (`seed_defaults.sql` and `seed_helpers.sql` committed; `seed_personal/`, one file per resume, gitignored).
 - **Tests:** pytest for the backend, Vitest for the front end.
 - **Linting:** ruff (Python) and tsc (TypeScript), run automatically by a Claude Code hook after each edit.
+
+## Running it
+Postgres 18 runs as a Homebrew service on port 5433 (see [BUILD_PLAN.md](BUILD_PLAN.md)). From `backend/`:
+- `.venv/bin/alembic upgrade head`: apply migrations to the app database
+- `.venv/bin/uvicorn app.main:app --reload`: start the API on port 8000
+- `.venv/bin/pytest`: run the backend tests (against `TEST_DATABASE_URL`, whose schema they rebuild)
+- `.venv/bin/alembic revision --autogenerate -m "..."`: create a migration after changing `app/models.py`
+
+From the project root:
+- `scripts/check.sh`: run every check (backend lint, tests, and schema drift; front end types, lint, and tests). The git pre-commit hook runs it too.
+
+From `frontend/`:
+- `npm run dev`: start the app at http://localhost:5173 (it forwards `/api` to the backend)
+- `npm test`: run the front end tests
 
 ## AI integration
 - **Direct API calls, not an agent.** The user flow is a fixed sequence, so the backend runs each step and makes one Claude request per step: extract the posting, suggest sections, suggest each section's content, suggest rewordings, review the whole thing.

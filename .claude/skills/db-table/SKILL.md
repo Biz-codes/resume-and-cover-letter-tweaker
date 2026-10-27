@@ -13,7 +13,7 @@ The schema lives in `docs/DATABASE.md`. It's the source of truth, so every schem
 
 2. **Write the table** in the existing format:
    - Heading `### table_name`, then a table with the columns `Column | Type | Constraints | Description`, with the pipes aligned.
-   - Library tables go under `## Tables`. Join tables for a resume or cover letter go under `## Join Tables`.
+   - Library tables go under `## Tables`. Tables where a library parent lists its children go under `## Library Join Tables`. Join tables for a resume or cover letter go under `## Join Tables`.
    - Descriptions follow the set patterns:
      - primary key: `unique X id`
      - foreign key: `id of related X`
@@ -24,8 +24,9 @@ The schema lives in `docs/DATABASE.md`. It's the source of truth, so every schem
    - **Primary key:** `SERIAL PRIMARY KEY` named `<table>_id` (except `section.id`).
    - **Ownership:** every top-level table has `account_id INTEGER NOT NULL REFERENCES account(account_id) ON DELETE CASCADE`. Join tables don't; they belong to an account through their resume or cover letter.
    - **Timestamps:** library tables get `created_at` and `updated_at` (`TIMESTAMP`, `DEFAULT NOW()`). Join tables get none.
+   - **Library items stand alone:** no parent id columns. A parent lists its children in a library join table with a (parent, child) primary key, a `position INTEGER NOT NULL` for default order, and no timestamps.
    - **Join tables** under a resume or cover letter get their own `SERIAL` id, a `position INTEGER NOT NULL`, and a `Unique:` line under the table.
-   - **Foreign keys** use `ON DELETE CASCADE` unless the user decides otherwise. Current exceptions use `ON DELETE SET NULL`: `based_on_resume_id`, `based_on_letter_id`, `tone_set_id`, and `sign_off_id`. `skill.category_id` uses `ON DELETE SET DEFAULT` (moves skills to the built-in "Other" category). If a cascade would delete a resume or cover letter because something it merely uses was deleted, ask the user whether it should be an exception.
+   - **Foreign keys** use `ON DELETE CASCADE` unless the user decides otherwise. Current exceptions use `ON DELETE SET NULL`: `based_on_resume_id`, `based_on_letter_id`, `tone_set_id`, `header_id`, and `sign_off_id`. If a cascade would delete a resume or cover letter because something it merely uses was deleted, ask the user whether it should be an exception.
    - **Enums** are Postgres enum types. Name the type in the Type column and list its values in a note.
 
 4. **Explain the change** with a `Note:` line under the table when the design isn't obvious from the columns.

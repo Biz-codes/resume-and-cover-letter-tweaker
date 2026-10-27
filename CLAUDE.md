@@ -6,7 +6,7 @@ Purpose: replace tailoring resumes in AI chat with an app that saves every versi
 
 Guiding principle: the app and AI do most of the heavy lifting (extracting, matching, suggesting, rewording), but the user has final control. The app suggests and the user decides. Nothing is added, changed, saved over, or deleted without the user's approval.
 
-Status: design done, building next. The design lives in `docs/`; no application code yet. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up. **Start every build session with [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)**: work on the first unchecked item, check items off as they're done, and update this status line as phases finish.
+Status: phase 1 (project setup) done; phase 2 (seed personal data) in progress: Tech base, the Neptune resume, and the Neptune cover letter are loaded. The design lives in `docs/`. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up. **Start every build session with [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)**: work on the first unchecked item, check items off as they're done, and update this status line as phases finish.
 
 ## Which doc to read
 - [docs/TECH_STACK.md](docs/TECH_STACK.md): Python/FastAPI, Postgres 18 (Homebrew) with SQLAlchemy and Alembic, React/TypeScript with Vite, project layout, Claude Opus 5.5 through the `anthropic` SDK, running locally. Read before setting up or adding to the codebase, and before writing any Claude API code.
@@ -18,19 +18,23 @@ Status: design done, building next. The design lives in `docs/`; no application 
 
 ## Project skills and hooks
 - `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
-- `/seed-resume`: translate an existing resume (PDF or pasted text) into INSERT statements in `db/seed_personal.sql` (gitignored).
+- `/seed-resume`: translate an existing resume or cover letter (PDF or pasted text) into a SQL file in `db/seed_personal/` (gitignored), reusing library items that already exist instead of duplicating them. Sent versions are copied exactly as sent.
 - **Suggest workflow improvements.** While working on the app, when a repeated task, a recurring mistake, or a manual step could be handled better by a new hook, skill, subagent, MCP server, or permission rule, suggest it to the user: say what it would do and why, in a sentence or two. Don't set it up without the user's approval.
+- `/check`: run every automated check (`scripts/check.sh`), confirm nothing secret or personal would be committed, and sweep the docs for leftovers from design changes. Use before the user commits and after design changes.
 - Hooks in `.claude/settings.json`: a PreToolUse hook blocks access to `.env` files; a PostToolUse hook runs `ruff` on edited Python files and `tsc` on edited TypeScript files once those tools are installed.
+- Git pre-commit hook (`.githooks/pre-commit`, turned on with `git config core.hooksPath .githooks`): refuses to commit `.env` files, `db/seed_personal/`, or database dumps, then runs `scripts/check.sh`. A failing check blocks the commit.
 
 ## Conventions
 - The docs are the source of truth. When the design changes, update the relevant doc in the same change.
+- `backend/tests/test_docs.py` checks DATABASE.md against the models (and API_ERRORS.md against the backend and front end error codes), and `test_migrations.py` checks the models against the migrations. A schema change that skips the docs or a migration fails the tests.
 - Every API error uses the shape and codes in docs/API_ERRORS.md. Every write runs in one transaction, so a failed request changes nothing. When adding an app-side check, name the error code it returns.
 - App-side checks are documented in two places on purpose: as a note under the table in DATABASE.md, and in FRONTEND_CHECKS.md. Add new ones to both.
 - DATABASE.md tables use the columns `Column | Type | Constraints | Description` with aligned pipes. Descriptions follow set patterns: "unique X id", "id of related X", "date/time X added to db", "date/time X last updated".
-- Users have full flexibility: any kind of content can go in any section (including mixes), and any section in any resume or cover letter. Cover letters have the same join tables as resumes. A library item's required `section_id` is only its home section, used to rank suggestions. Never use section titles for logic.
+- Users have full flexibility: any kind of content can go in any section (including mixes), and any section in any resume or cover letter. Cover letters have the same join tables as resumes. Never use section titles for logic.
 - The five built-in sections ("Summary", "Skills", "Experience", "Projects", "Education") and the built-in "Other" skill category (id 1) have fixed ids and no `account_id`. They can't be deleted or renamed.
 - Every top-level table has an `account_id` (built-in sections and the "Other" skill category leave it empty). There's one account for now, but always scope queries to the current account so multiple accounts can be added later.
 - Library tables have `created_at` and `updated_at`; database triggers keep `updated_at` current. Join tables have no timestamps; changing a selection updates the parent resume's or cover letter's `updated_at`.
+- Library items stand alone and store no parent id. Each parent lists its possible children in a library join table (`section_experience`, `experience_bullet_point`, `skill_category_skill`, etc.) with a `position` for default order and a (parent, child) primary key. One child can be listed under many parents. These lists drive suggestions; they don't limit where an item can go.
 - Join tables under resume/cover letter have their own `SERIAL` id (so child selections can reference them), a `position` column, and a `Unique:` line.
-- A resume or cover letter with no `job_posting_id` is a base version: an ongoing starting point that can be edited directly. Versions tied to a posting are never edited to fit a different posting. Copy them instead.
-- Every foreign key uses `ON DELETE CASCADE`, except `based_on_resume_id` / `based_on_letter_id`, `tone_set_id` on `resume` / `cover_letter`, and `sign_off_id` on `cover_letter`, which use `ON DELETE SET NULL`, and `skill.category_id`, which uses `ON DELETE SET DEFAULT` to move skills to "Other". The front end warns before deletes.
+- A resume or cover letter with no `job_posting_id` is a base version: an ongoing starting point that can be edited directly. Versions tied to a posting are never edited to fit a different posting. Copy them instead. Once the posting's `applied_on` date is set, its versions are locked (`VERSION_LOCKED`), and library edits that would change them save a new row instead.
+- Every foreign key uses `ON DELETE CASCADE`, except `based_on_resume_id` / `based_on_letter_id`, `tone_set_id` on `resume` / `cover_letter`, `header_id` on `job_posting` / `resume` / `cover_letter`, and `sign_off_id` on `cover_letter`, which use `ON DELETE SET NULL`. Deleting a parent never deletes its children, only its list of them. The front end warns before deletes.

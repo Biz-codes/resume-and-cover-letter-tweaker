@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Git pre-commit hook. Turned on once per clone with: git config core.hooksPath .githooks
+#   1. Refuses to commit secrets or personal data: .env files (except .env.example),
+#      anything in db/seed_personal/, and database dumps (*.dump).
+#   2. Runs every automated check (scripts/check.sh).
+# To skip it in an emergency: git commit --no-verify
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+blocked=$(git diff --cached --name-only --diff-filter=ACMR \
+    | grep -E '(^|/)\.env(\.[^/]*)?$|^db/seed_personal/|\.dump$' \
+    | grep -v '\.env\.example$')
+if [ -n "$blocked" ]; then
+    echo "Refusing to commit secrets or personal data:"
+    echo "$blocked" | sed 's/^/  /'
+    echo "Unstage them with: git restore --staged <file>"
+    exit 1
+fi
+
+exec "$ROOT/scripts/check.sh"
