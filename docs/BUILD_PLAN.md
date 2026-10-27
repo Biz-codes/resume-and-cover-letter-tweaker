@@ -33,16 +33,24 @@ Goal: an empty app that runs, with the full schema in a real database.
 6. [x] **Front end skeleton** in `frontend/`: a Vite + React + TypeScript app with Vitest, and an API client that reads the error shape from API_ERRORS.md.
 7. [x] **Tests:** pytest setup against the test database. Check that the migration runs, the triggers work, and built-in rows can't be deleted or renamed.
 
-## Phase 2: Seed personal data
-Goal: the user's real resume and cover letter content in the database.
+## Phase 2: Seed personal data (done)
+Goal: the user's real resume and cover letter content in the database. Done for Tech base, the Neptune resume, and the Neptune cover letter; more can be seeded the same way at any time.
 
-1. The user provides each existing resume or cover letter, one at a time. Use `/seed-resume` to translate it into its own file in `db/seed_personal/` (gitignored), reusing anything already in the library.
-2. Run each file once, before translating the next one, so the next one can match against it. After the first, run `db/seed_defaults.sql`.
-3. Check the result with the user: each seeded resume and cover letter should reproduce the original.
+1. [x] The user provides each existing resume or cover letter, one at a time. Use `/seed-resume` to translate it into its own file in `db/seed_personal/` (gitignored), reusing anything already in the library.
+2. [x] Run each file once, before translating the next one, so the next one can match against it. After the first, run `db/seed_defaults.sql`.
+3. [x] Check the result with the user: each seeded resume and cover letter should reproduce the original.
 
 ## Phase 3: Library management
 Goal: the user can view and edit all their content in the app.
 
+Build it one table at a time: each one's API endpoints, page, and tests together.
+1. [x] **API groundwork:** the current account (created with the defaults if none exists), looking up an item by id within the account, the API conventions in [TECH_STACK.md](TECH_STACK.md), and front end routing with a page per library table.
+2. [x] **Headers**, including saving a new header when a sent version uses the one being edited.
+3. [ ] **Sections, skill categories, and skills**, with their child lists, the built-in protections, and the move to "Other".
+4. [ ] **Experiences, projects, and bullet points**, with job versions and shared bullets.
+5. [ ] **Education, narrative content, writing rules, tone sets and rules, and sign-offs.**
+
+What the pages cover:
 - Pages to create, edit, and delete: headers (name, headline, contact details), sections, skill categories and skills, experiences, projects (with their skills), bullet points, education, narrative content, writing rules, tone sets and rules, and sign-offs.
 - Edit each parent's list of children (a section's items, a category's skills, a job's or project's bullets), show items no parent lists, and handle header and job versions, per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - Delete warnings, built-in protections, and the skill category move to "Other", per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).

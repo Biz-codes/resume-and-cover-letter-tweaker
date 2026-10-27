@@ -1,27 +1,24 @@
-import { useEffect, useState } from 'react'
-import { api, ApiError } from './api/client'
-
-type Status = { state: 'checking' } | { state: 'ok' } | { state: 'error'; message: string }
+// The app shell: navigation and one route per page. main.tsx provides the router.
+import { NavLink, Route, Routes } from 'react-router'
+import HeadersPage from './pages/HeadersPage'
+import HomePage from './pages/HomePage'
 
 function App() {
-  const [status, setStatus] = useState<Status>({ state: 'checking' })
-
-  useEffect(() => {
-    api
-      .get<{ status: string }>('/health')
-      .then(() => setStatus({ state: 'ok' }))
-      .catch((error: unknown) => {
-        const message = error instanceof ApiError ? error.message : String(error)
-        setStatus({ state: 'error', message })
-      })
-  }, [])
-
   return (
     <main>
       <h1>Resume and Cover Letter Tweaker</h1>
-      {status.state === 'checking' && <p>Checking the backend…</p>}
-      {status.state === 'ok' && <p>Backend and database are running.</p>}
-      {status.state === 'error' && <p role="alert">{status.message}</p>}
+      <nav aria-label="Main">
+        <NavLink to="/" end>
+          Home
+        </NavLink>
+        <span className="nav-group">Library:</span>
+        <NavLink to="/library/headers">Headers</NavLink>
+      </nav>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/library/headers" element={<HeadersPage />} />
+        <Route path="*" element={<p>That page doesn't exist.</p>} />
+      </Routes>
     </main>
   )
 }

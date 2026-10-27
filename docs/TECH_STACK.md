@@ -36,6 +36,15 @@ From `frontend/`:
 - `npm run dev`: start the app at http://localhost:5173 (it forwards `/api` to the backend)
 - `npm test`: run the front end tests
 
+## API conventions
+Every library table follows the pattern set by headers (`backend/app/routers/headers.py`, `frontend/src/pages/HeadersPage.tsx`):
+- **Routes** live under `/api`, one router module per table in `backend/app/routers/`: `GET /api/<items>` lists, `GET /api/<items>/{id}` gets one, `POST` creates (201), `PUT /api/<items>/{id}` replaces the editable fields, and `DELETE` removes (204).
+- **The current account:** endpoints take `AccountId` from `backend/app/account.py`, which creates the account with its defaults on first use. Look items up with `get_owned`, which returns `NOT_FOUND` for missing items and for other accounts' items alike.
+- **Input:** request bodies use the field types in `backend/app/schemas.py`: text is trimmed, blank optional fields are saved as empty (null), and lengths match the columns, so bad input returns `VALIDATION_FAILED` naming the field.
+- **Responses** include what the delete warning needs (e.g. a header's `used_by`, with `locked` for sent versions), so the page doesn't need extra requests.
+- **Versions:** a write that would change a sent version saves a new row instead (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)); the response is the row that was saved, so a different id tells the page a new row was made. `backend/app/versions.py` has the lock condition.
+- **Front end:** each table has a typed module in `frontend/src/api/` and a page in `frontend/src/pages/`, with a route and a link in `frontend/src/App.tsx`. Pages keep the user's input on errors, highlight the failing field, and list what a delete affects before confirming.
+
 ## AI integration
 - **Direct API calls, not an agent.** The user flow is a fixed sequence, so the backend runs each step and makes one Claude request per step: extract the posting, suggest sections, suggest each section's content, suggest rewordings, review the whole thing.
 - **Model:** Claude Opus 5.5 (`claude-opus-5-5`), with effort set per step: lower for extracting a job posting, higher for rewording and the final review.

@@ -14,3 +14,83 @@ main {
   margin: 0 auto;
   padding: 24px 16px;
 }
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+nav a.active {
+  font-weight: 600;
+}
+
+.nav-group,
+.muted {
+  color: #5f5b66;
+}
+
+.card {
+  border: 1px solid #d8d5dd;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.card h3,
+.card h4 {
+  margin: 0 0 4px;
+}
+
+.card p {
+  margin: 0 0 4px;
+}
+
+form.card label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+form.card input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  font: inherit;
+}
+
+input[aria-invalid='true'] {
+  border-color: #b3261e;
+  outline: 1px solid #b3261e;
+}
+
+[role='alert'] {
+  color: #b3261e;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.uses {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tag {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #ece9f0;
+  font-size: 0.85em;
+}
+
+.note,
+.confirm {
+  background: #fdf6e3;
+  padding: 8px;
+  border-radius: 4px;
+}
