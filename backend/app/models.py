@@ -227,6 +227,7 @@ class Project(Base):
     project_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     project_title: Mapped[str] = mapped_column(String(100))
+    done_for: Mapped[str | None] = mapped_column(String(100))
     url: Mapped[str | None] = mapped_column(Text)
     dates: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime | None] = created_at()

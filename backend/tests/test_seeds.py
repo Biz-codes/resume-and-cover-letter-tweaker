@@ -165,3 +165,31 @@ def test_a_lookup_matching_two_rows_fails(helpers: Connection, account: int):
     with pytest.raises(DBAPIError, match="more than one row"), helpers.begin_nested():
         helpers.execute(text("SELECT pg_temp.item('bullet_point', 'bullet_id', 'content',"
                              " 'Twice.')"))
+
+
+def test_a_project_done_for_someone_else_is_a_separate_version(helpers: Connection,
+                                                                account: int):
+    def project(done_for: str | None) -> int:
+        return call(helpers, "SELECT pg_temp.project('Dashboard', NULL, '2024', :done_for)",
+                    done_for=done_for)
+
+    assert project("Acme") == project("Acme")
+    assert len({project("Acme"), project("Freelance"), project(None)}) == 3
+
+
+def test_set_resume_skills_replaces_the_list_in_order(helpers: Connection, account: int):
+    new_doc(helpers, account, Resume, "Base")
+    section = call(helpers, "SELECT pg_temp.doc_section('resume', 'Base', :sec, 1)",
+                   sec=SKILLS_SECTION_ID)
+    call(helpers, "SELECT pg_temp.add_skill_category('resume', :section, 1, 'Back End',"
+                  " ARRAY['Go', 'Python', 'Rust'])", section=section)
+    call(helpers, "SELECT pg_temp.set_resume_skills('Base', 'Back End',"
+                  " ARRAY['Python', 'FastAPI', 'Go'])")
+    shown = helpers.execute(text(
+        "SELECT string_agg(k.skill_name, ', ' ORDER BY y.position) FROM resume_skill y"
+        " JOIN skill k USING (skill_id)")).scalar()
+    assert shown == "Python, FastAPI, Go"
+    listed = helpers.execute(text(
+        "SELECT string_agg(k.skill_name, ', ' ORDER BY x.position) FROM skill_category_skill x"
+        " JOIN skill k USING (skill_id)")).scalar()
+    assert listed == "Go, Python, Rust, FastAPI"  # Rust stays in the library list

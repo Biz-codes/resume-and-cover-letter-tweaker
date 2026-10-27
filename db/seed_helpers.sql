@@ -82,17 +82,18 @@ EXCEPTION WHEN no_data_found THEN
     RETURN found_id;
 END $$;
 
-CREATE FUNCTION pg_temp.project(title text, link text, date_text text) RETURNS integer
+CREATE FUNCTION pg_temp.project(title text, link text, date_text text,
+                                done_for_text text DEFAULT NULL) RETURNS integer
 LANGUAGE plpgsql AS $$
 DECLARE found_id integer;
 BEGIN
     SELECT project_id INTO STRICT found_id FROM project
     WHERE project_title = title AND url IS NOT DISTINCT FROM link
-      AND dates IS NOT DISTINCT FROM date_text;
+      AND dates IS NOT DISTINCT FROM date_text AND done_for IS NOT DISTINCT FROM done_for_text;
     RETURN found_id;
 EXCEPTION WHEN no_data_found THEN
-    INSERT INTO project (account_id, project_title, url, dates)
-    VALUES ((SELECT account_id FROM account), title, link, date_text)
+    INSERT INTO project (account_id, project_title, done_for, url, dates)
+    VALUES ((SELECT account_id FROM account), title, done_for_text, link, date_text)
     RETURNING project_id INTO found_id;
     RETURN found_id;
 END $$;
@@ -212,6 +213,25 @@ BEGIN
                          'skill_id', pg_temp.item('skill', 'skill_id', 'skill_name', skill));
 END $$;
 
+-- Set the skills a resume shows under one of its skill categories to exactly this list, in
+-- order. Each skill is found or added, and listed under the category.
+CREATE FUNCTION pg_temp.set_resume_skills(resume_name text, category text, skills text[])
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE rsc integer;
+BEGIN
+    SELECT x.resume_skill_category_id INTO STRICT rsc
+    FROM resume_skill_category x
+    JOIN resume_section rs USING (resume_section_id) JOIN resume r USING (resume_id)
+    JOIN skill_category c USING (category_id)
+    WHERE r.name = resume_name AND c.category_name = category;
+    DELETE FROM resume_skill WHERE resume_skill_category_id = rsc;
+    FOR i IN 1 .. cardinality(skills) LOOP
+        PERFORM pg_temp.list_skill(category, skills[i]);
+        INSERT INTO resume_skill (resume_skill_category_id, skill_id, position)
+        VALUES (rsc, pg_temp.item('skill', 'skill_id', 'skill_name', skills[i]), i);
+    END LOOP;
+END $$;
+
 -- A job and its bullets, in order. Returns the experience_id.
 CREATE FUNCTION pg_temp.add_job(doc text, ds integer, pos integer, title text,
                                 company_name text, loc text, date_text text, bullets text[])
@@ -246,13 +266,29 @@ BEGIN
     END LOOP;
 END $$;
 
+-- List every skill and bullet of one version of a project under another version, after the
+-- ones it already lists, so either version can use any of them.
+CREATE FUNCTION pg_temp.share_project(from_proj integer, to_proj integer) RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE id integer;
+BEGIN
+    FOR id IN SELECT skill_id FROM project_skill WHERE project_id = from_proj ORDER BY position LOOP
+        PERFORM pg_temp.list('project_skill', 'project_id', to_proj, 'skill_id', id);
+    END LOOP;
+    FOR id IN SELECT bullet_id FROM project_bullet_point
+              WHERE project_id = from_proj ORDER BY position LOOP
+        PERFORM pg_temp.list('project_bullet_point', 'project_id', to_proj, 'bullet_id', id);
+    END LOOP;
+END $$;
+
 -- A project with its tech list (skills) and bullets, in order.
 CREATE FUNCTION pg_temp.add_project(doc text, ds integer, pos integer, title text, link text,
-                                    date_text text, skills text[], bullets text[])
+                                    date_text text, skills text[], bullets text[],
+                                    done_for_text text DEFAULT NULL)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE proj integer; dproj integer; id integer;
 BEGIN
-    proj := pg_temp.project(title, link, date_text);
+    proj := pg_temp.project(title, link, date_text, done_for_text);
     PERFORM pg_temp.list('section_project', 'section_id', pg_temp.section_of(doc, ds),
                          'project_id', proj);
     dproj := pg_temp.place(doc || '_project', doc || '_project_id',

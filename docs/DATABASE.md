@@ -238,17 +238,20 @@ Note: a skill can be listed under any number of categories (`skill_category_skil
 Note: each version of a job is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same company, or the same job with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once.
 
 ### project
-| Column        | Type         | Constraints                                               | Description                                   |
-|---------------|--------------|-----------------------------------------------------------|-----------------------------------------------|
-| project_id    | SERIAL       | PRIMARY KEY                                               | unique project id                             |
-| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                          |
-| project_title | VARCHAR(100) | NOT NULL                                                  | name of project                               |
-| url           | TEXT         |                                                           | link to the project (repo, demo, or write-up) |
-| dates         | VARCHAR(50)  |                                                           | dates worked as displayed (e.g. Spring 2024)  |
-| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project added to db                 |
-| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project last updated                |
+| Column        | Type         | Constraints                                               | Description                                                 |
+|---------------|--------------|-----------------------------------------------------------|-------------------------------------------------------------|
+| project_id    | SERIAL       | PRIMARY KEY                                               | unique project id                                           |
+| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                        |
+| project_title | VARCHAR(100) | NOT NULL                                                  | name of project                                             |
+| done_for      | VARCHAR(100) |                                                           | who it was done for (an employer, a client, or "Freelance") |
+| url           | TEXT         |                                                           | link to the project (repo, demo, or write-up)               |
+| dates         | VARCHAR(50)  |                                                           | dates worked as displayed (e.g. Spring 2024)                |
+| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project added to db                               |
+| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project last updated                              |
 
 Note: a project lists its skills in `project_skill` and its bullets in `project_bullet_point`.
+
+Note: `done_for` is optional free text, printed as written (e.g. "McGraw Hill", "Freelance", or a client's name). Empty means the project line shows nothing there, as with personal projects. A different value is a different version of the project, like a job with different dates.
 
 ### bullet_point
 | Column     | Type         | Constraints                                               | Description                         |

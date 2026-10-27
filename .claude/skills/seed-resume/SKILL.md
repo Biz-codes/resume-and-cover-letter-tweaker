@@ -42,7 +42,7 @@ For every item in the resume, look for the same item in the library before addin
 | Skill category     | same name                                                                                   |
 | Skill              | same name                                                                                   |
 | Experience         | same job title, company, location, and dates                                                |
-| Project            | same title, url, and dates                                                                  |
+| Project            | same title, done for, url, and dates                                                        |
 | Education          | same degree, institution, details, and graduation                                           |
 | Bullet point       | same text                                                                                   |
 | Narrative sentence | same text                                                                                   |
@@ -85,7 +85,7 @@ Cover letters use the same join tables as resumes, with the `cover_letter_` pref
 - **Summary** → `narrative_content`, one row per sentence.
 - **Skills** → `skill_category` and `skill`. Keep the resume's own grouping and order. Skills the resume doesn't group go in the built-in "Other" category (id 1).
 - **Experience** → `experience` (`job_title`, `company`, `location`, `dates` as displayed), plus one `bullet_point` per bullet.
-- **Projects** → `project` (`project_title`, `url`, `dates`), plus its skills and bullets.
+- **Projects** → `project` (`project_title`, `done_for` if the resume names who it was for, `url`, `dates`), plus its skills and bullets. `add_project` takes `done_for` as its last argument.
 - **Education** → `education` (`degree` with field of study, `institution`, `details`, `graduation` with honors).
 - **Resume:** one `resume` row with the `name` and `header_id` (plus `job_posting_id` for a sent resume). Then the join rows (`resume_section`, `resume_experience`, `resume_bullet_point`, etc.) that reproduce the original's sections and order, using `position`. Join rows are always new, even when every item they point to is reused.
 
@@ -94,7 +94,7 @@ Cover letters use the same join tables as resumes, with the `cover_letter_` pref
 - **Copy text exactly.** Don't reword, fix or "improve" anything, even words on the banned list in `docs/WRITING_RULES.md`. For a sent resume, keep every typo, inconsistent dash, and lowercase word as sent: it's a record of what was submitted. The one exception, for every resume: text in all caps that's only styling (headings, job titles, degrees) is stored in normal case, since the front end handles styling.
 - **Don't guess missing values.** If something is ambiguous, such as a date or which section an item belongs to, ask the user.
 - **SQL style:**
-  - Use the helpers in `db/seed_helpers.sql` (include them with `\ir ../seed_helpers.sql` before `BEGIN`). They find or add each item by its exact text, list it under its parent, and add the document's join rows. The first argument is `'resume'` or `'cover_letter'`: `pg_temp.doc_section`, `add_sentences`, `add_bullets`, `add_skill_category`, `add_job`, `add_project`, `add_education`, plus `list_skill` and `share_bullets`. Follow `db/seed_personal/01_tech_base.sql`, `02_neptune.sql`, and `03_neptune_cover_letter.sql` as examples. Fix or extend the helpers there (they're committed and hold no personal data) rather than working around them.
+  - Use the helpers in `db/seed_helpers.sql` (include them with `\ir ../seed_helpers.sql` before `BEGIN`). They find or add each item by its exact text, list it under its parent, and add the document's join rows. The first argument is `'resume'` or `'cover_letter'`: `pg_temp.doc_section`, `add_sentences`, `add_bullets`, `add_skill_category`, `add_job`, `add_project`, `add_education`, plus `list_skill`, `share_bullets` and `share_project` (list one version's bullets, and skills, under another), and `set_resume_skills` (set the skills an existing resume shows under one category to an exact list). Follow `db/seed_personal/01_tech_base.sql`, `02_neptune.sql`, and `03_neptune_cover_letter.sql` as examples. Fix or extend the helpers there (they're committed and hold no personal data) rather than working around them.
   - Start with a `-- Resume: <name>` comment and how to run the file.
   - Wrap everything in `BEGIN; ... COMMIT;`.
   - First, a guard that stops the file if it was already run:
