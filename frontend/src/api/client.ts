@@ -78,3 +78,8 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => apiRequest<T>('PATCH', path, body),
   delete: <T = void>(path: string) => apiRequest<T>('DELETE', path),
 }
+
+// Any thrown value as an ApiError, so pages can show its message the same way.
+export function toApiError(error: unknown): ApiError {
+  return error instanceof ApiError ? error : new ApiError('INTERNAL_ERROR', String(error), null, 0)
+}

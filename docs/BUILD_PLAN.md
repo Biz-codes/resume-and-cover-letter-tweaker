@@ -46,7 +46,7 @@ Goal: the user can view and edit all their content in the app.
 Build it one table at a time: each one's API endpoints, page, and tests together.
 1. [x] **API groundwork:** the current account (created with the defaults if none exists), looking up an item by id within the account, the API conventions in [TECH_STACK.md](TECH_STACK.md), and front end routing with a page per library table.
 2. [x] **Headers**, including saving a new header when a sent version uses the one being edited.
-3. [ ] **Sections, skill categories, and skills**, with their child lists, the built-in protections, and the move to "Other".
+3. [x] **Sections, skill categories, and skills**, with their child lists, the built-in protections, and the move to "Other".
 4. [ ] **Experiences, projects, and bullet points**, with job versions and shared bullets.
 5. [ ] **Education, narrative content, writing rules, tone sets and rules, and sign-offs.**
 

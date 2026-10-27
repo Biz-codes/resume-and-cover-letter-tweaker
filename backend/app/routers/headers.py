@@ -4,8 +4,6 @@ Headers have versions (docs/FRONTEND_CHECKS.md, "Headers"): editing one that a s
 version uses saves a new header instead, and identical headers are reused, never duplicated.
 """
 
-from typing import Literal
-
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -15,6 +13,7 @@ from app.account import AccountId, get_owned
 from app.db import DbSession
 from app.models import CoverLetter, Header, JobPosting, Resume
 from app.schemas import OptionalText, RequiredText
+from app.usage import Use
 from app.versions import is_locked
 
 router = APIRouter(prefix="/api/headers", tags=["headers"])
@@ -29,16 +28,6 @@ class HeaderIn(BaseModel):
     linkedin_url: OptionalText()
     github_url: OptionalText()
     portfolio_url: OptionalText()
-
-
-class Use(BaseModel):
-    """A job posting, resume, or cover letter that shows the header."""
-
-    kind: Literal["job_posting", "resume", "cover_letter"]
-    id: int
-    name: str
-    # A sent version (or a posting already applied to) keeps this header as it is.
-    locked: bool
 
 
 class HeaderOut(HeaderIn):

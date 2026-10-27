@@ -1,6 +1,7 @@
 // Headers: the name, headline, and contact details at the top of a resume or cover letter.
 // See backend/app/routers/headers.py and "Headers" in docs/FRONTEND_CHECKS.md.
 import { api } from './client'
+import type { Use } from './usage'
 
 export interface HeaderFields {
   full_name: string
@@ -13,13 +14,7 @@ export interface HeaderFields {
   portfolio_url: string | null
 }
 
-export interface HeaderUse {
-  kind: 'job_posting' | 'resume' | 'cover_letter'
-  id: number
-  name: string
-  // A sent version (or a posting already applied to) keeps the header as it is.
-  locked: boolean
-}
+export type HeaderUse = Use
 
 export interface Header extends HeaderFields {
   header_id: number

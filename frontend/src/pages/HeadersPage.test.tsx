@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Header } from '../api/headers'
+import { sentBody, stubApi } from '../test/stubApi'
 import HeadersPage from './HeadersPage'
 
 const BASE: Header = {
@@ -21,26 +22,6 @@ const SENT: Header = {
   header_id: 2,
   headline: 'Front-End Engineer',
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: true }],
-}
-
-type Reply = { status: number; body?: unknown }
-
-// Answers each request from the replies for its method and path, in order.
-function stubApi(replies: Record<string, Reply[]>) {
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    const key = `${init?.method ?? 'GET'} ${url}`
-    const reply = replies[key]?.shift()
-    if (!reply) throw new Error(`unexpected request: ${key}`)
-    return Promise.resolve(
-      reply.status === 204 ? new Response(null, { status: 204 }) : Response.json(reply.body, { status: reply.status }),
-    )
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
-}
-
-function sentBody(fetchMock: ReturnType<typeof stubApi>, index: number) {
-  return JSON.parse(fetchMock.mock.calls[index][1]?.body as string)
 }
 
 async function cardFor(headline: string) {
@@ -67,7 +48,7 @@ describe('HeadersPage', () => {
     fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Sam Rivera' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
-    expect(sentBody(fetchMock, 1)).toMatchObject({ full_name: 'Sam Rivera', headline: null })
+    expect(sentBody(fetchMock, 'POST /api/headers')).toMatchObject({ full_name: 'Sam Rivera', headline: null })
   })
 
   it('keeps the input and highlights the field when the backend rejects it', async () => {

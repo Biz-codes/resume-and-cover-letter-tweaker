@@ -2,6 +2,8 @@
 import { NavLink, Route, Routes } from 'react-router'
 import HeadersPage from './pages/HeadersPage'
 import HomePage from './pages/HomePage'
+import SectionsPage from './pages/SectionsPage'
+import SkillsPage from './pages/SkillsPage'
 
 function App() {
   return (
@@ -13,10 +15,14 @@ function App() {
         </NavLink>
         <span className="nav-group">Library:</span>
         <NavLink to="/library/headers">Headers</NavLink>
+        <NavLink to="/library/sections">Sections</NavLink>
+        <NavLink to="/library/skills">Skills</NavLink>
       </nav>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/library/headers" element={<HeadersPage />} />
+        <Route path="/library/sections" element={<SectionsPage />} />
+        <Route path="/library/skills" element={<SkillsPage />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />
       </Routes>
     </main>

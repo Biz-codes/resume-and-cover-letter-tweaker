@@ -1,8 +1,11 @@
 // Library page for headers: list, add, edit, and delete, with the version rules from
 // "Headers" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ApiError } from '../api/client'
-import { headersApi, type Header, type HeaderFields, type HeaderUse } from '../api/headers'
+import { toApiError, type ApiError } from '../api/client'
+import { headersApi, type Header, type HeaderFields } from '../api/headers'
+import { anyLocked } from '../api/usage'
+import ConfirmDelete from '../components/ConfirmDelete'
+import UsedBy from '../components/UsedBy'
 
 const FIELDS: { name: keyof HeaderFields; label: string; type?: string }[] = [
   { name: 'full_name', label: 'Full name (required)' },
@@ -26,35 +29,11 @@ const EMPTY: HeaderFields = {
   portfolio_url: null,
 }
 
-const KIND_LABELS: Record<HeaderUse['kind'], string> = {
-  job_posting: 'Job posting',
-  resume: 'Resume',
-  cover_letter: 'Cover letter',
-}
-
 type Editing = { headerId: number | null; fields: HeaderFields }
-
-function errorOf(error: unknown): ApiError {
-  return error instanceof ApiError ? error : new ApiError('INTERNAL_ERROR', String(error), null, 0)
-}
 
 function fieldsOf(header: Header): HeaderFields {
   const { header_id: _id, used_by: _usedBy, ...fields } = header
   return fields
-}
-
-function UsedBy({ uses }: { uses: HeaderUse[] }) {
-  if (uses.length === 0) return <p className="muted">Not used yet.</p>
-  return (
-    <ul className="uses">
-      {uses.map((use) => (
-        <li key={`${use.kind}-${use.id}`}>
-          {KIND_LABELS[use.kind]}: {use.name}
-          {use.locked && <span className="tag">sent</span>}
-        </li>
-      ))}
-    </ul>
-  )
 }
 
 function HeaderForm({
@@ -130,7 +109,7 @@ export default function HeadersPage() {
           setHeaders(list)
           setLoadError(null)
         })
-        .catch((error: unknown) => setLoadError(errorOf(error))),
+        .catch((error: unknown) => setLoadError(toApiError(error))),
     [],
   )
 
@@ -165,7 +144,7 @@ export default function HeadersPage() {
       setEditing(null)
       await load()
     } catch (error) {
-      setFormError(errorOf(error))
+      setFormError(toApiError(error))
     } finally {
       setSaving(false)
     }
@@ -180,7 +159,7 @@ export default function HeadersPage() {
       setNotice('Header deleted.')
       await load()
     } catch (error) {
-      setDeleteError(errorOf(error))
+      setDeleteError(toApiError(error))
     }
   }
 
@@ -228,7 +207,7 @@ export default function HeadersPage() {
           <HeaderForm
             key={header.header_id}
             editing={editing}
-            locked={editedHeader?.used_by.some((use) => use.locked) ?? false}
+            locked={anyLocked(editedHeader?.used_by ?? [])}
             error={formError}
             saving={saving}
             onChange={(fields) => setEditing({ ...editing, fields })}
@@ -249,33 +228,17 @@ export default function HeadersPage() {
                   {url}
                 </p>
               ))}
-            <h4>Used by</h4>
             <UsedBy uses={header.used_by} />
 
             {deleting?.header_id === header.header_id ? (
-              <div className="confirm" role="group" aria-label="Confirm delete">
-                <p>Delete this header?</p>
-                {header.used_by.length > 0 && (
-                  <p>
-                    These will keep going with no header until you pick another:{' '}
-                    {header.used_by.map((use) => use.name).join('; ')}.
-                  </p>
-                )}
-                {header.used_by.some((use) => use.locked) && (
-                  <p>
-                    A sent version uses it, so deleting it changes the record of what you sent.
-                  </p>
-                )}
-                {deleteError && <p role="alert">{deleteError.message}</p>}
-                <div className="actions">
-                  <button type="button" onClick={() => void confirmDelete()}>
-                    Delete
-                  </button>
-                  <button type="button" onClick={() => setDeleting(null)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              <ConfirmDelete
+                what="this header"
+                uses={header.used_by}
+                effect="They keep going with no header until you pick another."
+                error={deleteError}
+                onConfirm={() => void confirmDelete()}
+                onCancel={() => setDeleting(null)}
+              />
             ) : (
               <div className="actions">
                 <button

@@ -94,3 +94,59 @@ input[aria-invalid='true'] {
   padding: 8px;
   border-radius: 4px;
 }
+
+.inline-form {
+  margin: 8px 0;
+}
+
+.inline-form label,
+.card > label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.inline-form input,
+.card > label select {
+  display: block;
+  padding: 6px;
+  font: inherit;
+}
+
+.ordered-list ol {
+  margin: 4px 0;
+  padding-left: 24px;
+}
+
+.ordered-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.card h5 {
+  margin: 12px 0 4px;
+}
+
+.section-group {
+  margin-top: 24px;
+}
+
+.section-group > h3 {
+  margin-bottom: 0;
+}
+
+.sublist {
+  margin: 12px 0 4px;
+}
+
+.sublist > summary {
+  cursor: pointer;
+  font-weight: 600;
+}

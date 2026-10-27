@@ -184,6 +184,8 @@ Note: there are no content rules. Any kind of content (sentences, skill categori
 
 Note: the backend refuses to delete or rename a built-in section, and a database trigger blocks it as a backstop.
 
+Note: titles are unique in the account, ignoring capitals and counting the built-in titles (the database checks exact matches; the app checks the rest and returns `DUPLICATE`). Renaming a section that a sent (locked) resume or cover letter uses saves a new section with the new title and the same lists; unsent versions switch to it (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
 ### narrative_content
 | Column     | Type         | Constraints                                               | Description                              |
 |------------|--------------|-----------------------------------------------------------|------------------------------------------|
@@ -208,6 +210,8 @@ Note: an accepted rewording is saved as a new row, listed under the same section
 
 Note: a category lists its skills in `skill_category_skill`, and sections list their categories in `section_skill_category`.
 
+Note: names are unique in the account, ignoring capitals and counting "Other". The app checks this and returns `DUPLICATE`.
+
 Note: a built-in "Other" category is created with the database, with the fixed id 1 and no `account_id` (every account shares it). It can't be deleted or renamed; the backend refuses, and a database trigger blocks it as a backstop. Skills with no better category go in "Other". It isn't listed under any section; the app offers it wherever skills are being added.
 
 Note: when a category is deleted, the app first lists any of its skills that no other category lists under "Other", and moves its resume and cover letter selections under "Other" in the same section, so no skill is left without a category and no resume loses skills. See "Deleting a skill category" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
@@ -222,6 +226,10 @@ Note: when a category is deleted, the app first lists any of its skills that no 
 | updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time skill last updated |
 
 Note: a skill can be listed under any number of categories (`skill_category_skill`) and projects (`project_skill`). When a category is added to a resume, the app suggests skills from the category's list, in its default order.
+
+Note: names are unique in the account, ignoring capitals. The app checks this and returns `DUPLICATE`.
+
+Note: every skill is listed under at least one category. Taking a skill out of its only category lists it under "Other" (an app rule; see "Suggesting and adding items" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### experience
 | Column        | Type         | Constraints                                               | Description                            |
