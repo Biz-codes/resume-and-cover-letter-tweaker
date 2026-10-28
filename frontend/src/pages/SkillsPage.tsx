@@ -3,12 +3,14 @@
 // every skill keeps a category, and deleting a category moves its skills under "Other".
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../api/client'
+import { projectLabel } from '../api/projects'
 import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../api/sections'
 import { OTHER_CATEGORY_ID, skillCategoriesApi, skillsApi, type Skill, type SkillCategory } from '../api/skills'
 import { anyLocked } from '../api/usage'
 import Collapsible from '../components/Collapsible'
 import ConfirmDelete from '../components/ConfirmDelete'
 import NameForm from '../components/NameForm'
+import NameList from '../components/NameList'
 import OrderedList from '../components/OrderedList'
 import UsedBy from '../components/UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
@@ -21,26 +23,6 @@ type Target = { kind: 'category' | 'skill'; id: number }
 
 // Ids of each card's Rename and Delete buttons, where focus returns when a form closes.
 const buttonId = (kind: Target['kind'], id: number, action: 'rename' | 'delete') => `${kind}-${id}-${action}`
-
-function projectLabel(project: Skill['projects'][number]) {
-  return project.done_for ? `${project.project_title} (${project.done_for})` : project.project_title
-}
-
-function NameList({ title, names }: { title: string; names: string[] }) {
-  return (
-    <Collapsible title={title} count={names.length}>
-      {names.length === 0 ? (
-        <p className="muted">None.</p>
-      ) : (
-        <ul className="uses">
-          {names.map((name) => (
-            <li key={name}>{name}</li>
-          ))}
-        </ul>
-      )}
-    </Collapsible>
-  )
-}
 
 export default function SkillsPage() {
   const [categories, setCategories] = useState<SkillCategory[] | null>(null)

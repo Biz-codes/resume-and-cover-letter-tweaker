@@ -33,14 +33,6 @@ from app.models import (
 )
 
 
-@pytest.fixture
-def account_id(db: Session) -> int:
-    account = Account()
-    db.add(account)
-    db.flush()
-    return account.account_id
-
-
 def add(db: Session, row):
     db.add(row)
     db.flush()
@@ -66,8 +58,9 @@ def skill_id(db: Session, name: str) -> int:
 
 
 def resume(db: Session, account_id: int, name: str, sent: bool) -> Resume:
-    posting = add(db, JobPosting(account_id=account_id, url="https://example.com", company="Acme",
-                                 job_title="Engineer", description="Build things.",
+    posting = add(db, JobPosting(account_id=account_id, url="https://example.com",
+                                 organization="Acme", role_title="Engineer",
+                                 description="Build things.",
                                  applied_on=date(2026, 10, 1) if sent else None))
     return add(db, Resume(account_id=account_id, name=name, job_posting_id=posting.job_posting_id))
 

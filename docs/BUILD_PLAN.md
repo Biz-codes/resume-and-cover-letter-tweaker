@@ -47,12 +47,12 @@ Build it one table at a time: each one's API endpoints, page, and tests together
 1. [x] **API groundwork:** the current account (created with the defaults if none exists), looking up an item by id within the account, the API conventions in [TECH_STACK.md](TECH_STACK.md), and front end routing with a page per library table.
 2. [x] **Headers**, including saving a new header when a sent version uses the one being edited.
 3. [x] **Sections, skill categories, and skills**, with their child lists, the built-in protections, and the move to "Other".
-4. [ ] **Experiences, projects, and bullet points**, with job versions and shared bullets.
+4. [x] **Experience, projects, and bullet points**, with role versions and shared bullets.
 5. [ ] **Education, narrative content, writing rules, tone sets and rules, and sign-offs.**
 
 What the pages cover:
-- Pages to create, edit, and delete: headers (name, headline, contact details), sections, skill categories and skills, experiences, projects (with their skills), bullet points, education, narrative content, writing rules, tone sets and rules, and sign-offs.
-- Edit each parent's list of children (a section's items, a category's skills, a job's or project's bullets), show items no parent lists, and handle header and job versions, per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+- Pages to create, edit, and delete: headers (name, headline, contact details), sections, skill categories and skills, experience, projects (with their skills), bullet points, education, narrative content, writing rules, tone sets and rules, and sign-offs.
+- Edit each parent's list of children (a section's items, a category's skills, a role's or project's bullets), show items no parent lists, and handle header and role versions, per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - Delete warnings, built-in protections, and the skill category move to "Other", per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 ## Phase 4: Building resumes and cover letters by hand
@@ -68,7 +68,7 @@ Goal: the full resume and cover letter tree works without AI.
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
 1. **Job posting:** fetch and extract a posting from a url, with the paste-in fallback, and let the user correct the result.
-2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the job title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting.
+2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the role title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting.
 3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone set.
 4. **Final review** of the resume and cover letter together.
 5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.

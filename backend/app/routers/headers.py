@@ -42,7 +42,7 @@ def uses(db: Session, header_ids: list[int]) -> dict[int, list[Use]]:
     found: dict[int, list[Use]] = {header_id: [] for header_id in header_ids}
     queries = [
         ("job_posting", select(JobPosting.header_id, JobPosting.job_posting_id,
-                               JobPosting.company + ": " + JobPosting.job_title,
+                               JobPosting.organization + ": " + JobPosting.role_title,
                                JobPosting.applied_on.is_not(None))),
         ("resume", select(Resume.header_id, Resume.resume_id, Resume.name,
                           is_locked(Resume))),

@@ -1,7 +1,7 @@
 # Database
 
 ## Overview
-Holds the user's library of resume and cover letter content (headers, sections, skills, jobs, projects, bullets, sentences, education), their job postings, and every resume and cover letter built from them.
+Holds the user's library of resume and cover letter content (headers, sections, skills, roles, projects, bullets, sentences, education), their job postings, and every resume and cover letter built from them.
 
 Every resume and cover letter is saved as its own version. There are two kinds:
 - **Base resumes / cover letters** have no job posting. They're ongoing starting points the user returns to and keeps updating over time.
@@ -13,7 +13,7 @@ The database will be seeded with the user's existing resume data as a starting p
 
 Seeding happens in this order:
 1. **Migrations** create the schema, the five built-in sections, and the built-in "Other" skill category.
-2. **Personal data** (`db/seed_personal/`, one file per resume, not committed): the user's account, library items, job postings, and resumes, translated into SQL from their existing resumes (PDF or pasted text). It contains personal information, so it's listed in `.gitignore`. Each file is run once. Content already in the library (the same project, job, bullet, sentence, or skill) is reused rather than inserted again, so the library holds each item once and every resume points to the items it shows. A resume that was already sent is recorded exactly as sent, mistakes included, apart from all-caps styling, which is stored in normal case. The `/seed-resume` skill has the matching rules, and `db/seed_helpers.sql` has the shared SQL helpers the files use.
+2. **Personal data** (`db/seed_personal/`, one file per resume, not committed): the user's account, library items, job postings, and resumes, translated into SQL from their existing resumes (PDF or pasted text). It contains personal information, so it's listed in `.gitignore`. Each file is run once. Content already in the library (the same project, role, bullet, sentence, or skill) is reused rather than inserted again, so the library holds each item once and every resume points to the items it shows. A resume that was already sent is recorded exactly as sent, mistakes included, apart from all-caps styling, which is stored in normal case. The `/seed-resume` skill has the matching rules, and `db/seed_helpers.sql` has the shared SQL helpers the files use.
 3. **Account defaults** (`db/seed_defaults.sql`, committed): the starting writing rules from [WRITING_RULES.md](WRITING_RULES.md) and the "Sincerely" sign-off, added for every account that doesn't have them yet. The rules go only to accounts with no writing rules at all, and the sign-off only to accounts with no sign-offs, so running it again never brings back something the user deleted or reworded.
 
 When the app creates a new account, the backend adds the same account defaults.
@@ -22,19 +22,19 @@ Everything belongs to an `account`. Only one account exists for now (the app run
 
 The database has three layers:
 - **Tables** are a reusable library of content (sections, skills, experience, bullet points, etc.). Each item is written once and stands alone.
-- **Library Join Tables** let each parent list every child that can go under it, with a default order: a section lists its possible sentences, skill categories, jobs, projects, bullets, and education; a skill category lists its skills; a job lists its bullets; a project lists its skills and bullets. One item can be listed under many parents, so two versions of a job can share the same bullets.
+- **Library Join Tables** let each parent list every child that can go under it, with a default order: a section lists its possible sentences, skill categories, roles, projects, bullets, and education; a skill category lists its skills; a role lists its bullets; a project lists its skills and bullets. One item can be listed under many parents, so two versions of a role can share the same bullets.
 - **Join Tables** record what a specific resume or cover letter uses: which library items the user selected, how they nest, and in what order.
 
 All `updated_at` columns default to the time the row is created, and a database trigger on each table sets them whenever a row is edited.
 
-Every foreign key uses `ON DELETE CASCADE`: deleting a row also deletes every row that refers to it, all the way down (e.g. deleting a skill removes it from every project and resume that uses it). The exceptions use `ON DELETE SET NULL`: `based_on_resume_id` / `based_on_letter_id`, so deleting an older version doesn't delete the versions copied from it, `tone_set_id` on `resume` / `cover_letter`, so deleting a tone set only clears it from the resumes and cover letters that used it, and `header_id` on `job_posting` / `resume` / `cover_letter` and `sign_off_id` on `cover_letter`, for the same reason. Because library items stand alone, deleting a parent (a section, skill category, job, or project) deletes only its list of children, not the children themselves: they stay in the library and in every other list and resume that uses them. The front end warns the user before a delete and explains what else will be removed.
+Every foreign key uses `ON DELETE CASCADE`: deleting a row also deletes every row that refers to it, all the way down (e.g. deleting a skill removes it from every project and resume that uses it). The exceptions use `ON DELETE SET NULL`: `based_on_resume_id` / `based_on_letter_id`, so deleting an older version doesn't delete the versions copied from it, `tone_set_id` on `resume` / `cover_letter`, so deleting a tone set only clears it from the resumes and cover letters that used it, and `header_id` on `job_posting` / `resume` / `cover_letter` and `sign_off_id` on `cover_letter`, for the same reason. Because library items stand alone, deleting a parent (a section, skill category, role, or project) deletes only its list of children, not the children themselves: they stay in the library and in every other list and resume that uses them. The front end warns the user before a delete and explains what else will be removed.
 
 Checks the app must handle (delete warnings, which items to suggest, timestamp updates) are listed in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Library join tables and resume and cover letter join tables have no timestamps. When a resume's or cover letter's selections change, the app updates that resume's or cover letter's `updated_at` instead.
 
 ## Tables
-Library items stand alone: none of them stores a parent id. Which items belong under a section, skill category, job, or project is recorded in the Library Join Tables. Those lists are where the app looks when suggesting content, but they don't limit where an item can go. The resume and cover letter join tables decide which items actually appear in a given resume or cover letter, and in which section; any item can go in any section.
+Library items stand alone: none of them stores a parent id. Which items belong under a section, skill category, role, or project is recorded in the Library Join Tables. Those lists are where the app looks when suggesting content, but they don't limit where an item can go. The resume and cover letter join tables decide which items actually appear in a given resume or cover letter, and in which section; any item can go in any section.
 
 ### account
 | Column     | Type      | Constraints   | Description                    |
@@ -51,7 +51,7 @@ Note: one row for now (the app's owner). Login fields such as a password will be
 | header_id     | SERIAL       | PRIMARY KEY                                               | unique header id               |
 | account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account           |
 | full_name     | VARCHAR(100) | NOT NULL                                                  | name at the top                |
-| headline      | VARCHAR(100) |                                                           | job title shown under the name |
+| headline      | VARCHAR(100) |                                                           | role title shown under the name |
 | email         | VARCHAR(255) |                                                           | contact email                  |
 | phone         | VARCHAR(50)  |                                                           | contact phone number           |
 | location      | VARCHAR(100) |                                                           | city/state                     |
@@ -63,7 +63,7 @@ Note: one row for now (the app's owner). Login fields such as a password will be
 
 Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, starting with the posting's header.
 
-Note: headers are library items with versions, like jobs. A different headline or contact detail is a new row, and identical headers are reused. Sent resumes and cover letters keep the header they went out with, so changing a phone number later means adding a header, not editing the old one (see "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: headers are library items with versions, like roles. A different headline or contact detail is a new row, and identical headers are reused. Sent resumes and cover letters keep the header they went out with, so changing a phone number later means adding a header, not editing the old one (see "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### job_posting
 | Column         | Type         | Constraints                                               | Description                                     |
@@ -71,8 +71,8 @@ Note: headers are library items with versions, like jobs. A different headline o
 | job_posting_id | SERIAL       | PRIMARY KEY                                               | unique job posting id                           |
 | account_id     | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                            |
 | url            | TEXT         | NOT NULL                                                  | url of the job posting                          |
-| company        | VARCHAR(100) | NOT NULL                                                  | name of hiring company                          |
-| job_title      | VARCHAR(100) | NOT NULL                                                  | title of the position                           |
+| organization   | VARCHAR(100) | NOT NULL                                                  | name of hiring company or organization          |
+| role_title     | VARCHAR(100) | NOT NULL                                                  | title of the position                           |
 | description    | TEXT         | NOT NULL                                                  | job description text extracted from the posting |
 | header_id      | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                            |
 | applied_on     | DATE         |                                                           | date application was sent                       |
@@ -102,7 +102,7 @@ Note: `header_id` is the header the user chose for this posting, right after cre
 | created_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time interview added to db     |
 | updated_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time interview last updated    |
 
-Note: one interview can cover several open positions at the same company, so interviews link to job postings through `job_posting_interview` instead of storing a `job_posting_id`. A posting's interviews are shown in date order.
+Note: one interview can cover several open positions at the same organization, so interviews link to job postings through `job_posting_interview` instead of storing a `job_posting_id`. A posting's interviews are shown in date order.
 
 ### job_posting_interview
 | Column         | Type    | Constraints                                                       | Description               |
@@ -127,7 +127,7 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume added to db                 |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume last updated                |
 
-Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. company and job title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
+Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. organization and role title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
 
 Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting starts with the posting's header, and the user can keep it, edit it, or pick another saved header (e.g. a different headline). A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
@@ -161,7 +161,7 @@ Note: `sign_off_id` picks the closing (e.g. "Sincerely," then the name). New cov
 
 Note: `signature_name` is the name printed under the sign-off. Empty means the header's `full_name`, so new letters leave it empty unless the user wants a different form of their name (e.g. without a nickname). A copied letter keeps it.
 
-Note: `addressee` is everything after "Dear" in the greeting. It defaults to "[company] Hiring Team", using the job posting's `company` (or just "Hiring Team" when there's no posting). The user can replace it with anything, such as a hiring manager's name ("Ms. Rivera"). The app fills in the default, since a database default can't look up the company.
+Note: `addressee` is everything after "Dear" in the greeting. It defaults to "[organization] Hiring Team", using the job posting's `organization` (or just "Hiring Team" when there's no posting). The user can replace it with anything, such as a hiring manager's name ("Ms. Rivera"). The app fills in the default, since a database default can't look up the organization.
 
 ### section
 | Column     | Type         | Constraints                                      | Description                                       |
@@ -180,7 +180,7 @@ Note: five built-in sections are created with the database, with fixed ids: "Sum
 
 Note: users can add any other sections they want (e.g. "Freelance and Consulting Experience", "Volunteer Experience", "Technical Skills", "EdTech paragraph").
 
-Note: there are no content rules. Any kind of content (sentences, skill categories, experiences, projects, bullet points, education) can go in any section, including a mix of kinds in one section, and any section can be included in any resume. A new item is listed under the section it's created in. New skill categories, experiences, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and the user can choose another.
+Note: there are no content rules. Any kind of content (sentences, skill categories, experience, projects, bullet points, education) can go in any section, including a mix of kinds in one section, and any section can be included in any resume. A new item is listed under the section it's created in. New skill categories, experience, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and the user can choose another.
 
 Note: the backend refuses to delete or rename a built-in section, and a database trigger blocks it as a backstop.
 
@@ -236,14 +236,14 @@ Note: every skill is listed under at least one category. Taking a skill out of i
 |---------------|--------------|-----------------------------------------------------------|----------------------------------------|
 | experience_id | SERIAL       | PRIMARY KEY                                               | unique experience id                   |
 | account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                   |
-| job_title     | VARCHAR(100) | NOT NULL                                                  | title of job held                      |
-| company       | VARCHAR(100) | NOT NULL                                                  | name of employer                       |
+| role_title    | VARCHAR(100) | NOT NULL                                                  | title of role held                     |
+| organization  | VARCHAR(100) | NOT NULL                                                  | name of employer or organization       |
 | location      | VARCHAR(100) |                                                           | city/state and/or remote               |
 | dates         | VARCHAR(50)  |                                                           | dates worked (e.g. Jan 2020 – Present) |
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db       |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated      |
 
-Note: each version of a job is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same company, or the same job with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once.
+Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### project
 | Column        | Type         | Constraints                                               | Description                                                 |
@@ -251,7 +251,7 @@ Note: each version of a job is its own row (e.g. "Software Engineer" and "Senior
 | project_id    | SERIAL       | PRIMARY KEY                                               | unique project id                                           |
 | account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                        |
 | project_title | VARCHAR(100) | NOT NULL                                                  | name of project                                             |
-| done_for      | VARCHAR(100) |                                                           | who it was done for (an employer, a client, or "Freelance") |
+| done_for      | VARCHAR(100) |                                                           | who or what the project is affiliated with                  |
 | url           | TEXT         |                                                           | link to the project (repo, demo, or write-up)               |
 | dates         | VARCHAR(50)  |                                                           | dates worked as displayed (e.g. Spring 2024)                |
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project added to db                               |
@@ -259,7 +259,9 @@ Note: each version of a job is its own row (e.g. "Software Engineer" and "Senior
 
 Note: a project lists its skills in `project_skill` and its bullets in `project_bullet_point`.
 
-Note: `done_for` is optional free text, printed as written (e.g. "McGraw Hill", "Freelance", or a client's name). Empty means the project line shows nothing there, as with personal projects. A different value is a different version of the project, like a job with different dates.
+Note: `done_for` is optional free text naming who or what the project is affiliated with, printed as written (e.g. "McGraw Hill", "Freelance", "Independent project"). Empty means the project line shows nothing there.
+
+Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### bullet_point
 | Column     | Type         | Constraints                                               | Description                         |
@@ -270,9 +272,9 @@ Note: `done_for` is optional free text, printed as written (e.g. "McGraw Hill", 
 | created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time bullet point added to db  |
 | updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time bullet point last updated |
 
-Note: a bullet is listed under jobs (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
+Note: a bullet is listed under roles (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
 
-Note: an accepted rewording is saved as a new row, listed under every job, project, and section that lists the original, and the original is never overwritten. Only the current resume switches to the new bullet.
+Note: an accepted rewording is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume switches to the new bullet.
 
 ### education
 | Column       | Type         | Constraints                                               | Description                                                              |
@@ -336,11 +338,11 @@ Note: deleting a tone set deletes its rules.
 Note: each account starts with "Sincerely", and the user can add others (e.g. "Best regards"). A cover letter ends with its sign-off, a comma, and its `signature_name` (or its header's `full_name`) on the next line. No sign-off means no closing.
 
 ## Library Join Tables
-Each parent lists every child that can go under it. These lists are what the app suggests from (e.g. a job's bullets, a category's skills), and `position` is the default order for a new resume. They don't limit where an item can go: a resume can still place any item in any section.
+Each parent lists every child that can go under it. These lists are what the app suggests from (e.g. a role's bullets, a category's skills), and `position` is the default order for a new resume. They don't limit where an item can go: a resume can still place any item in any section.
 
 Conventions for every library join table:
 - The primary key is the (parent, child) pair, so a child is listed under a parent only once. They need no id of their own, since nothing references them.
-- One child can be listed under many parents (a bullet under two versions of a job, a skill in two categories).
+- One child can be listed under many parents (a bullet under two versions of a role, a skill in two categories).
 - Deleting the parent or the child removes the row. Deleting a parent never deletes its children; an item listed under no parent stays in the library, and the app shows it so it can be listed again.
 - No `created_at`/`updated_at`.
 
@@ -375,7 +377,7 @@ Note: the skill categories that can go in this section. The built-in "Other" cat
 
 Primary key: (section_id, experience_id)
 
-Note: the jobs that can go in this section (e.g. paid jobs under "Experience", gigs under a freelance section).
+Note: the roles that can go in this section (e.g. paid jobs under "Experience", gigs under a freelance section).
 
 ### section_project
 | Column     | Type    | Constraints                                               | Description                         |
@@ -397,7 +399,7 @@ Note: the projects that can go in this section.
 
 Primary key: (section_id, bullet_id)
 
-Note: bullets that stand on their own directly in this section, not under a job or project.
+Note: bullets that stand on their own directly in this section, not under a role or project.
 
 ### section_education
 | Column       | Type    | Constraints                                                   | Description                           |
@@ -441,7 +443,7 @@ Note: the full list of skills used on a project, which the app suggests from. Wh
 
 Primary key: (experience_id, bullet_id)
 
-Note: every bullet that can go under this job. Versions of the same job (e.g. a different title or dates) list the same bullets, so each bullet is stored once. The app suggests a subset of this list for each resume.
+Note: every bullet that can go under this role. Versions of the same role (e.g. a different title or dates) list the same bullets, so each bullet is stored once. The app suggests a subset of this list for each resume.
 
 ### project_bullet_point
 | Column     | Type    | Constraints                                                   | Description                              |
@@ -460,7 +462,7 @@ Each join row has its own id so the next level down can reference that specific 
 
 Conventions for every join table:
 - `position` orders items under the same parent. Lower numbers appear first.
-- A section can mix item types (e.g. a sentence, then two experiences). Items directly in the same section share one numbering across all join tables (`resume_narrative_content`, `resume_skill_category`, `resume_experience`, `resume_project`, `resume_bullet_point`, `resume_education`, and the cover letter equivalents), so the app can interleave them. The app assigns these numbers, since the database can't check positions across tables.
+- A section can mix item types (e.g. a sentence, then two experience items). Items directly in the same section share one numbering across all join tables (`resume_narrative_content`, `resume_skill_category`, `resume_experience`, `resume_project`, `resume_bullet_point`, `resume_education`, and the cover letter equivalents), so the app can interleave them. The app assigns these numbers, since the database can't check positions across tables.
 - A `Unique:` line lists columns whose combination can't repeat, so the same item can't be picked twice under one parent.
 - No `created_at`/`updated_at`. Changing a selection updates the parent resume's or cover letter's `updated_at`.
 
@@ -566,7 +568,7 @@ Unique: (resume_section_id, education_id)
 
 **Cover letter join tables**
 
-Cover letters use the same structure as resumes, so any kind of content can go in a cover letter section. Most cover letter sections are paragraphs of sentences, but the user can add skills, experiences, projects, bullets, or education as they see fit.
+Cover letters use the same structure as resumes, so any kind of content can go in a cover letter section. Most cover letter sections are paragraphs of sentences, but the user can add skills, experience, projects, bullets, or education as they see fit.
 
 ### cover_letter_section
 | Column                  | Type         | Constraints                                                   | Description                      |

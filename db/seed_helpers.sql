@@ -3,7 +3,7 @@
 -- They're temporary functions (pg_temp), gone when the psql session ends.
 --
 -- Library items are matched on their exact text: a match is reused, otherwise a row is
--- added. Every item used is also listed under its parent (section, category, job, or
+-- added. Every item used is also listed under its parent (section, category, role, or
 -- project) if it isn't already, at the end of that list. A lookup that matches more than
 -- one row raises an error, so the whole seed file rolls back.
 --
@@ -59,25 +59,25 @@ EXCEPTION WHEN no_data_found THEN
     RETURN found_id;
 END $$;
 
--- A job version: every displayed field must match. find_ fails if it's missing.
-CREATE FUNCTION pg_temp.find_experience(title text, company_name text, loc text, date_text text)
+-- A role version: every displayed field must match. find_ fails if it's missing.
+CREATE FUNCTION pg_temp.find_experience(title text, org_name text, loc text, date_text text)
 RETURNS integer LANGUAGE plpgsql AS $$
 DECLARE found_id integer;
 BEGIN
     SELECT experience_id INTO STRICT found_id FROM experience
-    WHERE job_title = title AND company = company_name
+    WHERE role_title = title AND organization = org_name
       AND location IS NOT DISTINCT FROM loc AND dates IS NOT DISTINCT FROM date_text;
     RETURN found_id;
 END $$;
 
-CREATE FUNCTION pg_temp.experience(title text, company_name text, loc text, date_text text)
+CREATE FUNCTION pg_temp.experience(title text, org_name text, loc text, date_text text)
 RETURNS integer LANGUAGE plpgsql AS $$
 DECLARE found_id integer;
 BEGIN
-    RETURN pg_temp.find_experience(title, company_name, loc, date_text);
+    RETURN pg_temp.find_experience(title, org_name, loc, date_text);
 EXCEPTION WHEN no_data_found THEN
-    INSERT INTO experience (account_id, job_title, company, location, dates)
-    VALUES ((SELECT account_id FROM account), title, company_name, loc, date_text)
+    INSERT INTO experience (account_id, role_title, organization, location, dates)
+    VALUES ((SELECT account_id FROM account), title, org_name, loc, date_text)
     RETURNING experience_id INTO found_id;
     RETURN found_id;
 END $$;
@@ -165,7 +165,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- Bullets placed directly in a document section (not under a job or project).
+-- Bullets placed directly in a document section (not under a role or project).
 CREATE FUNCTION pg_temp.add_bullets(doc text, ds integer, bullets text[],
                                     first_pos integer DEFAULT 1)
 RETURNS void LANGUAGE plpgsql AS $$
@@ -232,30 +232,30 @@ BEGIN
     END LOOP;
 END $$;
 
--- A job and its bullets, in order. Returns the experience_id.
+-- A role and its bullets, in order. Returns the experience_id.
 CREATE FUNCTION pg_temp.add_job(doc text, ds integer, pos integer, title text,
-                                company_name text, loc text, date_text text, bullets text[])
+                                org_name text, loc text, date_text text, bullets text[])
 RETURNS integer LANGUAGE plpgsql AS $$
-DECLARE job integer; djob integer; id integer;
+DECLARE role integer; drole integer; id integer;
 BEGIN
-    job := pg_temp.experience(title, company_name, loc, date_text);
+    role := pg_temp.experience(title, org_name, loc, date_text);
     PERFORM pg_temp.list('section_experience', 'section_id', pg_temp.section_of(doc, ds),
-                         'experience_id', job);
-    djob := pg_temp.place(doc || '_experience', doc || '_experience_id',
+                         'experience_id', role);
+    drole := pg_temp.place(doc || '_experience', doc || '_experience_id',
                           ARRAY[doc || '_section_id', 'experience_id', 'position'],
-                          ARRAY[ds, job, pos]);
+                          ARRAY[ds, role, pos]);
     FOR i IN 1 .. cardinality(bullets) LOOP
         id := pg_temp.item('bullet_point', 'bullet_id', 'content', bullets[i]);
-        PERFORM pg_temp.list('experience_bullet_point', 'experience_id', job, 'bullet_id', id);
+        PERFORM pg_temp.list('experience_bullet_point', 'experience_id', role, 'bullet_id', id);
         PERFORM pg_temp.place(doc || '_bullet_point', doc || '_bullet_point_id',
                               ARRAY[doc || '_section_id', doc || '_experience_id', 'bullet_id',
                                     'position'],
-                              ARRAY[ds, djob, id, i]);
+                              ARRAY[ds, drole, id, i]);
     END LOOP;
-    RETURN job;
+    RETURN role;
 END $$;
 
--- A new version of a job lists all of the other version's bullets too, after its own.
+-- A new version of a role lists all of the other version's bullets too, after its own.
 CREATE FUNCTION pg_temp.share_bullets(from_job integer, to_job integer) RETURNS void
 LANGUAGE plpgsql AS $$
 DECLARE id integer;

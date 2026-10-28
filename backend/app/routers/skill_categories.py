@@ -38,6 +38,7 @@ from app.models import (
     SkillCategory,
     SkillCategorySkill,
 )
+from app.refs import SectionRef
 from app.routers.sections import get_section
 from app.schemas import RequiredText
 from app.usage import CATEGORY_LINKS, Use, switch_unsent, touch, used_by_sent_version, uses
@@ -58,11 +59,6 @@ class NewCategory(CategoryIn):
 class SkillRef(BaseModel):
     skill_id: int
     skill_name: str
-
-
-class SectionRef(BaseModel):
-    id: int
-    title: str
 
 
 class CategoryOut(BaseModel):

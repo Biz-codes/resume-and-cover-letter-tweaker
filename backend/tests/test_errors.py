@@ -10,15 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import DbSession, get_db
 from app.errors import AppError, ErrorCode, code_for_db_error, register_error_handlers
-from app.models import SKILLS_SECTION_ID, Account, Section
-
-
-@pytest.fixture
-def account_id(db: Session) -> int:
-    account = Account()
-    db.add(account)
-    db.flush()
-    return account.account_id
+from app.models import SKILLS_SECTION_ID, Section
 
 
 def db_error(db: Session, statement, params=None) -> DBAPIError:

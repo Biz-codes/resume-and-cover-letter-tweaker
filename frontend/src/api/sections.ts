@@ -11,6 +11,10 @@ export interface Section {
   // The five built-in sections can't be renamed or deleted.
   built_in: boolean
   skill_categories: { category_id: number; category_name: string }[]
+  experience: { experience_id: number; role_title: string; organization: string; dates: string | null }[]
+  projects: { project_id: number; project_title: string; done_for: string | null }[]
+  // Bullets listed directly in the section, not under a role or project.
+  bullets: { bullet_id: number; content: string }[]
   used_by: Use[]
 }
 
@@ -21,5 +25,11 @@ export const sectionsApi = {
   rename: (id: number, title: string) => api.put<Section>(`/sections/${id}`, { title }),
   setCategories: (id: number, categoryIds: number[]) =>
     api.put<Section>(`/sections/${id}/skill-categories`, { category_ids: categoryIds }),
+  setExperience: (id: number, experienceIds: number[]) =>
+    api.put<Section>(`/sections/${id}/experience`, { experience_ids: experienceIds }),
+  setProjects: (id: number, projectIds: number[]) =>
+    api.put<Section>(`/sections/${id}/projects`, { project_ids: projectIds }),
+  setBullets: (id: number, bulletIds: number[]) =>
+    api.put<Section>(`/sections/${id}/bullets`, { bullet_ids: bulletIds }),
   delete: (id: number) => api.delete(`/sections/${id}`),
 }

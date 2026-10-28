@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { Experience } from '../api/experience'
 import type { Section } from '../api/sections'
 import type { SkillCategory } from '../api/skills'
 import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
@@ -11,6 +12,9 @@ const SKILLS: Section = {
   title: 'Skills',
   built_in: true,
   skill_categories: [{ category_id: 3, category_name: 'Back End' }],
+  experience: [],
+  projects: [],
+  bullets: [],
   used_by: [],
 }
 const FREELANCE: Section = {
@@ -18,6 +22,9 @@ const FREELANCE: Section = {
   title: 'Freelance',
   built_in: false,
   skill_categories: [],
+  experience: [],
+  projects: [],
+  bullets: [],
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: true }],
 }
 const category = (id: number, name: string, builtIn = false): SkillCategory => ({
@@ -28,6 +35,16 @@ const category = (id: number, name: string, builtIn = false): SkillCategory => (
   sections: [],
   used_by: [],
 })
+const ROLE: Experience = {
+  experience_id: 9,
+  role_title: 'Engineer',
+  organization: 'Acme',
+  location: null,
+  dates: null,
+  bullets: [],
+  sections: [],
+  used_by: [],
+}
 const CATEGORIES = [category(1, 'Other', true), category(2, 'Front End'), category(3, 'Back End')]
 
 function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, sections = [SKILLS, FREELANCE]) {
@@ -36,6 +53,18 @@ function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, 
     'GET /api/skill-categories': [
       { status: 200, body: CATEGORIES },
       { status: 200, body: CATEGORIES },
+    ],
+    'GET /api/experience': [
+      { status: 200, body: [ROLE] },
+      { status: 200, body: [ROLE] },
+    ],
+    'GET /api/projects': [
+      { status: 200, body: [] },
+      { status: 200, body: [] },
+    ],
+    'GET /api/bullet-points': [
+      { status: 200, body: [] },
+      { status: 200, body: [] },
     ],
     ...extra,
   })
@@ -52,6 +81,9 @@ describe('SectionsPage', () => {
       title: 'intro',
       built_in: false,
       skill_categories: [],
+      experience: [],
+      projects: [],
+      bullets: [],
       used_by: [{ kind: 'cover_letter', id: 1, name: 'Acme letter', locked: false }],
     }
     const draft: Section = { ...intro, id: 8, title: 'Volunteering', used_by: [] }
@@ -84,7 +116,7 @@ describe('SectionsPage', () => {
       'Front End',
     ])
     fireEvent.change(select, { target: { value: '2' } })
-    fireEvent.click(within(await card('Skills')).getByText('Add'))
+    fireEvent.click(within(select.parentElement as HTMLElement).getByText('Add'))
     await screen.findAllByText('Back End')
     expect(sentBody(fetchMock, 'PUT /api/sections/2/skill-categories')).toEqual({ category_ids: [3, 2] })
   })
@@ -175,5 +207,26 @@ describe('SectionsPage', () => {
     fireEvent.click(screen.getByText('Retry'))
     expect(await screen.findByText('Skills')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it("saves a section's role list and writes bullets directly in it", async () => {
+    const fetchMock = stub({
+      'PUT /api/sections/6/experience': [{ status: 200, body: FREELANCE }],
+      'POST /api/bullet-points': [{ status: 201, body: {} }],
+    })
+    render(<SectionsPage />)
+    const freelance = await card('Freelance')
+    expect(within(freelance).getByText('Roles it lists (0)')).toBeInTheDocument()
+    const picker = within(freelance).getByLabelText('Add to Freelance roles')
+    fireEvent.change(picker, { target: { value: '9' } })
+    fireEvent.click(within(picker.parentElement as HTMLElement).getByText('Add'))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'PUT /api/sections/6/experience')).toEqual({ experience_ids: [9] }),
+    )
+    fireEvent.change(within(freelance).getByLabelText('New bullet for Freelance'), { target: { value: 'Ran workshops' } })
+    fireEvent.click(within(freelance).getByText('Add bullet'))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Ran workshops', section_id: 6 }),
+    )
   })
 })

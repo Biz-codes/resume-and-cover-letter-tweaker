@@ -97,8 +97,8 @@ class JobPosting(Base):
     job_posting_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     url: Mapped[str] = mapped_column(Text)
-    company: Mapped[str] = mapped_column(String(100))
-    job_title: Mapped[str] = mapped_column(String(100))
+    organization: Mapped[str] = mapped_column(String(100))
+    role_title: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(Text)
     # Header chosen for the posting; its new resumes and cover letters start with it.
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
@@ -213,8 +213,8 @@ class Experience(Base):
 
     experience_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
-    job_title: Mapped[str] = mapped_column(String(100))
-    company: Mapped[str] = mapped_column(String(100))
+    role_title: Mapped[str] = mapped_column(String(100))
+    organization: Mapped[str] = mapped_column(String(100))
     location: Mapped[str | None] = mapped_column(String(100))
     dates: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime | None] = created_at()

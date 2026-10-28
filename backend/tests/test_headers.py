@@ -14,14 +14,6 @@ EMPTY = {"phone": None, "location": None, "linkedin_url": None, "github_url": No
          "portfolio_url": None}
 
 
-@pytest.fixture
-def account_id(db: Session) -> int:
-    account = Account()
-    db.add(account)
-    db.flush()
-    return account.account_id
-
-
 def add_header(db: Session, account_id: int, **values) -> int:
     header = Header(account_id=account_id, **(NEPTUNE | values))
     db.add(header)
@@ -30,8 +22,8 @@ def add_header(db: Session, account_id: int, **values) -> int:
 
 
 def add_posting(db: Session, account_id: int, header_id: int, applied: bool) -> int:
-    posting = JobPosting(account_id=account_id, url="https://example.com/job", company="Acme",
-                         job_title="Engineer", description="Build things.", header_id=header_id,
+    posting = JobPosting(account_id=account_id, url="https://example.com/job", organization="Acme",
+                         role_title="Engineer", description="Build things.", header_id=header_id,
                          applied_on=date(2026, 10, 1) if applied else None)
     db.add(posting)
     db.flush()

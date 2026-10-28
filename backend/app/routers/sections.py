@@ -16,6 +16,9 @@ from app.errors import AppError, ErrorCode
 from app.library import check_ids, check_unique_name, copy_children, set_children
 from app.models import (
     OTHER_CATEGORY_ID,
+    BulletPoint,
+    Experience,
+    Project,
     Section,
     SectionBulletPoint,
     SectionEducation,
@@ -24,6 +27,14 @@ from app.models import (
     SectionProject,
     SectionSkillCategory,
     SkillCategory,
+)
+from app.refs import (
+    BulletRef,
+    ExperienceRef,
+    ProjectRef,
+    bullet_refs,
+    experience_refs,
+    project_refs,
 )
 from app.schemas import RequiredText
 from app.usage import SECTION_LINKS, Use, switch_unsent, used_by_sent_version, uses
@@ -49,11 +60,26 @@ class SectionOut(BaseModel):
     title: str
     built_in: bool
     skill_categories: list[CategoryRef]
+    experience: list[ExperienceRef]
+    projects: list[ProjectRef]
+    bullets: list[BulletRef]
     used_by: list[Use]
 
 
 class CategoryList(BaseModel):
     category_ids: list[int]
+
+
+class ExperienceList(BaseModel):
+    experience_ids: list[int]
+
+
+class ProjectList(BaseModel):
+    project_ids: list[int]
+
+
+class BulletList(BaseModel):
+    bullet_ids: list[int]
 
 
 def visible(account_id: int):
@@ -96,9 +122,14 @@ def categories_by_section(db: Session, section_ids: list[int],
 def to_out(db: Session, sections: list[Section], account_id: int) -> list[SectionOut]:
     ids = [section.id for section in sections]
     categories = categories_by_section(db, ids, account_id)
+    experience = experience_refs(db, SectionExperience, "section_id", ids, account_id)
+    projects = project_refs(db, SectionProject, "section_id", ids, account_id)
+    bullets = bullet_refs(db, SectionBulletPoint, "section_id", ids, account_id)
     used_by = uses(db, SECTION_LINKS, ids)
     return [SectionOut(id=section.id, title=section.title, built_in=section.account_id is None,
-                       skill_categories=categories[section.id], used_by=used_by[section.id])
+                       skill_categories=categories[section.id],
+                       experience=experience[section.id], projects=projects[section.id],
+                       bullets=bullets[section.id], used_by=used_by[section.id])
             for section in sections]
 
 
@@ -176,6 +207,41 @@ def set_section_categories(section_id: int, body: CategoryList, db: DbSession,
     set_children(db, SectionSkillCategory, "section_id", section_id, "category_id",
                  body.category_ids, visible=own_categories(account_id))
     return one_out(db, section, account_id)
+
+
+def set_items(db: Session, section_id: int, account_id: int, link, model, ids: list[int],
+              field: str) -> SectionOut:
+    """Replaces one of the section's lists of library items, in order."""
+    section = get_section(db, section_id, account_id)
+    id_column = model.__table__.primary_key.columns[0]
+    check_ids(db, model, id_column, ids, account_id, field=field)
+    own = select(id_column).where(model.account_id == account_id)
+    set_children(db, link, "section_id", section_id, id_column.key, ids, visible=own)
+    return one_out(db, section, account_id)
+
+
+@router.put("/{section_id}/experience")
+def set_section_experience(section_id: int, body: ExperienceList, db: DbSession,
+                            account_id: AccountId) -> SectionOut:
+    """Replaces the roles the section lists, in order."""
+    return set_items(db, section_id, account_id, SectionExperience, Experience,
+                     body.experience_ids, "experience_ids")
+
+
+@router.put("/{section_id}/projects")
+def set_section_projects(section_id: int, body: ProjectList, db: DbSession,
+                         account_id: AccountId) -> SectionOut:
+    """Replaces the projects the section lists, in order."""
+    return set_items(db, section_id, account_id, SectionProject, Project, body.project_ids,
+                     "project_ids")
+
+
+@router.put("/{section_id}/bullets")
+def set_section_bullets(section_id: int, body: BulletList, db: DbSession,
+                        account_id: AccountId) -> SectionOut:
+    """Replaces the bullets listed directly in the section (not under a role or project)."""
+    return set_items(db, section_id, account_id, SectionBulletPoint, BulletPoint,
+                     body.bullet_ids, "bullet_ids")
 
 
 @router.delete("/{section_id}", status_code=status.HTTP_204_NO_CONTENT)

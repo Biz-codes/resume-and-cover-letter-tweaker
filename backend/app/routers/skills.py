@@ -20,6 +20,7 @@ from app.models import (
     SkillCategory,
     SkillCategorySkill,
 )
+from app.refs import ProjectRef
 from app.routers.skill_categories import get_category
 from app.schemas import RequiredText
 from app.usage import SKILL_LINKS, Use, switch_unsent, used_by_sent_version, uses
@@ -39,12 +40,6 @@ class NewSkill(SkillIn):
 class CategoryRef(BaseModel):
     category_id: int
     category_name: str
-
-
-class ProjectRef(BaseModel):
-    project_id: int
-    project_title: str
-    done_for: str | None
 
 
 class SkillOut(BaseModel):

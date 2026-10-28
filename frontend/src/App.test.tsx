@@ -33,6 +33,9 @@ describe('App', () => {
     ['/library/headers', 'Headers', 'No headers yet.'],
     ['/library/sections', 'Sections', 'Add section'],
     ['/library/skills', 'Skills', 'No skills yet.'],
+    ['/library/experience', 'Experience', 'No roles yet.'],
+    ['/library/projects', 'Projects', 'No projects yet.'],
+    ['/library/bullets', 'Bullet points', 'No bullets yet.'],
   ])('shows %s as a whole page, marked current in the nav', async (path, page, loadedText) => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json([]))))
     renderAt(path)

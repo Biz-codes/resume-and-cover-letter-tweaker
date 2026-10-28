@@ -1,5 +1,6 @@
-// A one-field form for adding or renaming a library item. Keeps the input on errors. A form
-// that can be cancelled (renaming) opens in place of the item's title, so focus moves into it.
+// A one-field form for adding or renaming a library item, or writing a bullet (multiline).
+// Keeps the input on errors. A form that can be cancelled (renaming) opens in place of the
+// item's title, so focus moves into it.
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 
@@ -9,6 +10,7 @@ export default function NameForm({
   initial = '',
   lockedNote,
   submitLabel = 'Save',
+  multiline = false,
   onSave,
   onCancel,
 }: {
@@ -19,6 +21,8 @@ export default function NameForm({
   // Shown when a sent version uses the item, so saving makes a new version.
   lockedNote?: string
   submitLabel?: string
+  // A textarea for text longer than a name, such as a bullet point.
+  multiline?: boolean
   onSave: (name: string) => Promise<void>
   onCancel?: () => void
 }) {
@@ -27,7 +31,7 @@ export default function NameForm({
   const [saving, setSaving] = useState(false)
   const errorId = useId()
   const noteId = useId()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   const opensInPlace = Boolean(onCancel)
 
   useEffect(() => {
@@ -60,14 +64,26 @@ export default function NameForm({
       )}
       <label>
         {label}
-        <input
-          ref={inputRef}
-          value={name}
-          aria-required="true"
-          aria-invalid={error?.field === field}
-          aria-describedby={describedBy}
-          onChange={(event) => setName(event.target.value)}
-        />
+        {multiline ? (
+          <textarea
+            ref={inputRef}
+            value={name}
+            rows={3}
+            aria-required="true"
+            aria-invalid={error?.field === field}
+            aria-describedby={describedBy}
+            onChange={(event) => setName(event.target.value)}
+          />
+        ) : (
+          <input
+            ref={inputRef}
+            value={name}
+            aria-required="true"
+            aria-invalid={error?.field === field}
+            aria-describedby={describedBy}
+            onChange={(event) => setName(event.target.value)}
+          />
+        )}
       </label>
       {error && (
         <p role="alert" id={errorId}>

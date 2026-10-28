@@ -11,7 +11,7 @@ Cascades that remove more than the user might expect:
 - **Section**: built-in sections can never be deleted, so don't offer the option. Deleting a user-created section removes it, and everything placed in it, from every resume and cover letter. The library items it listed are kept; they're just no longer listed under that section.
 - **Skill category**: its skills stay in the library. Any skill no other category lists is listed under the built-in "Other" category. Resumes and cover letters keep showing the same skills, under "Other" (see "Deleting a skill category" below). The built-in "Other" category can never be deleted or renamed, so don't offer the option.
 - **Skill**: removed from every category (`skill_category_skill`), project (`project_skill`), resume (`resume_skill`, `resume_project_skill`), and cover letter (`cover_letter_skill`, `cover_letter_project_skill`).
-- **Experience / project**: removes it, and the bullets under it, from every resume and cover letter. The bullets stay in the library and under any other job or project that lists them.
+- **Experience / project**: removes it, and the bullets (and a project's skills) under it, from every resume and cover letter. The bullets and skills stay in the library and under any other role or project that lists them.
 - **Bullet point / sentence**: removed from every list (`experience_bullet_point`, `section_narrative_content`, etc.) and from every resume and cover letter that uses it.
 - **Resume / cover letter**: removes only its own selections. Library items are kept. Versions copied from it stay; their `based_on_resume_id` / `based_on_letter_id` is set to empty.
 - **Header**: job postings, resumes, and cover letters that use it are kept; their `header_id` is set to empty, so they show no header until the user picks another. List them in the warning.
@@ -47,10 +47,19 @@ If any step fails, the transaction rolls back: the category, its skills, and eve
 ## Sent versions are locked
 Recording the date a posting was applied to (`job_posting.applied_on`) marks its resumes and cover letters as sent. From then on they're a record of what went out, so:
 - **No edits:** their fields, sections, and selections can't be changed. Show them read-only and offer "Make a copy" instead: a new base version, or a version for another posting. The backend returns `VERSION_LOCKED` if a change is sent anyway.
-- **Library edits don't reach them:** editing a library item that a locked version uses (a section title, sentence, bullet, skill, skill category, job, project, education entry, or header) saves the change as a new row instead of changing the original. The new row is listed under the same parents and lists the same children as the original. Resumes and cover letters that aren't locked switch to the new row; locked ones keep the original. Headers are the exception: nothing switches to a new header automatically (see "Headers" below).
+- **Library edits don't reach them:** a resume or cover letter stores only which library items it picked (their ids, in its join tables), and prints each item's text and fields (a project's title, `done_for`, and dates, for example) from the library row. So editing a library item that a locked version uses (a section title, sentence, bullet, skill, skill category, role, project, education entry, or header) saves the change as a new row instead of changing the original. The new row is listed under the same parents and lists the same children as the original. Resumes and cover letters that aren't locked switch to the new row; locked ones keep the original. Headers, roles, and projects are the exceptions: see "Headers" and "Changing a role or project" below.
 - **Deleting is still allowed**, after a warning: deleting a locked version, or a library item a locked version uses, changes the record of what was sent. Say so in the delete warning.
 - **Unlocking:** clearing `applied_on` unlocks the posting's versions. Warn the user first.
 - **Renaming** a locked version (`name`) is allowed, since the name is only a label.
+
+## Changing a role or project
+A role's or project's fields (a role's `role_title`, `organization`, `location`, and `dates`; a project's title, `done_for`, link, and dates) are printed from its row, and a user may want different versions in different resumes in progress (with dates or without, for example). So editing one:
+- **Sent versions never change.** If a locked version uses it, the change is saved as a new row (see "Sent versions are locked").
+- **Ask about resumes and cover letters in progress.** If unlocked ones use it, ask whether to apply the change to them, naming them. The default is no.
+  - **Yes:** they get the change. It's made in place, unless a locked version uses the row; then it's a new row and they switch to it.
+  - **No:** the change is saved as a new row, and they keep the original until the user picks the new one.
+- **Nothing uses it:** edit it in place.
+- **A new row** is listed right after the original in every section that lists it, and lists the same bullets (and a project's skills).
 
 ## Headers
 - **A posting's header:** right after a job posting is created, the user picks its header (`job_posting.header_id`). Suggest the most recently used header, with the headline based on the posting's job title (a new header if that changes it).
@@ -60,8 +69,9 @@ Recording the date a posting was applied to (`job_posting.applied_on`) marks its
 
 ## Suggesting and adding items
 - **No content restrictions:** any kind of library item can go in any section, including mixes in one section, and any section can go in any resume or cover letter.
-- **New items are listed under their parent:** a new item is added to the list of the section, category, job, or project it's created in (e.g. a new bullet written under a job goes in that job's `experience_bullet_point` list). New skill categories, experiences, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and new skills to the built-in "Other" category. The user can choose any other section or category (or, for a skill category, no section).
-- **Unlisted items:** an item no parent lists (e.g. after its job was deleted) stays in the library. Show it in the library so the user can list it again or delete it.
+- **New items are listed under their parent:** a new item is added to the list of the section, category, role, or project it's created in (e.g. a new bullet written under a role goes in that role's `experience_bullet_point` list). New skill categories, experience, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and new skills to the built-in "Other" category. The user can choose any other section or category (or, for a skill category, no section).
+- **Versions of a role or project:** besides editing (see "Changing a role or project"), "New version" adds another row on purpose (e.g. a new title, or dates written differently), listed right after the original in every section that lists it and listing the same bullets (and a project's skills). Nothing switches to it; each resume and cover letter keeps the version it uses until the user picks another.
+- **Unlisted items:** an item no parent lists (e.g. after its role was deleted) stays in the library. Show it in the library so the user can list it again or delete it.
 - **Skills always have a category:** taking a skill out of the only category that lists it lists it under "Other" instead. Taking a skill out of "Other" when no other category lists it returns `VALIDATION_FAILED`; add it to another category first.
 - **"Other" isn't listed under sections:** listing it under a section returns `VALIDATION_FAILED`.
 - **Mixed sections:** items placed directly in the same resume or cover letter section share one `position` numbering across all join tables. Assign and reorder positions across item types together, so a sentence, an experience, and a bullet in one section have a single order.
@@ -72,10 +82,10 @@ Recording the date a posting was applied to (`job_posting.applied_on`) marks its
 - **Skills in a project**: suggest skills from `project_skill` for that project, in its default `position` order. The user picks which ones appear on each resume or cover letter (`resume_project_skill`, `cover_letter_project_skill`).
 - **Bullets**: only offer bullets the selected experience or project lists (`experience_bullet_point` / `project_bullet_point`). Suggest a subset that fits the posting, leaving out bullets too similar to ones already chosen. A bullet's `resume_experience_id` / `resume_project_id` (or the cover letter equivalents) must belong to the same section as the bullet. Leave both empty for a bullet listed directly in the section. A bullet that breaks these rules returns `VALIDATION_FAILED`.
 - **Default sign-off:** new cover letters use the account's "Sincerely" sign-off. The user can pick another or add their own.
-- **Default greeting:** when creating a cover letter, set `addressee` to "[company] Hiring Team" from the job posting (or "Hiring Team" with no posting). Keep any value the user types in instead.
+- **Default greeting:** when creating a cover letter, set `addressee` to "[organization] Hiring Team" from the job posting (or "Hiring Team" with no posting). Keep any value the user types in instead.
 
 ## Rewordings
-- **Never overwrite library content with a rewording.** When the user accepts a reworded or new bullet point or sentence, insert a new `bullet_point` or `narrative_content` row and list it under every parent that lists the original (sections, jobs, projects), right after the original.
+- **Never overwrite library content with a rewording.** When the user accepts a reworded or new bullet point or sentence, insert a new `bullet_point` or `narrative_content` row and list it under every parent that lists the original (sections, roles, projects), right after the original.
 - **Swap it into the current document only.** Point the current resume's or cover letter's join row at the new row. Other resumes and cover letters keep using the original.
 
 ## Writing rules

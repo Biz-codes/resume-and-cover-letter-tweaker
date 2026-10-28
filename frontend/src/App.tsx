@@ -2,8 +2,11 @@
 // main.tsx provides the router.
 import { NavLink, Route, Routes } from 'react-router'
 import { usePageTitle } from './hooks/usePageTitle'
+import BulletsPage from './pages/BulletsPage'
+import ExperiencePage from './pages/ExperiencePage'
 import HeadersPage from './pages/HeadersPage'
 import HomePage from './pages/HomePage'
+import ProjectsPage from './pages/ProjectsPage'
 import SectionsPage from './pages/SectionsPage'
 import SkillsPage from './pages/SkillsPage'
 
@@ -25,6 +28,9 @@ function App() {
           <NavLink to="/library/headers">Headers</NavLink>
           <NavLink to="/library/sections">Sections</NavLink>
           <NavLink to="/library/skills">Skills</NavLink>
+          <NavLink to="/library/experience">Experience</NavLink>
+          <NavLink to="/library/projects">Projects</NavLink>
+          <NavLink to="/library/bullets">Bullet points</NavLink>
         </nav>
       </header>
       <main>
@@ -33,6 +39,9 @@ function App() {
           <Route path="/library/headers" element={<HeadersPage />} />
           <Route path="/library/sections" element={<SectionsPage />} />
           <Route path="/library/skills" element={<SkillsPage />} />
+          <Route path="/library/experience" element={<ExperiencePage />} />
+          <Route path="/library/projects" element={<ProjectsPage />} />
+          <Route path="/library/bullets" element={<BulletsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

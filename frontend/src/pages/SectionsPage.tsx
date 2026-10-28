@@ -1,12 +1,16 @@
-// Library page for sections: add, rename, delete, and edit which skill categories each
-// section lists. Built-in sections can't be renamed or deleted (docs/FRONTEND_CHECKS.md).
+// Library page for sections: add, rename, delete, and edit which skill categories, roles,
+// projects, and bullets each section lists. Built-in sections can't be renamed or deleted (docs/FRONTEND_CHECKS.md).
 // Sections are grouped by whether their titles print: resume headings do, cover letter
 // section titles are labels only the user sees (docs/DATABASE.md, section notes).
 import { useCallback, useEffect, useState } from 'react'
+import { bulletsApi, type Bullet } from '../api/bullets'
 import { toApiError, type ApiError } from '../api/client'
+import { experienceLabel, experienceApi, type Experience } from '../api/experience'
+import { projectLabel, projectsApi, type Project } from '../api/projects'
 import { sectionsApi, type Section } from '../api/sections'
 import { skillCategoriesApi, type SkillCategory } from '../api/skills'
 import { anyLocked } from '../api/usage'
+import BulletList from '../components/BulletList'
 import Collapsible from '../components/Collapsible'
 import ConfirmDelete from '../components/ConfirmDelete'
 import NameForm from '../components/NameForm'
@@ -42,6 +46,9 @@ const LOCKED_NOTE =
 export default function SectionsPage() {
   const [sections, setSections] = useState<Section[] | null>(null)
   const [categories, setCategories] = useState<SkillCategory[]>([])
+  const [roles, setRoles] = useState<Experience[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [bullets, setBullets] = useState<Bullet[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [renaming, setRenaming] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
@@ -52,10 +59,19 @@ export default function SectionsPage() {
 
   const load = useCallback(
     () =>
-      Promise.all([sectionsApi.list(), skillCategoriesApi.list()])
-        .then(([sectionList, categoryList]) => {
+      Promise.all([
+        sectionsApi.list(),
+        skillCategoriesApi.list(),
+        experienceApi.list(),
+        projectsApi.list(),
+        bulletsApi.list(),
+      ])
+        .then(([sectionList, categoryList, roleList, projectList, bulletList]) => {
           setSections(sectionList)
           setCategories(categoryList)
+          setRoles(roleList)
+          setProjects(projectList)
+          setBullets(bulletList)
           setLoadError(null)
         })
         .catch((error: unknown) => setLoadError(toApiError(error))),
@@ -70,6 +86,9 @@ export default function SectionsPage() {
   const categoryChoices = categories
     .filter((category) => !category.built_in)
     .map((category) => ({ id: category.category_id, name: category.category_name }))
+  const roleChoices = roles.map((role) => ({ id: role.experience_id, name: experienceLabel(role) }))
+  const projectChoices = projects.map((project) => ({ id: project.project_id, name: projectLabel(project) }))
+  const allBullets = bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))
 
   async function create(title: string) {
     await sectionsApi.create(title)
@@ -171,6 +190,50 @@ export default function SectionsPage() {
                       }}
                     />
                   </Collapsible>
+
+                  <Collapsible title="Roles it lists" count={section.experience.length}>
+                    <OrderedList
+                      label={`${section.title} roles`}
+                      items={section.experience.map((role) => ({ id: role.experience_id, name: experienceLabel(role) }))}
+                      choices={roleChoices}
+                      emptyText="None."
+                      onChange={async (ids) => {
+                        await sectionsApi.setExperience(section.id, ids)
+                        await load()
+                      }}
+                    />
+                  </Collapsible>
+
+                  <Collapsible title="Projects it lists" count={section.projects.length}>
+                    <OrderedList
+                      label={`${section.title} projects`}
+                      items={section.projects.map((project) => ({
+                        id: project.project_id,
+                        name: projectLabel(project),
+                      }))}
+                      choices={projectChoices}
+                      emptyText="None."
+                      onChange={async (ids) => {
+                        await sectionsApi.setProjects(section.id, ids)
+                        await load()
+                      }}
+                    />
+                  </Collapsible>
+
+                  <BulletList
+                    owner={section.title}
+                    title="Bullets it lists directly"
+                    bullets={section.bullets}
+                    allBullets={allBullets}
+                    onChange={async (ids) => {
+                      await sectionsApi.setBullets(section.id, ids)
+                      await load()
+                    }}
+                    onWrite={async (content) => {
+                      await bulletsApi.create(content, { section_id: section.id })
+                      await load()
+                    }}
+                  />
 
                   <UsedBy uses={section.used_by} />
 

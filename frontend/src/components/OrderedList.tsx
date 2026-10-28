@@ -9,7 +9,11 @@ import { toApiError, type ApiError } from '../api/client'
 export interface ListItem {
   id: number
   name: string
+  // A shorter name for the buttons' labels, when the name is long (a bullet point).
+  label?: string
 }
+
+const labelOf = (item: ListItem) => item.label ?? item.name
 
 export default function OrderedList({
   label,
@@ -62,7 +66,7 @@ export default function OrderedList({
               <span className="row-actions">
                 <button
                   type="button"
-                  aria-label={`Move ${item.name} up`}
+                  aria-label={`Move ${labelOf(item)} up`}
                   aria-disabled={index === 0}
                   onClick={() => move(index, -1)}
                 >
@@ -70,7 +74,7 @@ export default function OrderedList({
                 </button>
                 <button
                   type="button"
-                  aria-label={`Move ${item.name} down`}
+                  aria-label={`Move ${labelOf(item)} down`}
                   aria-disabled={index === items.length - 1}
                   onClick={() => move(index, 1)}
                 >
@@ -78,7 +82,7 @@ export default function OrderedList({
                 </button>
                 <button
                   type="button"
-                  aria-label={`Remove ${item.name}`}
+                  aria-label={`Remove ${labelOf(item)}`}
                   onClick={() =>
                     void save(
                       items.filter((other) => other.id !== item.id).map((other) => other.id),

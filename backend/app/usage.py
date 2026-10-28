@@ -15,12 +15,16 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     CoverLetter,
+    CoverLetterBulletPoint,
+    CoverLetterExperience,
     CoverLetterProject,
     CoverLetterProjectSkill,
     CoverLetterSection,
     CoverLetterSkill,
     CoverLetterSkillCategory,
     Resume,
+    ResumeBulletPoint,
+    ResumeExperience,
     ResumeProject,
     ResumeProjectSkill,
     ResumeSection,
@@ -103,6 +107,31 @@ SKILL_LINKS = [
                  (CP, CP.cover_letter_project_id
                   == CoverLetterProjectSkill.cover_letter_project_id),
                  (CS, CS.cover_letter_section_id == CP.cover_letter_section_id)),
+]
+
+EXPERIENCE_LINKS = [
+    _resume_link(ResumeExperience, ResumeExperience.experience_id,
+                 ResumeExperience.resume_experience_id,
+                 (RS, RS.resume_section_id == ResumeExperience.resume_section_id)),
+    _letter_link(CoverLetterExperience, CoverLetterExperience.experience_id,
+                 CoverLetterExperience.cover_letter_experience_id,
+                 (CS, CS.cover_letter_section_id
+                  == CoverLetterExperience.cover_letter_section_id)),
+]
+PROJECT_LINKS = [
+    _resume_link(RP, RP.project_id, RP.resume_project_id,
+                 (RS, RS.resume_section_id == RP.resume_section_id)),
+    _letter_link(CP, CP.project_id, CP.cover_letter_project_id,
+                 (CS, CS.cover_letter_section_id == CP.cover_letter_section_id)),
+]
+BULLET_LINKS = [
+    _resume_link(ResumeBulletPoint, ResumeBulletPoint.bullet_id,
+                 ResumeBulletPoint.resume_bullet_point_id,
+                 (RS, RS.resume_section_id == ResumeBulletPoint.resume_section_id)),
+    _letter_link(CoverLetterBulletPoint, CoverLetterBulletPoint.bullet_id,
+                 CoverLetterBulletPoint.cover_letter_bullet_point_id,
+                 (CS, CS.cover_letter_section_id
+                  == CoverLetterBulletPoint.cover_letter_section_id)),
 ]
 
 

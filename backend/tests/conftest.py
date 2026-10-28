@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import BACKEND_DIR, get_settings
 from app.db import get_db, transaction
 from app.main import app
+from app.models import Account
 
 
 def alembic_config(url: str) -> Config:
@@ -76,3 +77,12 @@ def client(connection: Connection) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = test_db
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def account_id(db: Session) -> int:
+    """The current account: the first one, so the app uses it instead of creating one."""
+    account = Account()
+    db.add(account)
+    db.flush()
+    return account.account_id

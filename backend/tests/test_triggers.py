@@ -159,16 +159,17 @@ def test_deleting_a_category_keeps_its_skills(db: Session):
 
 def test_two_jobs_share_bullets_and_deleting_one_keeps_them(db: Session):
     account = make_account(db)
-    senior = Experience(account_id=account.account_id, job_title="Senior Engineer", company="Acme")
-    plain = Experience(account_id=account.account_id, job_title="Engineer", company="Acme")
+    senior = Experience(account_id=account.account_id, role_title="Senior Engineer",
+                        organization="Acme")
+    plain = Experience(account_id=account.account_id, role_title="Engineer", organization="Acme")
     bullet = BulletPoint(account_id=account.account_id, content="Built things.")
     db.add_all([senior, plain, bullet])
     db.flush()
-    for job in (senior, plain):
-        db.add(ExperienceBulletPoint(experience_id=job.experience_id, bullet_id=bullet.bullet_id,
+    for role in (senior, plain):
+        db.add(ExperienceBulletPoint(experience_id=role.experience_id, bullet_id=bullet.bullet_id,
                                      position=1))
         db.add(SectionExperience(section_id=EXPERIENCE_SECTION_ID,
-                                 experience_id=job.experience_id, position=1))
+                                 experience_id=role.experience_id, position=1))
     db.flush()
     db.execute(delete(Experience).where(Experience.experience_id == senior.experience_id))
     assert db.get(BulletPoint, bullet.bullet_id) is not None
@@ -177,29 +178,29 @@ def test_two_jobs_share_bullets_and_deleting_one_keeps_them(db: Session):
 
 def test_a_child_is_listed_under_a_parent_only_once(db: Session):
     account = make_account(db)
-    job = Experience(account_id=account.account_id, job_title="Engineer", company="Acme")
+    role = Experience(account_id=account.account_id, role_title="Engineer", organization="Acme")
     bullet = BulletPoint(account_id=account.account_id, content="Built things.")
-    db.add_all([job, bullet])
+    db.add_all([role, bullet])
     db.flush()
-    db.add(ExperienceBulletPoint(experience_id=job.experience_id, bullet_id=bullet.bullet_id,
+    db.add(ExperienceBulletPoint(experience_id=role.experience_id, bullet_id=bullet.bullet_id,
                                  position=1))
     db.flush()
     with pytest.raises(DBAPIError) as error, db.begin_nested():
         db.execute(text("INSERT INTO experience_bullet_point VALUES (:e, :b, 2)"),
-                   {"e": job.experience_id, "b": bullet.bullet_id})
+                   {"e": role.experience_id, "b": bullet.bullet_id})
     assert error.value.orig.sqlstate == "23505"
 
 
 def test_deleting_a_section_keeps_the_items_it_listed(db: Session):
     account = make_account(db)
     section = Section(account_id=account.account_id, title="Freelance")
-    job = Experience(account_id=account.account_id, job_title="Consultant", company="Self")
-    db.add_all([section, job])
+    role = Experience(account_id=account.account_id, role_title="Consultant", organization="Self")
+    db.add_all([section, role])
     db.flush()
-    db.add(SectionExperience(section_id=section.id, experience_id=job.experience_id, position=1))
+    db.add(SectionExperience(section_id=section.id, experience_id=role.experience_id, position=1))
     db.flush()
     db.execute(delete(Section).where(Section.id == section.id))
-    assert db.get(Experience, job.experience_id) is not None
+    assert db.get(Experience, role.experience_id) is not None
 
 
 # Other delete rules
@@ -211,7 +212,7 @@ def test_deleting_a_header_keeps_its_postings_resumes_and_letters(db: Session):
     db.add(header)
     db.flush()
     posting = JobPosting(account_id=account.account_id, url="https://example.com/job",
-                         company="Acme", job_title="Engineer", description="Build things.",
+                         organization="Acme", role_title="Engineer", description="Build things.",
                          header_id=header.header_id)
     resume = Resume(account_id=account.account_id, name="Base", header_id=header.header_id)
     letter = CoverLetter(account_id=account.account_id, name="Base", header_id=header.header_id)
@@ -254,7 +255,7 @@ def test_deleting_an_account_deletes_its_content_but_not_built_ins(db: Session):
 
 def make_posting(db: Session, account: Account, title: str) -> JobPosting:
     posting = JobPosting(account_id=account.account_id, url=f"https://example.com/{title}",
-                         company="Acme", job_title=title, description="Build things.")
+                         organization="Acme", role_title=title, description="Build things.")
     db.add(posting)
     db.flush()
     return posting
