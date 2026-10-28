@@ -41,7 +41,29 @@ describe('App', () => {
     renderAt(path)
     expect((await screen.findAllByText(loadedText)).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
+    // The main nav marks the library as the current section, not the current page.
+    expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'true')
     expect(document.title).toBe(`${page} – Resume Tweaker`)
+    await expectNoA11yViolations({ page: true })
+  })
+
+  it('shows the library landing page, with its sub-nav', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    renderAt('/library')
+    expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('navigation', { name: 'Library' })).toBeInTheDocument()
+    await expectNoA11yViolations({ page: true })
+  })
+
+  it.each([
+    ['/postings', 'Job postings'],
+    ['/resumes', 'Resumes'],
+    ['/cover-letters', 'Cover letters'],
+  ])('shows %s as coming soon', async (path, page) => {
+    vi.stubGlobal('fetch', vi.fn())
+    renderAt(path)
+    expect(screen.getByRole('heading', { level: 2, name: page })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
     await expectNoA11yViolations({ page: true })
   })
 

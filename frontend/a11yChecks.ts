@@ -20,11 +20,12 @@ const NO_TEST_NEEDED = new Set(['main.tsx'])
 // background.
 const CONTRAST_PAIRS: [string, string, string][] = [
   [':root', ':root', 'body text'],
-  ['.nav-group, .muted', ':root', 'muted text'],
+  ['.muted', ':root', 'muted text'],
   ["[role='alert']", ':root', 'error text'],
   ["[role='alert']", '.note, .confirm', 'error text in a delete confirm'],
   [':root', '.note, .confirm', 'text in a note or delete confirm'],
   [':root', '.tag', 'tag text'],
+  [':root', '.ordered-list li.moving', 'text of an item being moved'],
 ]
 
 function missingTests() {

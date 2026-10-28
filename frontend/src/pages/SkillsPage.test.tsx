@@ -71,7 +71,10 @@ describe('SkillsPage', () => {
   it('saves a reordered skill list', async () => {
     const fetchMock = stub({ 'PUT /api/skill-categories/6/skills': [{ status: 200, body: AI }] })
     render(<SkillsPage />)
-    fireEvent.click(within(await categoryCard('AI')).getByLabelText('Move Gemini up'))
+    const handle = within(await categoryCard('AI')).getByRole('button', { name: 'Move Gemini' })
+    fireEvent.click(handle)
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    fireEvent.click(handle)
     await screen.findAllByText('Gemini')
     await new Promise((resolve) => setTimeout(resolve))
     expect(sentBody(fetchMock, 'PUT /api/skill-categories/6/skills')).toEqual({ skill_ids: [11, 10] })

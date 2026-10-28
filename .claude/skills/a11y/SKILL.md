@@ -32,7 +32,8 @@ Every component and page is tested for accessibility from the start. Every test 
 **Names and labels**
 - Every input, select, and textarea has a visible `<label>` (wrapping the control, as `NameForm` does). Placeholder text is not a label.
 - Buttons and links say what they do. When a card repeats the same button ("Rename", "Delete"), give each one an `aria-label` that names its item, starting with the visible text (WCAG 2.5.3, label in name): `aria-label={`Delete "${name}"`}`.
-- Icon-only buttons (↑ ↓) have an `aria-label`.
+- Icon-only buttons (the ⠿ drag handle) have an `aria-label`.
+- Anything that can be dragged also works by keyboard and by single clicks (WCAG 2.5.7); reuse `OrderedList` for reordering.
 - Required fields carry `aria-required="true"` (the backend still validates).
 - Fields for the user's own details have `autoComplete` (`name`, `email`, `tel`, `url`) (WCAG 1.3.5).
 

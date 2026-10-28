@@ -2,6 +2,13 @@
 
 How the app turns a job posting url into a tailored resume and cover letter, and how base resumes are kept. Every suggestion follows [WRITING_RULES.md](WRITING_RULES.md). Content comes from the database described in [DATABASE.md](DATABASE.md).
 
+## Modes
+The app has distinct modes, so it's always clear whether the user is managing their content or building a document. Home asks "What do you want to do?" and offers one choice per mode; the main nav lists them too (`frontend/src/modes.ts`).
+- **Library** (`/library`): view and edit everything a resume or cover letter can draw from (headers, sections, skills, experience, projects, bullet points, and the rest), with its own sub-nav.
+- **Job postings** (`/postings`), **Resumes** (`/resumes`), and **Cover letters** (`/cover-letters`): create and work on them, following the user flow below. Until their phase is built, each shows a "coming soon" page.
+
+Building a resume or cover letter never requires switching to the library: content written there (a new or reworded bullet, a new sentence) is saved to the library as part of the flow.
+
 ## Reading the job posting
 1. Fetch the HTML from the url.
 2. Find the part of the page that holds the job description. Ignore navigation, ads, and unrelated listings.

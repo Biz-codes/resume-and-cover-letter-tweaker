@@ -24,6 +24,8 @@ function renderList(onChange = vi.fn(() => Promise.resolve())) {
 }
 
 const button = (name: string) => screen.getByRole('button', { name })
+const announced = () => document.querySelector('[aria-live]') as HTMLElement
+const names = () => screen.getAllByRole('listitem').map((row) => row.querySelector('.item-name')?.textContent)
 
 describe('OrderedList', () => {
   it('has no accessibility violations, listed or empty', async () => {
@@ -34,22 +36,107 @@ describe('OrderedList', () => {
     await expectNoA11yViolations()
   })
 
-  it('moves an item up or down', () => {
+  it('reorders by keyboard: Space picks up, arrows move, Space drops', async () => {
     const onChange = renderList()
-    fireEvent.click(button('Move SQL up'))
-    expect(onChange).toHaveBeenLastCalledWith([1, 3, 2])
-    fireEvent.click(button('Move Go down'))
-    expect(onChange).toHaveBeenLastCalledWith([2, 1, 3])
+    const handle = button('Move Go')
+    expect(handle).toHaveAccessibleDescription(/press Space to pick up/)
+    fireEvent.click(handle)
+    expect(handle).toHaveAttribute('aria-pressed', 'true')
+    expect(announced()).toHaveTextContent('Picked up Go, position 1 of 3.')
+    await expectNoA11yViolations()
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
+    expect(announced()).toHaveTextContent('Go, position 2 of 3.')
+    expect(names()).toEqual(['Python', 'Go', 'SQL'])
+    await vi.waitFor(() => expect(button('Move Go')).toHaveFocus())
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowUp' })
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowUp' })
+    expect(names()).toEqual(['Go', 'Python', 'SQL'])
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowDown' })
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowDown' })
+    fireEvent.click(button('Move Go'))
+    expect(onChange).toHaveBeenLastCalledWith([2, 3, 1])
+    expect(announced()).toHaveTextContent('Dropped Go, position 3 of 3.')
+    expect(button('Move Go')).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it("keeps the end buttons focusable but does nothing when they're pressed", () => {
+  it('puts the item back on Escape', () => {
     const onChange = renderList()
-    // aria-disabled rather than disabled, so a button that just moved its item to the top
-    // keeps focus.
-    expect(button('Move Go up')).toHaveAttribute('aria-disabled', 'true')
-    expect(button('Move SQL down')).toHaveAttribute('aria-disabled', 'true')
-    fireEvent.click(button('Move Go up'))
+    fireEvent.click(button('Move Go'))
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowDown' })
+    fireEvent.keyDown(button('Move Go'), { key: 'Escape' })
+    expect(names()).toEqual(['Go', 'Python', 'SQL'])
+    expect(announced()).toHaveTextContent('Cancelled. Go is back at position 1 of 3.')
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('reorders without dragging: pick up, then Move here', async () => {
+    const onChange = renderList()
+    fireEvent.click(button('Move SQL'))
+    expect(screen.queryByRole('button', { name: 'Remove Go' })).not.toBeInTheDocument()
+    expect(button('Cancel move')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(button('Move SQL here, to position 1'))
+    expect(onChange).toHaveBeenLastCalledWith([3, 1, 2])
+    await vi.waitFor(() => expect(button('Move SQL')).toHaveFocus())
+  })
+
+  it('cancels a move from its Cancel button', async () => {
+    const onChange = renderList()
+    fireEvent.click(button('Move Python'))
+    fireEvent.click(button('Cancel move'))
+    expect(onChange).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(button('Move Python')).toHaveFocus())
+  })
+
+  it('reorders by dragging the handle, past several rows', async () => {
+    const onChange = renderList()
+    // jsdom has no layout, so give each row a 20px-tall box by where it is in the list now.
+    screen.getAllByRole('listitem').forEach((row) => {
+      row.getBoundingClientRect = () => {
+        const index = [...(row.parentElement?.children ?? [])].indexOf(row)
+        return { top: index * 20, height: 20 } as DOMRect
+      }
+    })
+    const handle = button('Move Go')
+    fireEvent.pointerDown(handle, { button: 0, clientY: 10, pointerId: 1 })
+    // The moves go to the window: the dragged row moves in the page as the list rearranges.
+    fireEvent.pointerMove(window, { clientY: 20, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientY: 35, pointerId: 1 })
+    expect(names()).toEqual(['Python', 'Go', 'SQL'])
+    fireEvent.pointerMove(window, { clientY: 55, pointerId: 1 })
+    expect(names()).toEqual(['Python', 'SQL', 'Go'])
+    // Mid-drag: no Move here or Cancel buttons, just the highlighted row.
+    expect(screen.queryByRole('button', { name: /Move Go here/ })).not.toBeInTheDocument()
+    expect(handle).toHaveAttribute('aria-pressed', 'true')
+    await expectNoA11yViolations()
+    fireEvent.pointerUp(window, { pointerId: 1 })
+    fireEvent.click(handle)
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenLastCalledWith([2, 3, 1])
+  })
+
+  it('puts a dragged item back when the pointer is cancelled', () => {
+    const onChange = renderList()
+    const handle = button('Move Go')
+    fireEvent.pointerDown(handle, { button: 0, clientY: 10, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientY: 60, pointerId: 1 })
+    fireEvent.pointerCancel(window, { pointerId: 1 })
+    expect(names()).toEqual(['Go', 'Python', 'SQL'])
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps the dropped order in place while it saves', async () => {
+    let finish = () => {}
+    renderList(vi.fn(() => new Promise<void>((resolve) => (finish = resolve))))
+    fireEvent.click(button('Move Go'))
+    fireEvent.keyDown(button('Move Go'), { key: 'ArrowDown' })
+    fireEvent.click(button('Move Go'))
+    expect(names()).toEqual(['Python', 'Go', 'SQL'])
+    expect(button('Remove Go')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    finish()
+    // The parent hasn't sent a new list here, so the saved order gives way to the items given.
+    await vi.waitFor(() => expect(names()).toEqual(['Go', 'Python', 'SQL']))
   })
 
   it('takes an item out and moves focus to the list', async () => {
