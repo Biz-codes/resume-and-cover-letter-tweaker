@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../api/sections'
 import type { SkillCategory } from '../api/skills'
-import { errorBody, sentBody, stubApi } from '../test/stubApi'
+import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
 
@@ -153,5 +153,27 @@ describe('SectionsPage', () => {
     expect(within(screen.getByRole('group', { name: 'Delete "Freelance"?' })).getByText('Cancel')).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('button', { name: 'Delete "Freelance"' })).toHaveFocus()
+  })
+
+  it('says it is loading', async () => {
+    stubPendingApi()
+    render(<SectionsPage />)
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('offers Retry when the list fails to load', async () => {
+    stub({
+      'GET /api/sections': [
+        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
+        { status: 200, body: [SKILLS] },
+      ],
+    })
+    render(<SectionsPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByText('Retry'))
+    expect(await screen.findByText('Skills')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

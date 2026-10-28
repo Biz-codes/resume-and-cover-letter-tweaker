@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Hooks that make sure every front end change gets an accessibility review (the /a11y skill).
 
-- `record` (PostToolUse on Edit|Write): notes each edited component, page, or stylesheet
-  under frontend/src (not tests) in a per-session list in the temp folder.
+- `record` (PostToolUse on Edit|Write): notes each edited component, page, stylesheet, or
+  component test under frontend/src (not the shared helpers in src/test/) in a per-session
+  list in the temp folder.
 - `remind` (Stop): if the list isn't empty, clears it and blocks the stop with exit code 2,
   telling Claude to run /a11y on those files. When Claude is already continuing because of
   this hook (stop_hook_active), it lets the stop through, so it never loops.
@@ -20,8 +21,6 @@ def pending_file(session_id):
 def needs_review(path):
     parts = path.parts
     if "frontend" not in parts or "src" not in parts or "test" in parts:
-        return False
-    if path.name.endswith((".test.tsx", ".test.ts")):
         return False
     return path.suffix in (".tsx", ".css")
 
@@ -44,7 +43,8 @@ def remind(data):
     print("Front end files changed this turn:\n"
           + "\n".join(f"  - {name}" for name in files)
           + "\nRun the /a11y skill on them: review against its checklist, fix what it finds, and "
-          "make sure their tests call expectNoA11yViolations in every state they render.",
+          "make sure their tests reach every state the code renders, calling "
+          "expectNoA11yViolations for each state a test passes through before it ends.",
           file=sys.stderr)
     sys.exit(2)
 

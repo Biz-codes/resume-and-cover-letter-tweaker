@@ -5,7 +5,7 @@ Rules the database does not enforce, so the app must handle them. See the databa
 ## Delete warnings
 The five built-in sections ("Summary", "Skills", "Experience", "Projects", "Education") and the built-in "Other" skill category can't be deleted or renamed. The backend refuses with `BUILT_IN_PROTECTED`, and a database trigger blocks it as a backstop.
 
-Every foreign key uses `ON DELETE CASCADE`, so deleting a row also deletes every row that refers to it. Before any delete, warn the user and list what else will be removed.
+Most foreign keys use `ON DELETE CASCADE`, so deleting a row also deletes every row that refers to it. The exceptions (`header_id`, `sign_off_id`, `tone_set_id`, and `based_on_resume_id` / `based_on_letter_id`) are set to empty instead, as described below. Before any delete, warn the user and list what else will be removed or changed, including any sent versions it affects.
 
 Cascades that remove more than the user might expect:
 - **Section**: built-in sections can never be deleted, so don't offer the option. Deleting a user-created section removes it, and everything placed in it, from every resume and cover letter. The library items it listed are kept; they're just no longer listed under that section.
@@ -29,7 +29,7 @@ Deleting the category would remove its skill list and its resume and cover lette
 4. Move the selected skills (`resume_skill` / `cover_letter_skill` rows) under that "Other" row, after any skills already there, keeping their order. Skip skills already selected under "Other".
 5. Then delete the category.
 
-If any step fails, the transaction rolls back: the category, its skills, and every resume and cover letter stay exactly as they were. Return `INTERNAL_ERROR` with a message like "Couldn't delete the category; nothing was changed."
+If any step fails, the transaction rolls back: the category, its skills, and every resume and cover letter stay exactly as they were. Return `INTERNAL_ERROR`, whose message says nothing was changed ("Something went wrong. Nothing was changed.").
 
 ## Accounts
 - **New accounts get the defaults:** when the backend creates an account, add the starting writing rules and the "Sincerely" sign-off (the same rows `db/seed_defaults.sql` adds).
@@ -56,11 +56,11 @@ Recording the date a posting was applied to (`job_posting.applied_on`) marks its
 - **A posting's header:** right after a job posting is created, the user picks its header (`job_posting.header_id`). Suggest the most recently used header, with the headline based on the posting's job title (a new header if that changes it).
 - **New resumes and cover letters for a posting** start with the posting's header. Ask the user to use it, edit it, or pick another saved header. A posting with no header yet asks for one first.
 - **New base resumes and cover letters** start with the header of the version they're copied from, or the most recently used header when starting fresh.
-- **Changing the headline or contact details:** if no locked (sent) resume, cover letter, or applied posting uses the header, edit it in place. If one does, save the change as a new header (see "Sent versions are locked"), so sent versions keep the header they went out with. Nothing else switches to the new header automatically, since applications in progress at the same time may need different headers: an edit made from a resume or cover letter points only that one at the new header, and an edit made on the header library page just adds the header for the user to pick. Before saving, reuse an existing header with the exact same values instead of adding a duplicate.
+- **Changing the headline or contact details:** if no locked (sent) resume, cover letter, or applied posting uses the header, edit it in place. If one does, save the change as a new header (see "Sent versions are locked"), so sent versions keep the header they went out with. Nothing else switches to the new header automatically, since applications in progress at the same time may need different headers: an edit made from a resume or cover letter points only that one at the new header, and an edit made on the header library page just adds the header for the user to pick. Whenever a header would be added (the New header button, or an edit saved as a new header), reuse an existing header with the exact same values instead of adding a duplicate.
 
 ## Suggesting and adding items
 - **No content restrictions:** any kind of library item can go in any section, including mixes in one section, and any section can go in any resume or cover letter.
-- **New items are listed under their parent:** a new item is added to the list of the section, category, job, or project it's created in (e.g. a new bullet written under a job goes in that job's `experience_bullet_point` list). New skill categories, experiences, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections. The user can choose any other section.
+- **New items are listed under their parent:** a new item is added to the list of the section, category, job, or project it's created in (e.g. a new bullet written under a job goes in that job's `experience_bullet_point` list). New skill categories, experiences, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and new skills to the built-in "Other" category. The user can choose any other section or category (or, for a skill category, no section).
 - **Unlisted items:** an item no parent lists (e.g. after its job was deleted) stays in the library. Show it in the library so the user can list it again or delete it.
 - **Skills always have a category:** taking a skill out of the only category that lists it lists it under "Other" instead. Taking a skill out of "Other" when no other category lists it returns `VALIDATION_FAILED`; add it to another category first.
 - **"Other" isn't listed under sections:** listing it under a section returns `VALIDATION_FAILED`.

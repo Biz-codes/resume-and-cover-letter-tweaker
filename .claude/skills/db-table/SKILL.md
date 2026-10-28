@@ -39,4 +39,6 @@ The schema lives in `docs/DATABASE.md`. It's the source of truth, so every schem
    - **`docs/APP_FLOW.md`:** update it if the change affects the user flow.
    - **`docs/OPEN_QUESTIONS.md`:** mark a related question decided, with a link.
 
-6. **Report back:** list each table and column changed, each doc updated, and any decision you made that the user didn't explicitly ask for.
+6. **Update the code** once the user approves the design: change `backend/app/models.py` to match the doc, create a migration from `backend/` with `.venv/bin/alembic revision --autogenerate -m "..."` (check it, and add any triggers or data by hand), and run `scripts/check.sh`. `test_docs.py` and `test_migrations.py` fail if the doc, models, and migrations disagree.
+
+7. **Report back:** list each table and column changed, each doc updated, and any decision you made that the user didn't explicitly ask for.

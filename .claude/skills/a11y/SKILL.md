@@ -1,14 +1,14 @@
 ---
 name: a11y
-description: Review new or changed front end code for accessibility (WCAG 2.2 AA), fix what it finds, and add axe-core checks and behavior tests for every state the code renders. Use after adding or changing any component, page, or CSS in frontend/, when the Stop hook says front end files changed, or when the user asks about accessibility.
+description: Review new or changed front end code for accessibility (WCAG 2.2 AA), fix what it finds, and add axe-core checks and behavior tests for every state the code renders. Use after adding or changing any component, page, CSS, or front end test in frontend/, when the Stop hook says front end files changed, or when the user asks about accessibility.
 ---
 
 # Accessibility review for front end code
 
-Every component and page is tested for accessibility from the start. Three layers do the work:
+Every component and page is tested for accessibility from the start. Every test run (`npm test`, `vitest run`, a single file, or a watch-mode rerun) runs all the automated checks:
 
-1. **oxlint's jsx-a11y rules** (`frontend/.oxlintrc.json`) run on every edit through the PostToolUse hook and in `scripts/check.sh`. They catch missing alt text, labels without controls, click handlers on non-interactive elements, and the like.
-2. **axe-core** runs in the Vitest tests through `expectNoA11yViolations()` from `frontend/src/test/axe.ts`. `src/test/a11yCoverage.test.ts` fails if a `.tsx` file has no sibling `.test.tsx` that calls it, and checks the text colors in `src/index.css` for contrast.
+1. **Whole-front-end checks** (`frontend/a11yChecks.ts`, Vitest global setup) run before the tests and stop the run if any fail: every `.tsx` file has a sibling `.test.tsx`, oxlint's jsx-a11y rules pass, and the color pairs in `CONTRAST_PAIRS` meet 4.5:1. oxlint also runs on every edit through the PostToolUse hook.
+2. **axe-core** (`frontend/src/test/axe.ts`) runs automatically after every test that rendered something (`src/test/setup.ts`), so every front end test is an accessibility test. Tests also call `expectNoA11yViolations()` themselves for each state they pass through before the end.
 3. **This review** covers what tools can't: focus, keyboard flow, what a screen reader announces, and whether names make sense out of context. axe finds roughly a third of real problems, so this step is not optional.
 
 ## Steps
@@ -18,11 +18,12 @@ Every component and page is tested for accessibility from the start. Three layer
 2. **Review it against the checklist below.** For each problem, fix it in the component, unless the fix would change the design or how the UI looks or behaves in a way the user would notice. Then describe it and ask first.
 
 3. **Write the tests,** in the component's sibling `.test.tsx`:
-   - Call `await expectNoA11yViolations()` in every state the code renders: loaded, empty, loading error, form open, validation error shown, delete confirm open, locked-version note shown. Use `{ page: true }` only for the app shell (`App.test.tsx`).
+   - Reach every state the code renders: loading, loaded, empty, load error with Retry, form open, saving, validation error shown, delete confirm open, locked-version note shown. Each state is either where a test ends (checked automatically) or gets an explicit `await expectNoA11yViolations()` where the test passes through it. Use `{ page: true }` only for the app shell (`App.test.tsx`), and add each new route to its whole-page test.
+   - Check loading and saving states with requests that never answer (`stubPendingApi()` in `src/test/stubApi.ts`, or a fetch mock that returns a pending promise), so the response can't arrive halfway through the axe check.
    - Add behavior tests for what axe can't see: where focus goes when a form or confirm opens and closes, that names are unique and descriptive (`getByRole('button', { name: 'Delete "Freelance"' })`), that status text lands in the live region.
    - Query by role and accessible name (`getByRole`, `getByLabelText`) rather than by text or class, so the tests fail when the accessible name breaks.
 
-4. **Run the checks:** `cd frontend && node_modules/.bin/vitest run && node_modules/.bin/oxlint && node_modules/.bin/tsc -b`. All must pass.
+4. **Run the checks:** `cd frontend && node_modules/.bin/vitest run && node_modules/.bin/tsc -b`. The test run includes oxlint's jsx-a11y rules; run `node_modules/.bin/oxlint` too for the other lint rules. All must pass.
 
 5. **Report:** what you reviewed, what you fixed, the tests you added, and anything left for the user to decide.
 
@@ -54,7 +55,7 @@ Every component and page is tested for accessibility from the start. Three layer
 - The shell keeps `header`, `nav`, and `main` landmarks, with page content inside `main`.
 
 **Color and motion**
-- Text contrast is at least 4.5:1, or 3:1 for text at least 24px (or bold and at least 18.66px). Field borders, focus outlines, and other parts of controls are at least 3:1 (WCAG 1.4.11). When you add a text color or a background to `index.css`, add the pair to `CONTRAST_PAIRS` in `a11yCoverage.test.ts`.
+- Text contrast is at least 4.5:1, or 3:1 for text at least 24px (or bold and at least 18.66px). Field borders, focus outlines, and other parts of controls are at least 3:1 (WCAG 1.4.11). When you add a text color or a background to `index.css`, add the pair to `CONTRAST_PAIRS` in `frontend/a11yChecks.ts`.
 - Respect `prefers-reduced-motion` for any animation.
 
 **Content**

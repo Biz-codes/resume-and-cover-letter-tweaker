@@ -64,10 +64,20 @@ function HeaderForm({
   onCancel: () => void
 }) {
   const errorId = useId()
+  const noteId = useId()
   const formRef = useRef<HTMLFormElement>(null)
 
   // The form opens in place of a button or card, so focus moves to its first field.
   useEffect(() => formRef.current?.querySelector('input')?.focus(), [])
+
+  // Focus lands on the first field, past the note, so the note describes that field.
+  function describedBy(name: keyof HeaderFields) {
+    const ids = [
+      locked && name === FIELDS[0].name ? noteId : null,
+      error?.field === name ? errorId : null,
+    ].filter(Boolean)
+    return ids.length ? ids.join(' ') : undefined
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -82,7 +92,7 @@ function HeaderForm({
       aria-label={editing.headerId ? 'Edit header' : 'New header'}
     >
       {locked && (
-        <p className="note">
+        <p className="note" id={noteId}>
           A sent version uses this header, so your changes will be saved as a new header.
           Everything that uses this one keeps it; pick the new header where you want it.
         </p>
@@ -97,7 +107,7 @@ function HeaderForm({
             value={editing.fields[name] ?? ''}
             aria-required={name === 'full_name' || undefined}
             aria-invalid={error?.field === name}
-            aria-describedby={error?.field === name ? errorId : undefined}
+            aria-describedby={describedBy(name)}
             onChange={(event) => onChange({ ...editing.fields, [name]: event.target.value })}
           />
         </label>

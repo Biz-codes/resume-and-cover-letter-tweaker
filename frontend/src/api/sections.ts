@@ -2,6 +2,9 @@
 import { api } from './client'
 import type { Use } from './usage'
 
+// The built-in sections' fixed ids (backend/app/models.py). Never look them up by title.
+export const BUILT_IN_SECTION_IDS = { summary: 1, skills: 2, experience: 3, projects: 4, education: 5 }
+
 export interface Section {
   id: number
   title: string

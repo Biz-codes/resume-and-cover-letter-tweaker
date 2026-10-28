@@ -35,7 +35,7 @@ Every error response has an HTTP status and this body:
 `NOT_FOUND` also covers items from another account, so the API never reveals whether another account's item exists.
 
 ## Backend rules
-- **Transactions:** every request that writes data runs in one database transaction. If any step fails, the whole request rolls back and nothing is changed. Error messages for multi-step changes say so (e.g. "Couldn't delete the category; nothing was changed.").
+- **Transactions:** every request that writes data runs in one database transaction. If any step fails, the whole request rolls back and nothing is changed. The `INTERNAL_ERROR` message says so: "Something went wrong. Nothing was changed."
 - **Database errors map to codes:**
   - a unique constraint violation → `DUPLICATE`
   - a foreign key violation → `NOT_FOUND`

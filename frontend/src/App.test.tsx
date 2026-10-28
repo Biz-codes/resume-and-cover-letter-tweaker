@@ -25,6 +25,21 @@ describe('App', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json(body, { status: 500 }))))
     renderAt('/')
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    await expectNoA11yViolations({ page: true })
+  })
+
+  // Each library page inside the shell, as a whole page: landmarks, one h1, heading order.
+  it.each([
+    ['/library/headers', 'Headers', 'No headers yet.'],
+    ['/library/sections', 'Sections', 'Add section'],
+    ['/library/skills', 'Skills', 'No skills yet.'],
+  ])('shows %s as a whole page, marked current in the nav', async (path, page, loadedText) => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json([]))))
+    renderAt(path)
+    expect((await screen.findAllByText(loadedText)).length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
+    expect(document.title).toBe(`${page} – Resume Tweaker`)
+    await expectNoA11yViolations({ page: true })
   })
 
   it('shows a message for an unknown page', async () => {

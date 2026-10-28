@@ -12,7 +12,7 @@ Claude can't read or write `.env` files (a hook blocks it), so the user creates 
 - **Installed:** Python 3.14, Node 24, npm, git, and PostgreSQL 18 from Homebrew (`brew services`), on port **5433** with no password for the Mac user. Use its tools by full path, e.g. `$(brew --prefix postgresql@18)/bin/psql -p 5433`.
 - **Old Postgres 14** (EnterpriseDB installer, `/Library/PostgreSQL/14`) still runs on port 5432 and starts with the Mac. The app doesn't use it.
 - **Not installed and not needed:** Docker, uv, gh.
-- **Lint hook:** runs `ruff` from `backend/.venv` and `tsc -b` in `frontend/` after each edit, once those are installed.
+- **Claude Code hooks:** after each edit, `ruff` runs from `backend/.venv`, and `tsc -b` and `oxlint` run in `frontend/`. The full list of hooks is in [CLAUDE.md](../CLAUDE.md).
 
 ## Phase 1: Project setup (done)
 Goal: an empty app that runs, with the full schema in a real database.
@@ -20,7 +20,7 @@ Goal: an empty app that runs, with the full schema in a real database.
 1. [x] **Backend skeleton** in `backend/`:
    - Create a virtual environment at `backend/.venv` and install `fastapi`, `uvicorn`, `sqlalchemy`, `alembic`, `psycopg`, `pydantic-settings`, `anthropic`, `httpx`, `beautifulsoup4`, `pytest`, and `ruff`. Record them in a requirements file.
    - Add a FastAPI app with a health-check endpoint, and settings that read `backend/.env`.
-   - Add a committed `backend/.env.example` listing `DATABASE_URL` and `ANTHROPIC_API_KEY` with placeholder values.
+   - Add a committed `backend/.env.example` listing `DATABASE_URL`, `TEST_DATABASE_URL`, and `ANTHROPIC_API_KEY` with placeholder values.
 2. [x] **Error handling foundation:** the error response shape, error codes, and exception handlers from [API_ERRORS.md](API_ERRORS.md), including mapping database errors to codes. Every write runs in one transaction.
 3. [x] **Database:** create the app database (`resume_tweaker`) and a separate test database (`resume_tweaker_test`) in the local Postgres 18. The user copies `backend/.env.example` to `backend/.env`; the database URLs in it work as is.
 4. [x] **Models and first migration** from [DATABASE.md](DATABASE.md):

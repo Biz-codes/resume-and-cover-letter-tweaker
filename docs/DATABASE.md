@@ -1,7 +1,7 @@
 # Database
 
 ## Overview
-Holds sections, bullet points for resume and content for cover letter.
+Holds the user's library of resume and cover letter content (headers, sections, skills, jobs, projects, bullets, sentences, education), their job postings, and every resume and cover letter built from them.
 
 Every resume and cover letter is saved as its own version. There are two kinds:
 - **Base resumes / cover letters** have no job posting. They're ongoing starting points the user returns to and keeps updating over time.
@@ -18,7 +18,7 @@ Seeding happens in this order:
 
 When the app creates a new account, the backend adds the same account defaults.
 
-Everything belongs to an `account`. Only one account exists for now (the app runs locally for its owner), but the schema is ready for multiple accounts later. The name, headline, contact details, and links at the top of a resume or cover letter live in a `header` row, which the resume and its cover letter point to.
+Everything belongs to an `account`. Only one account exists for now (the app runs locally for its owner), but the schema is ready for multiple accounts later. The name, headline, contact details, and links at the top of a resume or cover letter live in a `header` row, which resumes and cover letters point to.
 
 The database has three layers:
 - **Tables** are a reusable library of content (sections, skills, experience, bullet points, etc.). Each item is written once and stands alone.
@@ -61,7 +61,7 @@ Note: one row for now (the app's owner). Login fields such as a password will be
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header added to db   |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header last updated  |
 
-Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A resume and its cover letter point to the same header through `header_id`.
+Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, starting with the posting's header.
 
 Note: headers are library items with versions, like jobs. A different headline or contact detail is a new row, and identical headers are reused. Sent resumes and cover letters keep the header they went out with, so changing a phone number later means adding a header, not editing the old one (see "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
@@ -149,7 +149,7 @@ Note: base resumes can be edited directly at any time, but the database keeps no
 | based_on_letter_id | INTEGER      | REFERENCES cover_letter(letter_id) ON DELETE SET NULL     | id of cover letter this version was copied from |
 | addressee          | VARCHAR(100) |                                                           | who the greeting addresses: "Dear [addressee]," |
 | sign_off_id        | INTEGER      | REFERENCES sign_off(sign_off_id) ON DELETE SET NULL       | id of sign-off used before the name             |
-| signature_name     | VARCHAR(100) |                                                           | name under the sign-off, if not the account's   |
+| signature_name     | VARCHAR(100) |                                                           | name under the sign-off, if not the header's    |
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter added to db              |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter last updated             |
 

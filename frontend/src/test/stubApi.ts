@@ -27,3 +27,9 @@ export function sentBody(fetchMock: ReturnType<typeof stubApi>, key: string, nth
 export const errorBody = (code: string, message: string, field: string | null = null) => ({
   error: { code, message, field },
 })
+
+// Leaves every request unanswered, so a test can check the loading state without the
+// response arriving halfway through the check.
+export function stubPendingApi() {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+}

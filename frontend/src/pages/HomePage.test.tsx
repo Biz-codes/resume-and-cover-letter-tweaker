@@ -1,15 +1,20 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
-import { errorBody } from '../test/stubApi'
+import { errorBody, stubPendingApi } from '../test/stubApi'
 import HomePage from './HomePage'
 
 describe('HomePage', () => {
-  it('says the backend is running, under the app title', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ status: 'ok' }))))
+  it('says it is checking the backend', async () => {
+    stubPendingApi()
     render(<HomePage />)
     expect(screen.getByText('Checking the backend…')).toBeInTheDocument()
     await expectNoA11yViolations()
+  })
+
+  it('says the backend is running, under the app title', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ status: 'ok' }))))
+    render(<HomePage />)
     expect(await screen.findByText('Backend and database are running.')).toBeInTheDocument()
     expect(document.title).toBe('Resume Tweaker')
     await expectNoA11yViolations()

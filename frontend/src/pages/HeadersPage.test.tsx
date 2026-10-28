@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Header } from '../api/headers'
-import { sentBody, stubApi } from '../test/stubApi'
+import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
 
@@ -46,7 +46,11 @@ describe('HeadersPage', () => {
       'POST /api/headers': [{ status: 201, body: created }],
     })
     render(<HeadersPage />)
-    fireEvent.click(await screen.findByText('New header'))
+    expect(await screen.findByText('No headers yet.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByText('New header'))
+    expect(screen.getByRole('form', { name: 'New header' })).toBeInTheDocument()
+    await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Sam Rivera' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
@@ -78,7 +82,9 @@ describe('HeadersPage', () => {
     })
     render(<HeadersPage />)
     fireEvent.click(within(await cardFor('Front-End Engineer')).getByText('Edit'))
-    expect(screen.getByText(/saved as a new header/)).toBeInTheDocument()
+    // Focus lands on the first field, past the note, so the note describes that field.
+    expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
+    expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription(/saved as a new header/)
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
     fireEvent.click(screen.getByText('Save'))
@@ -155,5 +161,28 @@ describe('HeadersPage', () => {
     fireEvent.click(screen.getByText('Retry'))
     expect(await screen.findByText('Software Engineer')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('says it is loading', async () => {
+    stubPendingApi()
+    render(<HeadersPage />)
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('ignores a second save while saving, without disabling the focused button', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'POST' ? new Promise<Response>(() => {}) : Promise.resolve(Response.json([])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    render(<HeadersPage />)
+    fireEvent.click(await screen.findByText('New header'))
+    fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Sam Rivera' } })
+    fireEvent.click(screen.getByText('Save'))
+    const saving = await screen.findByRole('button', { name: 'Saving…' })
+    expect(saving).toHaveAttribute('aria-disabled', 'true')
+    expect(saving).toBeEnabled()
+    fireEvent.click(saving)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 })

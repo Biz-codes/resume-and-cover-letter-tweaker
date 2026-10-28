@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../api/sections'
 import type { Skill, SkillCategory } from '../api/skills'
-import { sentBody, stubApi, type Reply } from '../test/stubApi'
+import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SkillsPage from './SkillsPage'
 
@@ -121,5 +121,47 @@ describe('SkillsPage', () => {
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "AI".')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Skills' })).toHaveFocus())
+  })
+
+  it('says it is loading', async () => {
+    stubPendingApi()
+    render(<SkillsPage />)
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('offers Retry when the lists fail to load', async () => {
+    stub({
+      'GET /api/skills': [
+        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
+        { status: 200, body: [CLAUDE, GEMINI] },
+      ],
+    })
+    render(<SkillsPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByText('Retry'))
+    expect(await categoryCard('AI')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('says when there are no skills yet', async () => {
+    stub({ 'GET /api/skills': [{ status: 200, body: [] }] })
+    render(<SkillsPage />)
+    const allSkills = await screen.findByRole('heading', { name: 'All skills' })
+    expect(allSkills.nextElementSibling).toHaveTextContent('No skills yet.')
+  })
+
+  it('lists what uses a skill before deleting it, and returns focus on cancel', async () => {
+    stub()
+    render(<SkillsPage />)
+    const deleteButton = await screen.findByRole('button', { name: 'Delete "Claude"' })
+    fireEvent.click(deleteButton)
+    const confirm = screen.getByRole('group', { name: 'Delete "Claude"?' })
+    expect(confirm).toHaveTextContent('Used by: Acme resume.')
+    expect(confirm).toHaveTextContent('from every category and project')
+    await expectNoA11yViolations()
+    fireEvent.click(within(confirm).getByText('Cancel'))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Delete "Claude"' })).toHaveFocus())
   })
 })

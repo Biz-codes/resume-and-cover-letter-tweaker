@@ -50,7 +50,8 @@ Everything for an application hangs off its job posting. A resume and a cover le
    - **Experience:** `Job Title | Company | Location | Dates`, then its bullets.
    - **Projects:** `Project Title | Done For | Dates`, then its skills and bullets; empty parts (nothing in `done_for`, no dates) are left out. Education follows the same pattern as experience.
    - **Bullets:** each starts with `- `.
-   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name (the letter's `signature_name`, or the header's `full_name` when that's empty). On the job posting, the user can record the date they applied, the date they were turned down or hired, and contacts such as the hiring manager or a referral. They can add interviews (date and notes), and link one interview to several of the company's postings when it covered more than one opening.
+   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name (the letter's `signature_name`, or the header's `full_name` when that's empty).
+9. **Track the application.** On the job posting, the user can record the date they applied (which locks its resume and cover letter), the date they were turned down or hired, and contacts such as the hiring manager or a referral. They can add interviews (date and notes), and link one interview to several of the company's postings when it covered more than one opening.
 
 ## Base resumes
 Base resumes and cover letters aren't tied to a job posting. They're ongoing starting points the user keeps coming back to, such as a general tech resume or a teaching resume. The seeded data starts out as base resumes.

@@ -3,7 +3,7 @@
 // every skill keeps a category, and deleting a category moves its skills under "Other".
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../api/client'
-import { sectionsApi, type Section } from '../api/sections'
+import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../api/sections'
 import { OTHER_CATEGORY_ID, skillCategoriesApi, skillsApi, type Skill, type SkillCategory } from '../api/skills'
 import { anyLocked } from '../api/usage'
 import Collapsible from '../components/Collapsible'
@@ -13,8 +13,6 @@ import OrderedList from '../components/OrderedList'
 import UsedBy from '../components/UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
-
-const SKILLS_SECTION_ID = 2
 
 const lockedNote = (what: string) =>
   `A sent version uses this ${what}, so the new name will be saved as a new ${what}. Sent versions keep the old name; unsent ones switch to the new one.`
@@ -49,7 +47,7 @@ export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [newCategorySection, setNewCategorySection] = useState(String(SKILLS_SECTION_ID))
+  const [newCategorySection, setNewCategorySection] = useState(String(BUILT_IN_SECTION_IDS.skills))
   const [renaming, setRenaming] = useState<Target | null>(null)
   const [deleting, setDeleting] = useState<Target | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)

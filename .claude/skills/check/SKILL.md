@@ -10,7 +10,7 @@ Report results in plain language. Don't commit or stage anything; the user handl
 ## 1. Automated checks
 
 Run `scripts/check.sh` from the project root. It runs ruff, the backend tests, `alembic check`, TypeScript, oxlint, and the front end tests, and lists any that failed. It's the same script the git pre-commit hook runs.
-- The front end tests include the accessibility checks: axe-core on every component state, and `src/test/a11yCoverage.test.ts` (every component has an axe test; CSS colors meet contrast). oxlint includes the jsx-a11y rules.
+- The front end tests include the accessibility checks: `a11yChecks.ts` runs first (every component has a test, jsx-a11y lint passes, CSS colors meet contrast), and axe-core runs after every test and wherever a test checks a state on the way. oxlint includes the jsx-a11y rules.
 - The backend tests include `tests/test_docs.py`, which checks DATABASE.md against the models and API_ERRORS.md against the error codes, and `tests/test_seeds.py` for the committed seed SQL.
 - If Postgres isn't running, the script says so. Ask the user to start it (`brew services start postgresql@18`) rather than skipping the database checks.
 - For a failure, show the relevant output and fix it if the cause is clear. If a fix would change the design, ask first.

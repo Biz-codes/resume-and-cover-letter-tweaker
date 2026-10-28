@@ -33,7 +33,7 @@ export const skillCategoriesApi = {
   // A skill taken out of its only category moves to "Other".
   setSkills: (id: number, skillIds: number[]) =>
     api.put<SkillCategory>(`/skill-categories/${id}/skills`, { skill_ids: skillIds }),
-  // Moves its skills and resume selections under "Other" first.
+  // Moves its skills and its resume and cover letter selections under "Other" first.
   delete: (id: number) => api.delete(`/skill-categories/${id}`),
 }
 
