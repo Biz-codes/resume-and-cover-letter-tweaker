@@ -9,7 +9,7 @@ body {
   margin: 0;
 }
 
-main {
+.app {
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px;
@@ -60,9 +60,20 @@ form.card input {
   font: inherit;
 }
 
+/* A box-shadow, not an outline, so the browser's focus ring still shows on invalid fields. */
 input[aria-invalid='true'] {
   border-color: #b3261e;
-  outline: 1px solid #b3261e;
+  box-shadow: 0 0 0 1px #b3261e;
+}
+
+button[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Page headings take focus after a delete; they aren't controls, so no focus ring. */
+h2[tabindex='-1']:focus {
+  outline: none;
 }
 
 [role='alert'] {

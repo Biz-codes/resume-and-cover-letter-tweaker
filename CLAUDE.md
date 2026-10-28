@@ -20,8 +20,12 @@ Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech ba
 - `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
 - `/seed-resume`: translate an existing resume or cover letter (PDF or pasted text) into a SQL file in `db/seed_personal/` (gitignored), reusing library items that already exist instead of duplicating them. Sent versions are copied exactly as sent.
 - **Suggest workflow improvements.** While working on the app, when a repeated task, a recurring mistake, or a manual step could be handled better by a new hook, skill, subagent, MCP server, or permission rule, suggest it to the user: say what it would do and why, in a sentence or two. Don't set it up without the user's approval.
+- `/a11y`: review new or changed front end code for accessibility (WCAG 2.2 AA), fix what it finds, and add axe-core checks and behavior tests for every state it renders.
 - `/check`: run every automated check (`scripts/check.sh`), confirm nothing secret or personal would be committed, and sweep the docs for leftovers from design changes. Use before the user commits and after design changes.
-- Hooks in `.claude/settings.json`: a PreToolUse hook blocks access to `.env` files; a PostToolUse hook runs `ruff` on edited Python files and `tsc` on edited TypeScript files once those tools are installed.
+- Hooks in `.claude/settings.json`:
+  - A PreToolUse hook blocks access to `.env` files.
+  - PostToolUse hooks run `ruff` on edited Python files, run `tsc` and `oxlint` (with jsx-a11y rules) on edited TypeScript files, and note edited front end components, pages, and CSS.
+  - A Stop hook (`.claude/hooks/a11y_review.py`) blocks the end of a turn that changed front end files until `/a11y` has reviewed them.
 - Git pre-commit hook (`.githooks/pre-commit`, turned on with `git config core.hooksPath .githooks`): refuses to commit `.env` files, `db/seed_personal/`, or database dumps, then runs `scripts/check.sh`. A failing check blocks the commit.
 
 ## Conventions
@@ -37,4 +41,5 @@ Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech ba
 - Library items stand alone and store no parent id. Each parent lists its possible children in a library join table (`section_experience`, `experience_bullet_point`, `skill_category_skill`, etc.) with a `position` for default order and a (parent, child) primary key. One child can be listed under many parents. These lists drive suggestions; they don't limit where an item can go.
 - Join tables under resume/cover letter have their own `SERIAL` id (so child selections can reference them), a `position` column, and a `Unique:` line.
 - A resume or cover letter with no `job_posting_id` is a base version: an ongoing starting point that can be edited directly. Versions tied to a posting are never edited to fit a different posting. Copy them instead. Once the posting's `applied_on` date is set, its versions are locked (`VERSION_LOCKED`), and library edits that would change them save a new row instead.
+- Accessibility is part of every front end change, not a later pass: target WCAG 2.2 AA, and give each `.tsx` file a sibling `.test.tsx` that calls `expectNoA11yViolations()` in every state it renders (`a11yCoverage.test.ts` enforces it). See "Accessibility" in [docs/TECH_STACK.md](docs/TECH_STACK.md).
 - Every foreign key uses `ON DELETE CASCADE`, except `based_on_resume_id` / `based_on_letter_id`, `tone_set_id` on `resume` / `cover_letter`, `header_id` on `job_posting` / `resume` / `cover_letter`, and `sign_off_id` on `cover_letter`, which use `ON DELETE SET NULL`. Deleting a parent never deletes its children, only its list of them. The front end warns before deletes.

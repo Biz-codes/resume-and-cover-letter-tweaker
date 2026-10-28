@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../api/sections'
 import type { SkillCategory } from '../api/skills'
 import { errorBody, sentBody, stubApi } from '../test/stubApi'
+import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
 
 const SKILLS: Section = {
@@ -62,6 +63,7 @@ describe('SectionsPage', () => {
     expect(within(group('Cover letter labels')).getByText('intro')).toBeInTheDocument()
     expect(within(group('Cover letter labels')).getByText(/Only you see these/)).toBeInTheDocument()
     expect(within(group('Not used yet')).getByText('Volunteering')).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it("doesn't offer renaming or deleting built-in sections", async () => {
@@ -102,6 +104,7 @@ describe('SectionsPage', () => {
     render(<SectionsPage />)
     fireEvent.click(within(await card('Freelance')).getByText('Rename'))
     expect(screen.getByText(/saved as a new section/)).toBeInTheDocument()
+    await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Section title'), { target: { value: 'Consulting' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -121,16 +124,34 @@ describe('SectionsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('already a section named "Skills"')
     expect(screen.getByLabelText('New section title')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('New section title')).toHaveValue('skills')
+    await expectNoA11yViolations()
   })
 
   it('lists what uses a section before deleting it', async () => {
     stub({ 'DELETE /api/sections/6': [{ status: 204 }] })
     render(<SectionsPage />)
-    fireEvent.click(within(await card('Freelance')).getByText('Delete'))
-    const confirm = screen.getByRole('group', { name: 'Confirm delete' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Freelance"' }))
+    const confirm = screen.getByRole('group', { name: 'Delete "Freelance"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
+    await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Freelance".')
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Sections' })).toHaveFocus())
+  })
+
+  it('moves focus into a form when it opens and back to its button when it closes', async () => {
+    stub()
+    render(<SectionsPage />)
+    expect(document.title).toBe('Sections – Resume Tweaker')
+    fireEvent.click(await screen.findByRole('button', { name: 'Rename "Freelance"' }))
+    expect(screen.getByLabelText('Section title')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Rename "Freelance"' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete "Freelance"' }))
+    expect(within(screen.getByRole('group', { name: 'Delete "Freelance"?' })).getByText('Cancel')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Delete "Freelance"' })).toHaveFocus()
   })
 })

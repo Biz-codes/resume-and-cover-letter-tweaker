@@ -20,7 +20,8 @@
 - `frontend/`: Vite + React + TypeScript app.
 - `db/`: seed SQL files (`seed_defaults.sql` and `seed_helpers.sql` committed; `seed_personal/`, one file per resume, gitignored).
 - **Tests:** pytest for the backend, Vitest for the front end.
-- **Linting:** ruff (Python) and tsc (TypeScript), run automatically by a Claude Code hook after each edit.
+- **Linting:** ruff (Python), and tsc and oxlint (TypeScript, including oxlint's jsx-a11y accessibility rules), run automatically by a Claude Code hook after each edit.
+- **Accessibility:** the front end targets WCAG 2.2 AA. See "Accessibility" below.
 
 ## Running it
 Postgres 18 runs as a Homebrew service on port 5433 (see [BUILD_PLAN.md](BUILD_PLAN.md)). From `backend/`:
@@ -45,6 +46,19 @@ Every library table follows the pattern set by headers (`backend/app/routers/hea
 - **Names and lists:** `backend/app/library.py` checks unique names and the ids sent in a list, and edits a parent's ordered list of children (`PUT /api/<items>/{id}/<children>` replaces the whole list, in order). Built-in parents are shared, so their lists are always narrowed to the current account's children.
 - **Versions:** a write that would change a sent version saves a new row instead (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)); the response is the row that was saved, so a different id tells the page a new row was made. `backend/app/versions.py` has the lock condition, and `switch_unsent` in `usage.py` moves unsent versions to the new row.
 - **Front end:** each table has a typed module in `frontend/src/api/` and a page in `frontend/src/pages/`, with a route and a link in `frontend/src/App.tsx`. Pages keep the user's input on errors, highlight the failing field, and list what a delete affects before confirming, using the shared pieces in `frontend/src/components/` (`UsedBy`, `ConfirmDelete`, `NameForm`, `OrderedList`, `Collapsible`). Everything in a library card below its title (lists, "Used by") goes in a `Collapsible`, which shows a count and starts open unless it's empty. Tests stub the API with `frontend/src/test/stubApi.ts`.
+
+## Accessibility
+Every component and page is accessible and tested for it from the start, in three layers:
+- **Lint:** oxlint's jsx-a11y rules (`frontend/.oxlintrc.json`) are errors. Only `prefer-tag-over-role` is off, because `role="status"` is announced more reliably than `<output>`.
+- **axe-core in the tests:** each `.tsx` file has a sibling `.test.tsx` that calls `expectNoA11yViolations()` (`frontend/src/test/axe.ts`) in every state it renders: loaded, empty, error, form open, delete confirm open. `src/test/a11yCoverage.test.ts` fails when one is missing, and checks the text colors in `index.css` for contrast, which axe can't measure in jsdom.
+- **Review:** the `/a11y` skill covers what tools can't: focus, keyboard use, announcements, and names that make sense out of context. A Claude Code Stop hook asks for it whenever a turn changed front end files.
+
+Patterns the pages follow:
+- **Focus:** a form or delete confirm that opens in place takes focus: the first field, or Cancel. When it closes, focus goes back to the button that opened it (`useFocusLater` in `frontend/src/hooks/`), or to the page heading after a delete.
+- **Names:** buttons repeated on every card name their item (`aria-label='Delete "Freelance"'`), starting with the visible text.
+- **Messages:** errors use `role="alert"` and are linked to their field with `aria-describedby`. The page's `role="status"` notice is always rendered, so screen readers announce changes to it.
+- **Disabled buttons:** a button that may have focus when it stops being available (Save while saving, ↑ at the top of a list) uses `aria-disabled` and ignores clicks, so focus isn't lost.
+- **Pages:** each sets its tab title with `usePageTitle`. The shell has `header`, `nav`, and `main` landmarks.
 
 ## AI integration
 - **Direct API calls, not an agent.** The user flow is a fixed sequence, so the backend runs each step and makes one Claude request per step: extract the posting, suggest sections, suggest each section's content, suggest rewordings, review the whole thing.

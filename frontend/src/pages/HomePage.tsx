@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 type Status = { state: 'checking' } | { state: 'ok' } | { state: 'error'; message: string }
 
 export default function HomePage() {
   const [status, setStatus] = useState<Status>({ state: 'checking' })
+  usePageTitle(null)
 
   useEffect(() => {
     api

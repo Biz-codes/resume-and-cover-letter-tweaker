@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { expectNoA11yViolations } from './test/axe'
 
 function renderAt(path: string) {
   render(
@@ -16,6 +17,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ status: 'ok' }))))
     renderAt('/')
     expect(await screen.findByText('Backend and database are running.')).toBeInTheDocument()
+    await expectNoA11yViolations({ page: true })
   })
 
   it('shows the error message when the health check fails', async () => {
@@ -25,9 +27,10 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
   })
 
-  it('shows a message for an unknown page', () => {
+  it('shows a message for an unknown page', async () => {
     vi.stubGlobal('fetch', vi.fn())
     renderAt('/nowhere')
     expect(screen.getByText("That page doesn't exist.")).toBeInTheDocument()
+    await expectNoA11yViolations({ page: true })
   })
 })

@@ -1,5 +1,6 @@
-// A one-field form for adding or renaming a library item. Keeps the input on errors.
-import { useState, type FormEvent } from 'react'
+// A one-field form for adding or renaming a library item. Keeps the input on errors. A form
+// that can be cancelled (renaming) opens in place of the item's title, so focus moves into it.
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 
 export default function NameForm({
@@ -24,9 +25,18 @@ export default function NameForm({
   const [name, setName] = useState(initial)
   const [error, setError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
+  const errorId = useId()
+  const noteId = useId()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const opensInPlace = Boolean(onCancel)
+
+  useEffect(() => {
+    if (opensInPlace) inputRef.current?.focus()
+  }, [opensInPlace])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     setSaving(true)
     setError(null)
     try {
@@ -39,20 +49,34 @@ export default function NameForm({
     }
   }
 
+  const describedBy = [lockedNote && noteId, error && errorId].filter(Boolean).join(' ') || undefined
+
   return (
     <form className="inline-form" onSubmit={submit}>
-      {lockedNote && <p className="note">{lockedNote}</p>}
+      {lockedNote && (
+        <p className="note" id={noteId}>
+          {lockedNote}
+        </p>
+      )}
       <label>
         {label}
         <input
+          ref={inputRef}
           value={name}
+          aria-required="true"
           aria-invalid={error?.field === field}
+          aria-describedby={describedBy}
           onChange={(event) => setName(event.target.value)}
         />
       </label>
-      {error && <p role="alert">{error.message}</p>}
+      {error && (
+        <p role="alert" id={errorId}>
+          {error.message}
+        </p>
+      )}
       <div className="actions">
-        <button type="submit" disabled={saving}>
+        {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
+        <button type="submit" aria-disabled={saving}>
           {saving ? 'Saving…' : submitLabel}
         </button>
         {onCancel && (

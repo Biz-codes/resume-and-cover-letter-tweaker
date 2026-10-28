@@ -1,6 +1,9 @@
 // A parent's list of children (a section's categories, a category's skills): reorder,
 // take out, and add from the items not listed yet. Each change is saved right away.
-import { useState } from 'react'
+// Focus never drops to the top of the page: the move buttons at either end use aria-disabled
+// (a disabled button loses focus), removing an item moves focus to the list, and adding one
+// moves it back to the picker.
+import { useRef, useState } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 
 export interface ListItem {
@@ -24,19 +27,23 @@ export default function OrderedList({
 }) {
   const [error, setError] = useState<ApiError | null>(null)
   const [adding, setAdding] = useState('')
+  const groupRef = useRef<HTMLDivElement>(null)
+  const pickerRef = useRef<HTMLSelectElement>(null)
   const listedIds = new Set(items.map((item) => item.id))
   const available = choices.filter((choice) => !listedIds.has(choice.id))
 
-  async function save(ids: number[]) {
+  async function save(ids: number[], focusAfter?: HTMLElement | null) {
     setError(null)
     try {
       await onChange(ids)
+      focusAfter?.focus()
     } catch (caught) {
       setError(toApiError(caught))
     }
   }
 
   function move(index: number, by: number) {
+    if (index + by < 0 || index + by >= items.length) return
     const ids = items.map((item) => item.id)
     const [moved] = ids.splice(index, 1)
     ids.splice(index + by, 0, moved)
@@ -44,7 +51,7 @@ export default function OrderedList({
   }
 
   return (
-    <div className="ordered-list" aria-label={label} role="group">
+    <div className="ordered-list" aria-label={label} role="group" tabIndex={-1} ref={groupRef}>
       {items.length === 0 ? (
         <p className="muted">{emptyText}</p>
       ) : (
@@ -53,21 +60,31 @@ export default function OrderedList({
             <li key={item.id}>
               <span>{item.name}</span>
               <span className="row-actions">
-                <button type="button" aria-label={`Move ${item.name} up`} disabled={index === 0} onClick={() => move(index, -1)}>
+                <button
+                  type="button"
+                  aria-label={`Move ${item.name} up`}
+                  aria-disabled={index === 0}
+                  onClick={() => move(index, -1)}
+                >
                   ↑
                 </button>
                 <button
                   type="button"
                   aria-label={`Move ${item.name} down`}
-                  disabled={index === items.length - 1}
+                  aria-disabled={index === items.length - 1}
                   onClick={() => move(index, 1)}
                 >
                   ↓
                 </button>
                 <button
                   type="button"
-                  aria-label={`Take ${item.name} out`}
-                  onClick={() => void save(items.filter((other) => other.id !== item.id).map((other) => other.id))}
+                  aria-label={`Remove ${item.name}`}
+                  onClick={() =>
+                    void save(
+                      items.filter((other) => other.id !== item.id).map((other) => other.id),
+                      groupRef.current,
+                    )
+                  }
                 >
                   Remove
                 </button>
@@ -78,7 +95,12 @@ export default function OrderedList({
       )}
       {available.length > 0 && (
         <div className="actions">
-          <select aria-label={`Add to ${label}`} value={adding} onChange={(event) => setAdding(event.target.value)}>
+          <select
+            ref={pickerRef}
+            aria-label={`Add to ${label}`}
+            value={adding}
+            onChange={(event) => setAdding(event.target.value)}
+          >
             <option value="">Choose one to add…</option>
             {available.map((choice) => (
               <option key={choice.id} value={choice.id}>
@@ -88,9 +110,10 @@ export default function OrderedList({
           </select>
           <button
             type="button"
-            disabled={!adding}
+            aria-disabled={!adding}
             onClick={() => {
-              void save([...items.map((item) => item.id), Number(adding)])
+              if (!adding) return
+              void save([...items.map((item) => item.id), Number(adding)], pickerRef.current)
               setAdding('')
             }}
           >

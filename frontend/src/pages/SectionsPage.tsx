@@ -12,6 +12,8 @@ import ConfirmDelete from '../components/ConfirmDelete'
 import NameForm from '../components/NameForm'
 import OrderedList from '../components/OrderedList'
 import UsedBy from '../components/UsedBy'
+import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 type Group = 'resume' | 'letter' | 'unused'
 
@@ -45,6 +47,8 @@ export default function SectionsPage() {
   const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const focusLater = useFocusLater()
+  usePageTitle('Sections')
 
   const load = useCallback(
     () =>
@@ -76,6 +80,7 @@ export default function SectionsPage() {
   async function rename(section: Section, title: string) {
     const saved = await sectionsApi.rename(section.id, title)
     setRenaming(null)
+    focusLater(`section-${saved.id}-rename`)
     setNotice(
       saved.id === section.id
         ? 'Saved.'
@@ -89,6 +94,7 @@ export default function SectionsPage() {
     try {
       await sectionsApi.delete(section.id)
       setDeleting(null)
+      focusLater(PAGE_HEADING_ID)
       setNotice(`Deleted "${section.title}".`)
       await load()
     } catch (error) {
@@ -98,12 +104,14 @@ export default function SectionsPage() {
 
   return (
     <section>
-      <h2>Sections</h2>
+      <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
+        Sections
+      </h2>
       <p className="muted">
         Resume headings and cover letter topics. Any content can go in any section; the lists here
         are only what the app suggests first.
       </p>
-      {notice && <p role="status">{notice}</p>}
+      <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>
@@ -133,7 +141,10 @@ export default function SectionsPage() {
                       initial={section.title}
                       lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
                       onSave={(title) => rename(section, title)}
-                      onCancel={() => setRenaming(null)}
+                      onCancel={() => {
+                        setRenaming(null)
+                        focusLater(`section-${section.id}-rename`)
+                      }}
                     />
                   ) : (
                     <h4>
@@ -172,15 +183,25 @@ export default function SectionsPage() {
                         effect="It and everything placed in it are removed from them. The library items it lists stay in the library."
                         error={deleteError}
                         onConfirm={() => void confirmDelete(section)}
-                        onCancel={() => setDeleting(null)}
+                        onCancel={() => {
+                          setDeleting(null)
+                          focusLater(`section-${section.id}-delete`)
+                        }}
                       />
                     ) : (
                       <div className="actions">
-                        <button type="button" onClick={() => setRenaming(section.id)}>
+                        <button
+                          type="button"
+                          id={`section-${section.id}-rename`}
+                          aria-label={`Rename "${section.title}"`}
+                          onClick={() => setRenaming(section.id)}
+                        >
                           Rename
                         </button>
                         <button
                           type="button"
+                          id={`section-${section.id}-delete`}
+                          aria-label={`Delete "${section.title}"`}
                           onClick={() => {
                             setDeleting(section.id)
                             setDeleteError(null)

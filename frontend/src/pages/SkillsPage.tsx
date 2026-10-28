@@ -11,6 +11,8 @@ import ConfirmDelete from '../components/ConfirmDelete'
 import NameForm from '../components/NameForm'
 import OrderedList from '../components/OrderedList'
 import UsedBy from '../components/UsedBy'
+import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 const SKILLS_SECTION_ID = 2
 
@@ -18,6 +20,9 @@ const lockedNote = (what: string) =>
   `A sent version uses this ${what}, so the new name will be saved as a new ${what}. Sent versions keep the old name; unsent ones switch to the new one.`
 
 type Target = { kind: 'category' | 'skill'; id: number }
+
+// Ids of each card's Rename and Delete buttons, where focus returns when a form closes.
+const buttonId = (kind: Target['kind'], id: number, action: 'rename' | 'delete') => `${kind}-${id}-${action}`
 
 function projectLabel(project: Skill['projects'][number]) {
   return project.done_for ? `${project.project_title} (${project.done_for})` : project.project_title
@@ -49,6 +54,8 @@ export default function SkillsPage() {
   const [deleting, setDeleting] = useState<Target | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const focusLater = useFocusLater()
+  usePageTitle('Skills')
 
   const load = useCallback(
     () =>
@@ -70,6 +77,12 @@ export default function SkillsPage() {
   const skillChoices = skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))
   const is = (target: Target | null, kind: Target['kind'], id: number) => target?.kind === kind && target.id === id
 
+  function closeForm(target: Target, action: 'rename' | 'delete') {
+    if (action === 'rename') setRenaming(null)
+    else setDeleting(null)
+    focusLater(buttonId(target.kind, target.id, action))
+  }
+
   function startDeleting(target: Target) {
     setDeleting(target)
     setDeleteError(null)
@@ -81,6 +94,7 @@ export default function SkillsPage() {
     try {
       await (target.kind === 'category' ? skillCategoriesApi.delete(target.id) : skillsApi.delete(target.id))
       setDeleting(null)
+      focusLater(PAGE_HEADING_ID)
       setNotice(`Deleted "${name}".`)
       await load()
     } catch (error) {
@@ -91,6 +105,7 @@ export default function SkillsPage() {
   async function renameCategory(category: SkillCategory, name: string) {
     const saved = await skillCategoriesApi.rename(category.category_id, name)
     setRenaming(null)
+    focusLater(buttonId('category', saved.category_id, 'rename'))
     setNotice(
       saved.category_id === category.category_id
         ? 'Saved.'
@@ -102,6 +117,7 @@ export default function SkillsPage() {
   async function renameSkill(skill: Skill, name: string) {
     const saved = await skillsApi.rename(skill.skill_id, name)
     setRenaming(null)
+    focusLater(buttonId('skill', saved.skill_id, 'rename'))
     setNotice(
       saved.skill_id === skill.skill_id
         ? 'Saved.'
@@ -112,12 +128,14 @@ export default function SkillsPage() {
 
   return (
     <section>
-      <h2>Skills</h2>
+      <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
+        Skills
+      </h2>
       <p className="muted">
         Each category lists the skills the app suggests for it, in this order. A skill can be in more
         than one category, and every skill is in at least one ("Other" if nothing else).
       </p>
-      {notice && <p role="status">{notice}</p>}
+      <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>
@@ -164,7 +182,7 @@ export default function SkillsPage() {
               initial={category.category_name}
               lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
               onSave={(name) => renameCategory(category, name)}
-              onCancel={() => setRenaming(null)}
+              onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'rename')}
             />
           ) : (
             <h4>
@@ -210,14 +228,24 @@ export default function SkillsPage() {
                 effect='They keep showing its skills, under "Other".'
                 error={deleteError}
                 onConfirm={() => void remove({ kind: 'category', id: category.category_id }, category.category_name)}
-                onCancel={() => setDeleting(null)}
+                onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'delete')}
               />
             ) : (
               <div className="actions">
-                <button type="button" onClick={() => setRenaming({ kind: 'category', id: category.category_id })}>
+                <button
+                  type="button"
+                  id={buttonId('category', category.category_id, 'rename')}
+                  aria-label={`Rename "${category.category_name}"`}
+                  onClick={() => setRenaming({ kind: 'category', id: category.category_id })}
+                >
                   Rename
                 </button>
-                <button type="button" onClick={() => startDeleting({ kind: 'category', id: category.category_id })}>
+                <button
+                  type="button"
+                  id={buttonId('category', category.category_id, 'delete')}
+                  aria-label={`Delete "${category.category_name}"`}
+                  onClick={() => startDeleting({ kind: 'category', id: category.category_id })}
+                >
                   Delete
                 </button>
               </div>
@@ -239,7 +267,7 @@ export default function SkillsPage() {
               initial={skill.skill_name}
               lockedNote={anyLocked(skill.used_by) ? lockedNote('skill') : undefined}
               onSave={(name) => renameSkill(skill, name)}
-              onCancel={() => setRenaming(null)}
+              onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'rename')}
             />
           ) : (
             <h4>{skill.skill_name}</h4>
@@ -255,14 +283,24 @@ export default function SkillsPage() {
                 effect="It's removed from them, and from every category and project."
                 error={deleteError}
                 onConfirm={() => void remove({ kind: 'skill', id: skill.skill_id }, skill.skill_name)}
-                onCancel={() => setDeleting(null)}
+                onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'delete')}
               />
             ) : (
               <div className="actions">
-                <button type="button" onClick={() => setRenaming({ kind: 'skill', id: skill.skill_id })}>
+                <button
+                  type="button"
+                  id={buttonId('skill', skill.skill_id, 'rename')}
+                  aria-label={`Rename "${skill.skill_name}"`}
+                  onClick={() => setRenaming({ kind: 'skill', id: skill.skill_id })}
+                >
                   Rename
                 </button>
-                <button type="button" onClick={() => startDeleting({ kind: 'skill', id: skill.skill_id })}>
+                <button
+                  type="button"
+                  id={buttonId('skill', skill.skill_id, 'delete')}
+                  aria-label={`Delete "${skill.skill_name}"`}
+                  onClick={() => startDeleting({ kind: 'skill', id: skill.skill_id })}
+                >
                   Delete
                 </button>
               </div>

@@ -4,7 +4,8 @@
 - .py files: `ruff check`, using ruff from the nearest .venv (e.g. backend/.venv)
   or from PATH (skipped if ruff isn't installed).
 - .ts/.tsx files: `tsc -b` in the nearest folder with a tsconfig.json, which follows
-  Vite's project references (skipped if there's no tsconfig or no local TypeScript install).
+  Vite's project references, then `oxlint` on the file, which includes the jsx-a11y
+  accessibility rules (each skipped if it isn't installed locally).
 Problems exit with code 2 so Claude sees them and can fix them.
 """
 import json
@@ -47,6 +48,9 @@ def main():
                 tsc = folder / "node_modules" / ".bin" / "tsc"
                 if tsc.exists():
                     run([str(tsc), "-b"], cwd=folder)
+                oxlint = folder / "node_modules" / ".bin" / "oxlint"
+                if oxlint.exists():
+                    run([str(oxlint), str(path)], cwd=folder)
                 return
 
 

@@ -1,5 +1,7 @@
-// The delete warning: what else changes, and whether a sent version is affected.
-import type { ReactNode } from 'react'
+// The delete warning: what else changes, and whether a sent version is affected. It opens in
+// place of the Delete button, so focus moves to its Cancel button (the safe choice), and the
+// group is named by its question so screen readers announce what's being deleted.
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { ApiError } from '../api/client'
 import { anyLocked, type Use } from '../api/usage'
 
@@ -19,9 +21,14 @@ export default function ConfirmDelete({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const questionId = useId()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => cancelRef.current?.focus(), [])
+
   return (
-    <div className="confirm" role="group" aria-label="Confirm delete">
-      <p>Delete {what}?</p>
+    <div className="confirm" role="group" aria-labelledby={questionId}>
+      <p id={questionId}>Delete {what}?</p>
       {uses.length > 0 && (
         <p>
           Used by: {uses.map((use) => use.name).join('; ')}. {effect}
@@ -33,7 +40,7 @@ export default function ConfirmDelete({
         <button type="button" onClick={onConfirm}>
           Delete
         </button>
-        <button type="button" onClick={onCancel}>
+        <button type="button" ref={cancelRef} onClick={onCancel}>
           Cancel
         </button>
       </div>

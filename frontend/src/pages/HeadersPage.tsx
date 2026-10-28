@@ -1,21 +1,24 @@
 // Library page for headers: list, add, edit, and delete, with the version rules from
 // "Headers" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md.
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import { headersApi, type Header, type HeaderFields } from '../api/headers'
 import { anyLocked } from '../api/usage'
 import ConfirmDelete from '../components/ConfirmDelete'
 import UsedBy from '../components/UsedBy'
+import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
+import { usePageTitle } from '../hooks/usePageTitle'
 
-const FIELDS: { name: keyof HeaderFields; label: string; type?: string }[] = [
-  { name: 'full_name', label: 'Full name (required)' },
-  { name: 'headline', label: 'Headline' },
-  { name: 'email', label: 'Email', type: 'email' },
-  { name: 'phone', label: 'Phone', type: 'tel' },
+// autoComplete lets browsers fill in the user's own details (WCAG 1.3.5).
+const FIELDS: { name: keyof HeaderFields; label: string; type?: string; autoComplete?: string }[] = [
+  { name: 'full_name', label: 'Full name (required)', autoComplete: 'name' },
+  { name: 'headline', label: 'Headline', autoComplete: 'organization-title' },
+  { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' },
+  { name: 'phone', label: 'Phone', type: 'tel', autoComplete: 'tel' },
   { name: 'location', label: 'Location' },
-  { name: 'linkedin_url', label: 'LinkedIn URL' },
-  { name: 'github_url', label: 'GitHub URL' },
-  { name: 'portfolio_url', label: 'Portfolio URL' },
+  { name: 'linkedin_url', label: 'LinkedIn URL', autoComplete: 'url' },
+  { name: 'github_url', label: 'GitHub URL', autoComplete: 'url' },
+  { name: 'portfolio_url', label: 'Portfolio URL', autoComplete: 'url' },
 ]
 
 const EMPTY: HeaderFields = {
@@ -30,6 +33,13 @@ const EMPTY: HeaderFields = {
 }
 
 type Editing = { headerId: number | null; fields: HeaderFields }
+
+// Ids of the buttons that open a form, where focus returns when it closes.
+const NEW_HEADER_ID = 'new-header'
+const buttonId = (headerId: number, action: 'edit' | 'delete') => `header-${headerId}-${action}`
+
+// Names a header in its buttons' labels; several headers can share a name.
+const headerLabel = (header: Header) => (header.headline ? `${header.full_name}, ${header.headline}` : header.full_name)
 
 function fieldsOf(header: Header): HeaderFields {
   const { header_id: _id, used_by: _usedBy, ...fields } = header
@@ -53,34 +63,53 @@ function HeaderForm({
   onSave: () => void
   onCancel: () => void
 }) {
+  const errorId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // The form opens in place of a button or card, so focus moves to its first field.
+  useEffect(() => formRef.current?.querySelector('input')?.focus(), [])
+
   function submit(event: FormEvent) {
     event.preventDefault()
-    onSave()
+    if (!saving) onSave()
   }
 
   return (
-    <form className="card" onSubmit={submit} aria-label={editing.headerId ? 'Edit header' : 'New header'}>
+    <form
+      className="card"
+      ref={formRef}
+      onSubmit={submit}
+      aria-label={editing.headerId ? 'Edit header' : 'New header'}
+    >
       {locked && (
         <p className="note">
           A sent version uses this header, so your changes will be saved as a new header.
           Everything that uses this one keeps it; pick the new header where you want it.
         </p>
       )}
-      {FIELDS.map(({ name, label, type }) => (
+      {FIELDS.map(({ name, label, type, autoComplete }) => (
         <label key={name}>
           {label}
           <input
             name={name}
             type={type ?? 'text'}
+            autoComplete={autoComplete}
             value={editing.fields[name] ?? ''}
+            aria-required={name === 'full_name' || undefined}
             aria-invalid={error?.field === name}
+            aria-describedby={error?.field === name ? errorId : undefined}
             onChange={(event) => onChange({ ...editing.fields, [name]: event.target.value })}
           />
         </label>
       ))}
-      {error && <p role="alert">{error.message}</p>}
+      {error && (
+        <p role="alert" id={errorId}>
+          {error.message}
+        </p>
+      )}
       <div className="actions">
-        <button type="submit" disabled={saving}>
+        {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
+        <button type="submit" aria-disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
         </button>
         <button type="button" onClick={onCancel}>
@@ -100,6 +129,8 @@ export default function HeadersPage() {
   const [deleting, setDeleting] = useState<Header | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const focusLater = useFocusLater()
+  usePageTitle('Headers')
 
   const load = useCallback(
     () =>
@@ -143,6 +174,7 @@ export default function HeadersPage() {
       }
       setEditing(null)
       await load()
+      focusLater(buttonId(saved.header_id, 'edit'))
     } catch (error) {
       setFormError(toApiError(error))
     } finally {
@@ -156,6 +188,7 @@ export default function HeadersPage() {
     try {
       await headersApi.delete(deleting.header_id)
       setDeleting(null)
+      focusLater(PAGE_HEADING_ID)
       setNotice('Header deleted.')
       await load()
     } catch (error) {
@@ -165,13 +198,20 @@ export default function HeadersPage() {
 
   const editedHeader = headers?.find((header) => header.header_id === editing?.headerId)
 
+  function cancelEditing() {
+    focusLater(editing?.headerId ? buttonId(editing.headerId, 'edit') : NEW_HEADER_ID)
+    setEditing(null)
+  }
+
   return (
     <section>
-      <h2>Headers</h2>
+      <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
+        Headers
+      </h2>
       <p className="muted">
         The name, headline, and contact details at the top of a resume or cover letter.
       </p>
-      {notice && <p role="status">{notice}</p>}
+      <p role="status">{notice}</p>
 
       {loadError && (
         <div role="alert">
@@ -191,11 +231,11 @@ export default function HeadersPage() {
           saving={saving}
           onChange={(fields) => setEditing({ ...editing, fields })}
           onSave={() => void save()}
-          onCancel={() => setEditing(null)}
+          onCancel={cancelEditing}
         />
       ) : (
         headers && (
-          <button type="button" onClick={() => startEditing({ headerId: null, fields: EMPTY })}>
+          <button type="button" id={NEW_HEADER_ID} onClick={() => startEditing({ headerId: null, fields: EMPTY })}>
             New header
           </button>
         )
@@ -212,7 +252,7 @@ export default function HeadersPage() {
             saving={saving}
             onChange={(fields) => setEditing({ ...editing, fields })}
             onSave={() => void save()}
-            onCancel={() => setEditing(null)}
+            onCancel={cancelEditing}
           />
         ) : (
           <article key={header.header_id} className="card">
@@ -237,18 +277,25 @@ export default function HeadersPage() {
                 effect="They keep going with no header until you pick another."
                 error={deleteError}
                 onConfirm={() => void confirmDelete()}
-                onCancel={() => setDeleting(null)}
+                onCancel={() => {
+                  setDeleting(null)
+                  focusLater(buttonId(header.header_id, 'delete'))
+                }}
               />
             ) : (
               <div className="actions">
                 <button
                   type="button"
+                  id={buttonId(header.header_id, 'edit')}
+                  aria-label={`Edit "${headerLabel(header)}"`}
                   onClick={() => startEditing({ headerId: header.header_id, fields: fieldsOf(header) })}
                 >
                   Edit
                 </button>
                 <button
                   type="button"
+                  id={buttonId(header.header_id, 'delete')}
+                  aria-label={`Delete "${headerLabel(header)}"`}
                   onClick={() => {
                     setDeleting(header)
                     setDeleteError(null)

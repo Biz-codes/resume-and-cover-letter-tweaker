@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../api/sections'
 import type { Skill, SkillCategory } from '../api/skills'
 import { sentBody, stubApi, type Reply } from '../test/stubApi'
+import { expectNoA11yViolations } from '../test/axe'
 import SkillsPage from './SkillsPage'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
@@ -55,12 +56,14 @@ describe('SkillsPage', () => {
   it('shows each category with its skills, sections, and uses', async () => {
     stub()
     render(<SkillsPage />)
+    expect(document.title).toBe('Skills – Resume Tweaker')
     const ai = await categoryCard('AI')
     expect(within(ai).getByText('Sections that list it (1)')).toBeInTheDocument()
     expect(within(ai).getByText('Skills', { selector: 'li' })).toBeInTheDocument()
     expect(within(ai).getAllByRole('listitem').map((item) => item.textContent)).toContain('Resume: Acme resumesent')
     const other = await categoryCard('Other')
     expect(within(other).queryByText('Delete')).not.toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('saves a reordered skill list', async () => {
@@ -98,8 +101,10 @@ describe('SkillsPage', () => {
     render(<SkillsPage />)
     const claude = (await screen.findAllByRole('heading', { name: 'Claude' }))[0].closest('article') as HTMLElement
     expect(within(claude).getByText(/Tweaker \(Independent Project\)/)).toBeInTheDocument()
-    fireEvent.click(within(claude).getByText('Rename'))
-    expect(screen.getByText(/saved as a new skill/)).toBeInTheDocument()
+    fireEvent.click(within(claude).getByRole('button', { name: 'Rename "Claude"' }))
+    expect(screen.getByLabelText('Skill name')).toHaveFocus()
+    expect(screen.getByLabelText('Skill name')).toHaveAccessibleDescription(/saved as a new skill/)
+    await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Skill name'), { target: { value: 'Claude Code' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent('Sent versions keep "Claude".')
@@ -108,10 +113,13 @@ describe('SkillsPage', () => {
   it('explains that deleting a category keeps its skills under "Other"', async () => {
     stub({ 'DELETE /api/skill-categories/6': [{ status: 204 }] })
     render(<SkillsPage />)
-    fireEvent.click(within(await categoryCard('AI')).getByText('Delete'))
-    const confirm = screen.getByRole('group', { name: 'Confirm delete' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete "AI"' }))
+    const confirm = screen.getByRole('group', { name: 'Delete "AI"?' })
+    expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep showing its skills, under "Other".')
+    await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "AI".')
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Skills' })).toHaveFocus())
   })
 })

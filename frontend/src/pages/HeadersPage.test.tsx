@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Header } from '../api/headers'
 import { sentBody, stubApi } from '../test/stubApi'
+import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
 
 const BASE: Header = {
@@ -35,6 +36,7 @@ describe('HeadersPage', () => {
     const sent = await cardFor('Front-End Engineer')
     expect(within(sent).getByText(/Acme resume/)).toBeInTheDocument()
     expect(within(sent).getByText('sent')).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('adds a header, sending blank fields as empty', async () => {
@@ -63,7 +65,9 @@ describe('HeadersPage', () => {
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid full name.')
     expect(screen.getByLabelText('Full name (required)')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription('Invalid full name.')
     expect(screen.getByLabelText('Headline')).toHaveValue('Engineer')
+    await expectNoA11yViolations()
   })
 
   it('warns that editing a header a sent version uses saves a new one', async () => {
@@ -75,6 +79,7 @@ describe('HeadersPage', () => {
     render(<HeadersPage />)
     fireEvent.click(within(await cardFor('Front-End Engineer')).getByText('Edit'))
     expect(screen.getByText(/saved as a new header/)).toBeInTheDocument()
+    await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent('Saved as a new header.')
@@ -98,13 +103,45 @@ describe('HeadersPage', () => {
       'DELETE /api/headers/2': [{ status: 204 }],
     })
     render(<HeadersPage />)
-    fireEvent.click(within(await cardFor('Front-End Engineer')).getByText('Delete'))
-    const confirm = screen.getByRole('group', { name: 'Confirm delete' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Sam Rivera, Front-End Engineer"' }))
+    const confirm = screen.getByRole('group', { name: 'Delete this header?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Header deleted.')
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Headers' })).toHaveFocus())
+  })
+
+  it('moves focus into the form when it opens and back to its button when it closes', async () => {
+    stubApi({ 'GET /api/headers': [{ status: 200, body: [BASE] }] })
+    render(<HeadersPage />)
+    expect(document.title).toBe('Headers – Resume Tweaker')
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' }))
+    expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New header' }))
+    expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
+    expect(screen.getByLabelText('Full name (required)')).toHaveAttribute('autocomplete', 'name')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'New header' })).toHaveFocus()
+  })
+
+  it('moves focus to the saved header', async () => {
+    const saved = { ...BASE, phone: '555-0100' }
+    stubApi({
+      'GET /api/headers': [{ status: 200, body: [BASE] }, { status: 200, body: [saved] }],
+      'PUT /api/headers/1': [{ status: 200, body: saved }],
+    })
+    render(<HeadersPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
+    )
   })
 
   it('offers Retry when the list fails to load', async () => {
@@ -114,6 +151,7 @@ describe('HeadersPage', () => {
     })
     render(<HeadersPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Retry'))
     expect(await screen.findByText('Software Engineer')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
