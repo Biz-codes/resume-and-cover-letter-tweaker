@@ -48,6 +48,25 @@ describe('ConfirmDelete', () => {
     await expectNoA11yViolations()
   })
 
+  it('can name what it lists and say how a sent version is affected', async () => {
+    render(
+      <ConfirmDelete
+        what='"Tech base"'
+        uses={[SENT]}
+        usesLabel="Copies made from it"
+        effect="They're kept."
+        locked={false}
+        error={null}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+    const confirm = screen.getByRole('group', { name: 'Delete "Tech base"?' })
+    expect(confirm).toHaveTextContent("Copies made from it: Acme resume. They're kept.")
+    expect(confirm).not.toHaveTextContent('record of what you sent')
+    await expectNoA11yViolations()
+  })
+
   it('shows an error as an alert', async () => {
     renderConfirm(new ApiError('INTERNAL_ERROR', 'Something went wrong.', null, 500))
     expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.')

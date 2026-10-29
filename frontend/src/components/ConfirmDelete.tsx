@@ -8,15 +8,23 @@ import { anyLocked, type Use } from '../api/usage'
 export default function ConfirmDelete({
   what,
   uses,
+  usesLabel = 'Used by',
   effect,
+  locked = anyLocked(uses),
+  lockedNote = 'A sent version uses it, so deleting it changes the record of what you sent.',
   error,
   onConfirm,
   onCancel,
 }: {
   what: string
   uses: Use[]
+  // What `uses` lists (e.g. "Copies made from it").
+  usesLabel?: string
   // What happens to the things that use it, e.g. "They keep going with no header."
   effect: ReactNode
+  // Whether deleting it changes a sent version, said in `lockedNote`.
+  locked?: boolean
+  lockedNote?: string
   error: ApiError | null
   onConfirm: () => void
   onCancel: () => void
@@ -31,10 +39,10 @@ export default function ConfirmDelete({
       <p id={questionId}>Delete {what}?</p>
       {uses.length > 0 && (
         <p>
-          Used by: {uses.map((use) => use.name).join('; ')}. {effect}
+          {usesLabel}: {uses.map((use) => use.name).join('; ')}. {effect}
         </p>
       )}
-      {anyLocked(uses) && <p>A sent version uses it, so deleting it changes the record of what you sent.</p>}
+      {locked && <p>{lockedNote}</p>}
       {error && <p role="alert">{error.message}</p>}
       <div className="actions">
         <button type="button" onClick={onConfirm}>

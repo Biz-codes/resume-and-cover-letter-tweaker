@@ -7,11 +7,13 @@ from app.db import DbSession
 from app.errors import register_error_handlers
 from app.routers import (
     bullet_points,
+    cover_letters,
     education,
     experience,
     headers,
     narrative_content,
     projects,
+    resumes,
     sections,
     sign_offs,
     skill_categories,
@@ -23,7 +25,8 @@ from app.routers import (
 app = FastAPI(title="Resume and Cover Letter Tweaker")
 register_error_handlers(app)
 for module in (headers, sections, skill_categories, skills, experience, projects,
-               bullet_points, education, narrative_content, writing_rules, tone_sets, sign_offs):
+               bullet_points, education, narrative_content, writing_rules, tone_sets, sign_offs,
+               resumes, cover_letters):
     app.include_router(module.router)
 
 

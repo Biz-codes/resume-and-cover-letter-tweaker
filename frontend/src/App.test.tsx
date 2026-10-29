@@ -64,10 +64,41 @@ describe('App', () => {
   })
 
   it.each([
-    ['/postings', 'Job postings'],
-    ['/resumes', 'Resumes'],
-    ['/cover-letters', 'Cover letters'],
-  ])('shows %s as coming soon', async (path, page) => {
+    ['/resumes', 'Resumes', 'No base resumes yet.'],
+    ['/cover-letters', 'Cover letters', 'No base cover letters yet.'],
+  ])('shows %s as a whole page', async (path, page, loadedText) => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json([]))))
+    renderAt(path)
+    expect(await screen.findByText(loadedText)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
+    await expectNoA11yViolations({ page: true })
+  })
+
+  it('shows a resume as a whole page, under Resumes in the nav', async () => {
+    const resume = {
+      resume_id: 1,
+      name: 'Tech base',
+      header_id: null,
+      tone_set_id: null,
+      job_posting: null,
+      based_on: null,
+      locked: false,
+      copies: [],
+      updated_at: null,
+      output: { parts: [{ label: 'Summary', text: 'Summary\nEngineer.' }], text: 'Summary\nEngineer.' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => Promise.resolve(Response.json(url === '/api/resumes/1' ? resume : []))),
+    )
+    renderAt('/resumes/1')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Resumes' })).toHaveAttribute('aria-current', 'true')
+    expect(document.title).toBe('Tech base – Resume Tweaker')
+    await expectNoA11yViolations({ page: true })
+  })
+
+  it.each([['/postings', 'Job postings']])('shows %s as coming soon', async (path, page) => {
     vi.stubGlobal('fetch', vi.fn())
     renderAt(path)
     expect(screen.getByRole('heading', { level: 2, name: page })).toBeInTheDocument()

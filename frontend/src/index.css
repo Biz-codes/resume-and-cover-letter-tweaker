@@ -268,3 +268,43 @@ form.card label select {
 .card-header .actions {
   margin-top: 0;
 }
+
+/* The resumes or cover letters on their page. */
+.doc-list li {
+  margin: 6px 0;
+}
+
+/* A resume's or cover letter's details: each label beside its value. */
+.details-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.details-list dt {
+  font-weight: 600;
+}
+
+.details-list dd {
+  margin: 0;
+}
+
+/* Each part of the plain-text output, with its Copy button. */
+.output-part {
+  margin: 16px 0;
+}
+
+.output-part h4 {
+  margin: 0;
+}
+
+.output-part pre {
+  margin: 4px 0 0;
+  padding: 8px;
+  border: 1px solid #d8d5dd;
+  border-radius: 4px;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

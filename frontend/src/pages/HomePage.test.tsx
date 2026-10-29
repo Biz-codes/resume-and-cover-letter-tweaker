@@ -21,10 +21,11 @@ describe('HomePage', () => {
     expect(library).toHaveAttribute('href', '/library')
     expect(library.parentElement).not.toHaveTextContent('coming soon')
     expect(library).toHaveAccessibleDescription(/^Everything a resume or cover letter can draw from/)
-    const resume = screen.getByRole('link', { name: 'Create a resume' })
-    expect(within(resume.parentElement as HTMLElement).getByText('coming soon')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Create a resume' }).parentElement).not.toHaveTextContent('coming soon')
+    const posting = screen.getByRole('link', { name: 'Create a job posting' })
+    expect(within(posting.parentElement as HTMLElement).getByText('coming soon')).toBeInTheDocument()
     // Read with the link, for screen reader users moving from link to link.
-    expect(resume).toHaveAccessibleDescription(/^coming soon Build a resume from your library/)
+    expect(posting).toHaveAccessibleDescription(/^coming soon Save a posting to tailor/)
     await expectNoA11yViolations()
   })
 

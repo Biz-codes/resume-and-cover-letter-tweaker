@@ -6,6 +6,8 @@ import { NavLink, Route, Routes, useLocation } from 'react-router'
 import { PAGE_HEADING_ID } from './hooks/useFocusLater'
 import { usePageTitle } from './hooks/usePageTitle'
 import BulletsPage from './pages/BulletsPage'
+import DocumentRoute from './pages/DocumentPage'
+import DocumentsPage from './pages/DocumentsPage'
 import EducationPage from './pages/EducationPage'
 import ExperiencePage from './pages/ExperiencePage'
 import HeadersPage from './pages/HeadersPage'
@@ -84,6 +86,10 @@ function App() {
             <Route path="writing-rules" element={<WritingRulesPage />} />
             <Route path="tone-sets" element={<ToneSetsPage />} />
           </Route>
+          <Route path="/resumes" element={<DocumentsPage key="resume" kind="resume" />} />
+          <Route path="/resumes/:id" element={<DocumentRoute kind="resume" />} />
+          <Route path="/cover-letters" element={<DocumentsPage key="cover_letter" kind="cover_letter" />} />
+          <Route path="/cover-letters/:id" element={<DocumentRoute kind="cover_letter" />} />
           {MODES.filter((mode) => mode.comingIn).map((mode) => (
             <Route key={mode.path} path={mode.path} element={<ComingSoonPage mode={mode} />} />
           ))}

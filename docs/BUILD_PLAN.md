@@ -58,6 +58,13 @@ What the pages cover:
 ## Phase 4: Building resumes and cover letters by hand
 Goal: the full resume and cover letter tree works without AI.
 
+Build it in steps, each with its API endpoints, pages, and tests together:
+1. [x] **Resumes and cover letters:** list them (base versions, then ones for postings), show each as plain text with copy buttons, create base versions with the default header (and a letter's greeting and sign-off), edit their details, copy one to a new base version (the whole tree), and delete, with sent versions locked except for their name.
+2. [ ] **Building the tree:** add, remove, and reorder sections, the items in each section (mixed kinds, one order), a category's and project's skills, and a role's or project's bullets, with the warning before editing a base version. Write new bullets and narrative content in place.
+3. [ ] **Job postings by hand:** create and edit a posting from a pasted description, pick its header, and start its resumes and cover letters from a copy or fresh, each with the posting's header (use, edit, or pick another).
+4. [ ] **Tracking and locking:** applied, rejection, and hire dates, contacts, and interviews shared across postings. Recording the applied date locks the posting's versions; clearing it warns first.
+
+What the steps cover:
 - Create base resumes and cover letters, add sections, and add any library items in any order, including mixed sections and the nested skills and bullets.
 - Create a job posting by hand (pasted description) and pick its header. Create resumes and cover letters under it, each starting from the posting's header with the use / edit / pick another choice. Resumes and cover letters aren't linked to each other directly.
 - Copy a version and warn before editing a base version.

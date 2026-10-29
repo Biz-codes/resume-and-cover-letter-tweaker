@@ -38,7 +38,7 @@ If any step fails, the transaction rolls back: the category, its skills, and eve
 
 ## Versions
 - **Base resumes / cover letters** (no `job_posting_id`) can be edited directly whenever the user wants. They're ongoing starting points.
-- **Warn before editing a base resume / cover letter.** Editing it changes it in place, and its earlier state can't be recovered. Before the first edit in a session, tell the user this and offer to create a new base resume based on this one instead (`based_on_resume_id` / `based_on_letter_id` set to the original). Let them choose to edit in place or make a copy.
+- **Warn before editing a base resume / cover letter.** Editing it changes it in place, and its earlier state can't be recovered. Before the first edit of each base version while the app is open, tell the user this and offer to create a new base resume based on this one instead (`based_on_resume_id` / `based_on_letter_id` set to the original). Let them choose to edit in place or make a copy. Versions for a posting are edited without the warning until they're sent.
 - **Never edit a tailored version to fit a different posting.** Starting from any earlier resume or cover letter, base or tailored, creates a new row with `based_on_resume_id` / `based_on_letter_id` set to the original.
 - **Saving a tailored version as a new base:** the user can copy a tailored version into a new base resume (no posting) to reuse later.
 - **Resumes and cover letters connect only through their job posting:** there's no direct link between them. A resume or cover letter made for a posting gets that posting's `job_posting_id`, not the one of the version it was copied from.
@@ -50,7 +50,7 @@ Recording the date a posting was applied to (`job_posting.applied_on`) marks its
 - **Library edits don't reach them:** a resume or cover letter stores only which library items it picked (their ids, in its join tables), and prints each item's text and fields (a project's title, `done_for`, and dates, for example) from the library row. So editing a library item that a locked version uses (a section title, sentence, bullet, skill, skill category, role, project, education entry, sign-off, or header) saves the change as a new row instead of changing the original. The new row is listed under the same parents and lists the same children as the original. Resumes and cover letters that aren't locked switch to the new row; locked ones keep the original. Headers, roles, and projects are the exceptions: see "Headers" and "Changing a role or project" below.
 - **Deleting is still allowed**, after a warning: deleting a locked version, or a library item a locked version uses, changes the record of what was sent. Say so in the delete warning.
 - **Unlocking:** clearing `applied_on` unlocks the posting's versions. Warn the user first.
-- **Renaming** a locked version (`name`) is allowed, since the name is only a label.
+- **Renaming** a locked version (`name`) is allowed, since the name is only a label. Changing any of its other fields (header, tone set, a letter's greeting, sign-off, or signature name) returns `VERSION_LOCKED`.
 
 ## Changing a role or project
 A role's or project's fields (a role's `role_title`, `organization`, `location`, and `dates`; a project's title, `done_for`, link, and dates) are printed from its row, and a user may want different versions in different resumes in progress (with dates or without, for example). So editing one:

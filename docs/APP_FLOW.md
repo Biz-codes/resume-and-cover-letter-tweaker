@@ -5,7 +5,7 @@ How the app turns a job posting url into a tailored resume and cover letter, and
 ## Modes
 The app has distinct modes, so it's always clear whether the user is managing their content or building a document. Home asks "What do you want to do?" and offers one choice per mode; the main nav lists them too (`frontend/src/modes.ts`).
 - **Library** (`/library`): view and edit everything a resume or cover letter can draw from (headers, sections, skills, experience, projects, bullet points, and the rest), with its own sub-nav.
-- **Job postings** (`/postings`), **Resumes** (`/resumes`), and **Cover letters** (`/cover-letters`): create and work on them, following the user flow below. Until their phase is built, each shows a "coming soon" page.
+- **Job postings** (`/postings`), **Resumes** (`/resumes`), and **Cover letters** (`/cover-letters`): create and work on them, following the user flow below. Job postings shows a "coming soon" page until it's built. A resume or cover letter has its own page (`/resumes/:id`, `/cover-letters/:id`) with its details, its plain-text output, and copying and deleting it.
 
 Building a resume or cover letter never requires switching to the library: content written there (a new or reworded bullet, new narrative content) is saved to the library as part of the flow.
 
@@ -51,13 +51,18 @@ Everything for an application hangs off its job posting. A resume and a cover le
 8. **Output** the final resume and cover letter as plain text for the user to copy and paste into their own document or an application form. There are copy buttons for the whole document and for each section. No .docx or PDF export.
 
    Plain-text layout:
-   - **Header:** name, then the headline, then contact details and links on one line separated by ` | `.
-   - **Resume sections:** the section title, then its content.
+   - **Header:** name, then the headline, then contact details and links on one line separated by ` | ` (email, phone, location, then the LinkedIn, GitHub, and portfolio links).
+   - **Resume sections:** the section title, then its content, with a blank line between sections.
+   - **Narrative content:** excerpts placed one after another run together as one paragraph.
    - **Skills:** one line per category, like `Category: skill, skill, skill`.
    - **Experience:** `Role Title | Organization | Location | Dates`, then its bullets.
-   - **Projects:** `Project Title | Done For | Dates`, then its skills and bullets; empty parts (nothing in `done_for`, no dates) are left out. Education follows the same pattern as experience.
+   - **Projects:** `Project Title | Done For | Dates`, then a `Skills: skill, skill` line and its bullets.
+   - **Education:** `Degree | Institution | Graduation`, then its details.
+   - Empty parts of a line (nothing in `done_for`, no dates) are left out.
    - **Bullets:** each starts with `- `.
-   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name (the letter's `signature_name`, or the header's `full_name` when that's empty).
+   - **Cover letter:** header, greeting, paragraphs separated by blank lines (no section titles), then the sign-off and the user's name (the letter's `signature_name`, or the header's `full_name` when that's empty). No greeting without an addressee, and no closing without a sign-off.
+
+   The backend builds the text (`backend/app/plain_text.py`) in parts: the header, each section, and a letter's greeting and sign-off, so each part has its own copy button.
 9. **Track the application.** On the job posting, the user can record the date they applied (which locks its resume and cover letter), the date they were turned down or hired, and contacts such as the hiring manager or a referral. They can add interviews (date and notes), and link one interview to several of the organization's postings when it covered more than one opening.
 
 ## Base resumes

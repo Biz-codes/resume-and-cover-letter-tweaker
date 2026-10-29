@@ -30,13 +30,11 @@ export const MODES: Mode[] = [
     name: 'Resumes',
     action: 'Create a resume',
     description: 'Build a resume from your library, as a base version or for a posting.',
-    comingIn: 'phase 4',
   },
   {
     path: '/cover-letters',
     name: 'Cover letters',
     action: 'Create a cover letter',
     description: 'Build a cover letter from your library, as a base version or for a posting.',
-    comingIn: 'phase 4',
   },
 ]
