@@ -100,6 +100,24 @@ describe('ProjectsPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(`Everything that used "${LABEL}" still does`)
   })
 
+  it('asks whether to apply a change to resumes in progress, as roles do', async () => {
+    const draft = { kind: 'resume' as const, id: 3, name: 'Draft resume', locked: false }
+    const inUse = { ...TWEAKER, used_by: [draft] }
+    const fetchMock = stub({ 'PUT /api/projects/4': [{ status: 200, body: { ...inUse, dates: '2024' } }] }, [inUse])
+    render(<ProjectsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
+    // Nothing sent uses it, so there's no note on the first field.
+    expect(screen.getByLabelText('Project title (required)')).not.toHaveAccessibleDescription()
+    const choice = screen.getByRole('group', { name: /Used by: Draft resume\.$/ })
+    expect(within(choice).getByRole('radio', { name: /No, save it as a new version/ })).toBeChecked()
+    await expectNoA11yViolations()
+    fireEvent.click(within(choice).getByRole('radio', { name: 'Yes, change it for them too.' }))
+    fireEvent.change(screen.getByLabelText(/Dates/), { target: { value: '2024' } })
+    fireEvent.click(screen.getByText('Save'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    expect(sentBody(fetchMock, 'PUT /api/projects/4')).toMatchObject({ dates: '2024', apply_to_unsent: true })
+  })
+
   it('adds a new version of a project', async () => {
     const version = { ...TWEAKER, project_id: 8, dates: 'Fall 2024', used_by: [] }
     const fetchMock = stub({ 'POST /api/projects/4/versions': [{ status: 201, body: version }] })

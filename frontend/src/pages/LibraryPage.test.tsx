@@ -21,7 +21,9 @@ describe('LibraryPage', () => {
     renderAt('/library')
     expect(document.title).toBe('Library – Resume Tweaker')
     const choices = screen.getByRole('list')
-    expect(within(choices).getByRole('link', { name: 'Bullet points' })).toHaveAttribute('href', '/library/bullets')
+    const bullets = within(choices).getByRole('link', { name: 'Bullet points' })
+    expect(bullets).toHaveAttribute('href', '/library/bullets')
+    expect(bullets).toHaveAccessibleDescription('Every bullet, and where each is listed.')
     expect(within(choices).getByText('Skill categories and the skills in each.')).toBeInTheDocument()
   })
 

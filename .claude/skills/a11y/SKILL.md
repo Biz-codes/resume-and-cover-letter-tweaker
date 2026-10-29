@@ -1,6 +1,6 @@
 ---
 name: a11y
-description: Review new or changed front end code for accessibility (WCAG 2.2 AA), fix what it finds, and add axe-core checks and behavior tests for every state the code renders. Use after adding or changing any component, page, CSS, or front end test in frontend/, when the Stop hook says front end files changed, or when the user asks about accessibility.
+description: Review the whole front end for accessibility (WCAG 2.2 AA), not just what changed, fix what it finds, and add axe-core checks and behavior tests for every state the code renders. Use after adding or changing any component, page, CSS, or front end test in frontend/, when the Stop hook says front end files changed, or when the user asks about accessibility.
 ---
 
 # Accessibility review for front end code
@@ -13,9 +13,12 @@ Every component and page is tested for accessibility from the start. Every test 
 
 ## Steps
 
-1. **Find what changed.** `git status --short frontend/` and `git diff HEAD -- frontend/` (plus untracked files). If the Stop hook listed files, start with those. Read each changed component or page in full, along with the shared components it uses.
+1. **Read the whole front end, not just the change.** A change in one place often breaks accessibility somewhere else: a renamed label breaks a test's query, a new route changes which nav link is current, a shared component's focus handling changes every page that uses it, a CSS change lowers contrast on a page nobody touched. So every review covers every file:
+   - Start with what changed (`git status --short frontend/`, `git diff HEAD -- frontend/`, untracked files, and any files the Stop hook listed), so you know where to look hardest.
+   - Then read every component, page, hook, and test in `frontend/src/`, plus `index.css` and `frontend/a11yChecks.ts`, in full: `find frontend/src -name '*.ts*' -not -path '*/node_modules/*'`.
+   - Look at how the pages fit together, which a single file doesn't show: moving between pages (where focus lands, what's announced), the nav and sub-nav (`aria-current`), heading levels across the shell and each page, landmarks, and the live regions on one page (only one `role="status"`).
 
-2. **Review it against the checklist below.** For each problem, fix it in the component, unless the fix would change the design or how the UI looks or behaves in a way the user would notice. Then describe it and ask first.
+2. **Review all of it against the checklist below.** For each problem, fix it in the component, unless the fix would change the design or how the UI looks or behaves in a way the user would notice. Then describe it and ask first.
 
 3. **Write the tests,** in the component's sibling `.test.tsx`:
    - Reach every state the code renders: loading, loaded, empty, load error with Retry, form open, saving, validation error shown, delete confirm open, locked-version note shown. Each state is either where a test ends (checked automatically) or gets an explicit `await expectNoA11yViolations()` where the test passes through it. Use `{ page: true }` only for the app shell (`App.test.tsx`), and add each new route to its whole-page test.
@@ -25,7 +28,7 @@ Every component and page is tested for accessibility from the start. Every test 
 
 4. **Run the checks:** `cd frontend && node_modules/.bin/vitest run && node_modules/.bin/tsc -b`. The test run includes oxlint's jsx-a11y rules; run `node_modules/.bin/oxlint` too for the other lint rules. All must pass.
 
-5. **Report:** what you reviewed, what you fixed, the tests you added, and anything left for the user to decide.
+5. **Report:** what you reviewed (the whole front end, with the change that prompted it), what you fixed, and where (including problems found outside the change), the tests you added, and anything left for the user to decide.
 
 ## Checklist
 

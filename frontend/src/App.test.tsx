@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -41,8 +41,11 @@ describe('App', () => {
     renderAt(path)
     expect((await screen.findAllByText(loadedText)).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
-    // The main nav marks the library as the current section, not the current page.
+    // The main nav marks the library as the current section, not the current page, and no
+    // other mode.
     expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('link', { name: 'Resumes' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current')
     expect(document.title).toBe(`${page} – Resume Tweaker`)
     await expectNoA11yViolations({ page: true })
   })
@@ -67,9 +70,25 @@ describe('App', () => {
     await expectNoA11yViolations({ page: true })
   })
 
+  it('leaves focus alone on the first page, then focuses each new page heading', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    renderAt('/')
+    expect(document.body).toHaveFocus()
+    // A choice on Home goes away with the page, so focus can't stay on it.
+    fireEvent.click(screen.getByRole('link', { name: 'Browse your library' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Library' })).toHaveFocus()
+    expect(document.title).toBe('Library – Resume Tweaker')
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Library' })).getByRole('link', { name: 'Skills' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Skills' })).toHaveFocus()
+    fireEvent.click(screen.getByRole('link', { name: 'Resumes' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Resumes' })).toHaveFocus()
+    await expectNoA11yViolations({ page: true })
+  })
+
   it('shows a message for an unknown page', async () => {
     vi.stubGlobal('fetch', vi.fn())
     renderAt('/nowhere')
+    expect(screen.getByRole('heading', { level: 2, name: 'Page not found' })).toBeInTheDocument()
     expect(screen.getByText("That page doesn't exist.")).toBeInTheDocument()
     await expectNoA11yViolations({ page: true })
   })

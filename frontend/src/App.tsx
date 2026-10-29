@@ -1,7 +1,9 @@
 // The app shell: the header with the main nav (one link per mode, src/modes.ts), and one route
 // per page inside <main>. Library pages are child routes of /library, under its own sub-nav.
 // main.tsx provides the router.
+import { useEffect, useRef } from 'react'
 import { NavLink, Route, Routes, useLocation } from 'react-router'
+import { PAGE_HEADING_ID } from './hooks/useFocusLater'
 import { usePageTitle } from './hooks/usePageTitle'
 import BulletsPage from './pages/BulletsPage'
 import ExperiencePage from './pages/ExperiencePage'
@@ -16,11 +18,29 @@ import SkillsPage from './pages/SkillsPage'
 
 function NotFound() {
   usePageTitle('Page not found')
-  return <p>That page doesn't exist.</p>
+  return (
+    <section>
+      <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
+        Page not found
+      </h2>
+      <p>That page doesn't exist.</p>
+    </section>
+  )
 }
 
 function App() {
   const { pathname } = useLocation()
+  const shownPath = useRef(pathname)
+
+  // After moving to another page, focus its heading: the link that was followed may be gone (a
+  // choice on Home), and screen readers then read the new page's name. The first page loaded
+  // leaves focus where the browser puts it.
+  useEffect(() => {
+    if (shownPath.current === pathname) return
+    shownPath.current = pathname
+    document.getElementById(PAGE_HEADING_ID)?.focus()
+  }, [pathname])
+
   return (
     <div className="app">
       <header>

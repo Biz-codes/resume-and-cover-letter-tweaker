@@ -282,7 +282,7 @@ export default function HeadersPage() {
 
             {deleting?.header_id === header.header_id ? (
               <ConfirmDelete
-                what="this header"
+                what={`"${headerLabel(header)}"`}
                 uses={header.used_by}
                 effect="They keep going with no header until you pick another."
                 error={deleteError}

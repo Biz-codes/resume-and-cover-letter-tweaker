@@ -1,5 +1,6 @@
 // The library mode: a sub-nav for its pages (LibraryLayout) and a landing page that says what
 // each one holds (LibraryHome). Each library table's page is a child route of /library.
+import { useId } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { PAGE_HEADING_ID } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -30,6 +31,7 @@ export function LibraryLayout() {
 
 export function LibraryHome() {
   usePageTitle('Library')
+  const id = useId()
   return (
     <section>
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
@@ -42,8 +44,12 @@ export function LibraryHome() {
       <ul className="choices">
         {LIBRARY_PAGES.map((page) => (
           <li key={page.path}>
-            <Link to={`/library/${page.path}`}>{page.name}</Link>
-            <p className="muted">{page.description}</p>
+            <Link to={`/library/${page.path}`} aria-describedby={`${id}-${page.path}`}>
+              {page.name}
+            </Link>
+            <p className="muted" id={`${id}-${page.path}`}>
+              {page.description}
+            </p>
           </li>
         ))}
       </ul>

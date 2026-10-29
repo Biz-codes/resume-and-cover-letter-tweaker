@@ -20,8 +20,11 @@ describe('HomePage', () => {
     const library = screen.getByRole('link', { name: 'Browse your library' })
     expect(library).toHaveAttribute('href', '/library')
     expect(library.parentElement).not.toHaveTextContent('coming soon')
-    const resume = screen.getByRole('link', { name: 'Create a resume' }).parentElement as HTMLElement
-    expect(within(resume).getByText('coming soon')).toBeInTheDocument()
+    expect(library).toHaveAccessibleDescription(/^Everything a resume or cover letter can draw from/)
+    const resume = screen.getByRole('link', { name: 'Create a resume' })
+    expect(within(resume.parentElement as HTMLElement).getByText('coming soon')).toBeInTheDocument()
+    // Read with the link, for screen reader users moving from link to link.
+    expect(resume).toHaveAccessibleDescription(/^coming soon Build a resume from your library/)
     await expectNoA11yViolations()
   })
 

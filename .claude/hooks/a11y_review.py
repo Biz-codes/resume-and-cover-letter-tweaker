@@ -5,7 +5,8 @@
   component test under frontend/src (not the shared helpers in src/test/) in a per-session
   list in the temp folder.
 - `remind` (Stop): if the list isn't empty, clears it and blocks the stop with exit code 2,
-  telling Claude to run /a11y on those files. When Claude is already continuing because of
+  telling Claude to run /a11y, starting with those files and then covering the whole front
+  end. When Claude is already continuing because of
   this hook (stop_hook_active), it lets the stop through, so it never loops.
 """
 import json
@@ -42,8 +43,9 @@ def remind(data):
         return
     print("Front end files changed this turn:\n"
           + "\n".join(f"  - {name}" for name in files)
-          + "\nRun the /a11y skill on them: review against its checklist, fix what it finds, and "
-          "make sure their tests reach every state the code renders, calling "
+          + "\nRun the /a11y skill: start with these files, then review the whole front end "
+          "against its checklist (a change in one place often affects others), fix what it "
+          "finds, and make sure the tests reach every state the code renders, calling "
           "expectNoA11yViolations for each state a test passes through before it ends.",
           file=sys.stderr)
     sys.exit(2)

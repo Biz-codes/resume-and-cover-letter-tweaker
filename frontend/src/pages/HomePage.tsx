@@ -1,6 +1,6 @@
 // Home: asks what the user wants to do, one choice per mode (src/modes.ts), and shows whether
 // the backend is running.
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError } from '../api/client'
 import { PAGE_HEADING_ID } from '../hooks/useFocusLater'
@@ -11,6 +11,7 @@ type Status = { state: 'checking' } | { state: 'ok' } | { state: 'error'; messag
 
 export default function HomePage() {
   const [status, setStatus] = useState<Status>({ state: 'checking' })
+  const id = useId()
   usePageTitle(null)
 
   useEffect(() => {
@@ -29,11 +30,26 @@ export default function HomePage() {
         What do you want to do?
       </h2>
       <ul className="choices">
-        {MODES.map((mode) => (
+        {/* Each link is described by its tag and description, so moving from link to link
+            still says which ones are coming soon. */}
+        {MODES.map((mode, index) => (
           <li key={mode.path}>
-            <Link to={mode.path}>{mode.action}</Link>
-            {mode.comingIn && <span className="tag">coming soon</span>}
-            <p className="muted">{mode.description}</p>
+            <Link
+              to={mode.path}
+              aria-describedby={[mode.comingIn && `${id}-tag-${index}`, `${id}-description-${index}`]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              {mode.action}
+            </Link>
+            {mode.comingIn && (
+              <span className="tag" id={`${id}-tag-${index}`}>
+                coming soon
+              </span>
+            )}
+            <p className="muted" id={`${id}-description-${index}`}>
+              {mode.description}
+            </p>
           </li>
         ))}
       </ul>

@@ -45,6 +45,18 @@ describe('NameForm', () => {
     await expectNoA11yViolations()
   })
 
+  it('marks a text area invalid and links the error to it', async () => {
+    const onSave = vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'Content is required.', 'content', 422)))
+    render(<NameForm label="New bullet for Acme" field="content" submitLabel="Add bullet" multiline onSave={onSave} />)
+    const textarea = screen.getByRole('textbox', { name: 'New bullet for Acme' })
+    expect(textarea.tagName).toBe('TEXTAREA')
+    fireEvent.click(screen.getByRole('button', { name: 'Add bullet' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Content is required.')
+    expect(textarea).toHaveAttribute('aria-invalid', 'true')
+    expect(textarea).toHaveAccessibleDescription('Content is required.')
+    await expectNoA11yViolations()
+  })
+
   it('ignores a second submit while saving, without disabling the focused button', async () => {
     let finish = () => {}
     const onSave = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)))

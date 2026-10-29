@@ -21,3 +21,10 @@ Decisions and gaps to resolve before coding starts. When one is answered, record
 9. ~~**Job site scraping**~~: decided. If fetching fails, the user pastes in the job description text. See [TECH_STACK.md](TECH_STACK.md).
 10. ~~**Section titles**~~: decided. Titles are free-form names and never used for logic. Any content can go in any section; each section lists the items that usually go in it (Library Join Tables), used to rank suggestions. Five built-in sections can't be deleted or renamed. See [DATABASE.md](DATABASE.md).
 11. ~~**Seed data format**~~: decided. Existing resumes (PDF or pasted text) are translated into a SQL seed file of `INSERT` statements, kept out of git. See [DATABASE.md](DATABASE.md).
+
+## For future consideration
+Small front end choices left as they are for now. None blocks the build plan.
+
+12. **Skip link**: add a "Skip to content" link that appears only when it has focus? Not required, since the landmarks and the focused page heading already let keyboard and screen reader users get past the nav (see "Focus" in [TECH_STACK.md](TECH_STACK.md)), but it's a common extra.
+13. **Tabbing out mid-move**: when a keyboard user picks up an item in a reorderable list (`OrderedList`) and tabs out of the list, it stays picked up, with "Move here" buttons still showing. Should leaving the list cancel the move?
+14. **`LIBRARY_PAGES` in its own file**: oxlint warns that `frontend/src/pages/LibraryPage.tsx` exports a list alongside its components, which only affects hot reload during development. Moving the list to its own file, as `modes.ts` is, would quiet it.

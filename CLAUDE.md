@@ -20,13 +20,13 @@ Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech ba
 - `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
 - `/seed-resume`: translate an existing resume or cover letter (PDF or pasted text) into a SQL file in `db/seed_personal/` (gitignored), reusing library items that already exist instead of duplicating them. Sent versions are copied exactly as sent.
 - **Suggest workflow improvements.** While working on the app, when a repeated task, a recurring mistake, or a manual step could be handled better by a new hook, skill, subagent, MCP server, or permission rule, suggest it to the user: say what it would do and why, in a sentence or two. Don't set it up without the user's approval.
-- `/a11y`: review new or changed front end code for accessibility (WCAG 2.2 AA), fix what it finds, and add axe-core checks and behavior tests for every state it renders.
+- `/a11y`: review the whole front end for accessibility (WCAG 2.2 AA), not just what changed, since a change in one place often affects others; fix what it finds, and add axe-core checks and behavior tests for every state it renders.
 - `/docs-audit` (run by the user when they choose): check every doc and code comment against the actual code, fix what's stale or missing, and ask about real disagreements.
 - `/check`: run every automated check (`scripts/check.sh`), confirm nothing secret or personal would be committed, and sweep the docs for leftovers from design changes. Use before the user commits and after design changes.
 - Hooks in `.claude/settings.json`:
   - A PreToolUse hook blocks access to `.env` files.
   - PostToolUse hooks run `ruff` on edited Python files, run `tsc` and `oxlint` (with jsx-a11y rules) on edited TypeScript files, and note edited front end components, pages, CSS, and tests.
-  - A Stop hook (`.claude/hooks/a11y_review.py`) blocks the end of a turn that changed front end files until `/a11y` has reviewed them.
+  - A Stop hook (`.claude/hooks/a11y_review.py`) blocks the end of a turn that changed front end files until `/a11y` has reviewed the front end.
 - Git pre-commit hook (`.githooks/pre-commit`, turned on with `git config core.hooksPath .githooks`): refuses to commit `.env` files, `db/seed_personal/`, or database dumps, then runs `scripts/check.sh`. A failing check blocks the commit.
 
 ## Conventions

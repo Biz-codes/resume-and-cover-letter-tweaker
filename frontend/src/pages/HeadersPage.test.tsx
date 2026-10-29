@@ -110,7 +110,7 @@ describe('HeadersPage', () => {
     })
     render(<HeadersPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Delete "Sam Rivera, Front-End Engineer"' }))
-    const confirm = screen.getByRole('group', { name: 'Delete this header?' })
+    const confirm = screen.getByRole('group', { name: 'Delete "Sam Rivera, Front-End Engineer"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
     expect(fetchMock).toHaveBeenCalledTimes(1)
