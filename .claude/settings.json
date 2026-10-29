@@ -25,6 +25,15 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/a11y_review.py\" record"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/a11y_review.py\" reviewed"
+          }
+        ]
       }
     ],
     "Stop": [

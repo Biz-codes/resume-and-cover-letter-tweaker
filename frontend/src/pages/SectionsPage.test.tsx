@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { Education } from '../api/education'
 import type { Experience } from '../api/experience'
 import type { Section } from '../api/sections'
 import type { SkillCategory } from '../api/skills'
@@ -11,6 +12,8 @@ const SKILLS: Section = {
   id: 2,
   title: 'Skills',
   built_in: true,
+  narrative_content: [],
+  education: [],
   skill_categories: [{ category_id: 3, category_name: 'Back End' }],
   experience: [],
   projects: [],
@@ -21,6 +24,8 @@ const FREELANCE: Section = {
   id: 6,
   title: 'Freelance',
   built_in: false,
+  narrative_content: [],
+  education: [],
   skill_categories: [],
   experience: [],
   projects: [],
@@ -45,6 +50,15 @@ const ROLE: Experience = {
   sections: [],
   used_by: [],
 }
+const DEGREE: Education = {
+  education_id: 7,
+  degree: 'B.A. in English',
+  institution: 'State University',
+  details: null,
+  graduation: 'May 2015',
+  sections: [],
+  used_by: [],
+}
 const CATEGORIES = [category(1, 'Other', true), category(2, 'Front End'), category(3, 'Back End')]
 
 function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, sections = [SKILLS, FREELANCE]) {
@@ -66,6 +80,14 @@ function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, 
       { status: 200, body: [] },
       { status: 200, body: [] },
     ],
+    'GET /api/narrative-content': [
+      { status: 200, body: [] },
+      { status: 200, body: [] },
+    ],
+    'GET /api/education': [
+      { status: 200, body: [DEGREE] },
+      { status: 200, body: [DEGREE] },
+    ],
     ...extra,
   })
 }
@@ -80,6 +102,8 @@ describe('SectionsPage', () => {
       id: 7,
       title: 'intro',
       built_in: false,
+      narrative_content: [],
+      education: [],
       skill_categories: [],
       experience: [],
       projects: [],
@@ -227,6 +251,30 @@ describe('SectionsPage', () => {
     fireEvent.click(within(freelance).getByText('Add bullet'))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Ran workshops', section_id: 6 }),
+    )
+  })
+
+  it("writes narrative content in a section and saves its education list", async () => {
+    const fetchMock = stub({
+      'POST /api/narrative-content': [{ status: 201, body: {} }],
+      'PUT /api/sections/6/education': [{ status: 200, body: FREELANCE }],
+    })
+    render(<SectionsPage />)
+    const freelance = await card('Freelance')
+    expect(within(freelance).getByText('Narrative content it lists (0)')).toBeInTheDocument()
+    fireEvent.change(within(freelance).getByLabelText('New narrative content for Freelance'), {
+      target: { value: 'I take on short projects.' },
+    })
+    fireEvent.click(within(freelance).getByText('Add narrative content'))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'POST /api/narrative-content')).toEqual({ content: 'I take on short projects.', section_ids: [6] }),
+    )
+    const picker = within(freelance).getByLabelText('Add to Freelance education')
+    expect(within(picker).getByRole('option', { name: 'B.A. in English, State University (May 2015)' })).toBeInTheDocument()
+    fireEvent.change(picker, { target: { value: '7' } })
+    fireEvent.click(within(picker.parentElement as HTMLElement).getByText('Add'))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'PUT /api/sections/6/education')).toEqual({ education_ids: [7] }),
     )
   })
 })

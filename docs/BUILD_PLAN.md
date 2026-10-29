@@ -40,7 +40,7 @@ Goal: the user's real resume and cover letter content in the database. Done for 
 2. [x] Run each file once, before translating the next one, so the next one can match against it. After the first, run `db/seed_defaults.sql`.
 3. [x] Check the result with the user: each seeded resume and cover letter should reproduce the original.
 
-## Phase 3: Library management
+## Phase 3: Library management (done)
 Goal: the user can view and edit all their content in the app.
 
 Build it one table at a time: each one's API endpoints, page, and tests together.
@@ -48,7 +48,7 @@ Build it one table at a time: each one's API endpoints, page, and tests together
 2. [x] **Headers**, including saving a new header when a sent version uses the one being edited.
 3. [x] **Sections, skill categories, and skills**, with their child lists, the built-in protections, and the move to "Other".
 4. [x] **Experience, projects, and bullet points**, with role versions and shared bullets.
-5. [ ] **Education, narrative content, writing rules, tone sets and rules, and sign-offs.**
+5. [x] **Education, narrative content, writing rules, tone sets and rules, and sign-offs.**
 
 What the pages cover:
 - Pages to create, edit, and delete: headers (name, headline, contact details), sections, skill categories and skills, experience, projects (with their skills), bullet points, education, narrative content, writing rules, tone sets and rules, and sign-offs.

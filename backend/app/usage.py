@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 from app.models import (
     CoverLetter,
     CoverLetterBulletPoint,
+    CoverLetterEducation,
     CoverLetterExperience,
+    CoverLetterNarrativeContent,
     CoverLetterProject,
     CoverLetterProjectSkill,
     CoverLetterSection,
@@ -24,7 +26,9 @@ from app.models import (
     CoverLetterSkillCategory,
     Resume,
     ResumeBulletPoint,
+    ResumeEducation,
     ResumeExperience,
+    ResumeNarrativeContent,
     ResumeProject,
     ResumeProjectSkill,
     ResumeSection,
@@ -133,6 +137,23 @@ BULLET_LINKS = [
                  (CS, CS.cover_letter_section_id
                   == CoverLetterBulletPoint.cover_letter_section_id)),
 ]
+NARRATIVE_LINKS = [
+    _resume_link(ResumeNarrativeContent, ResumeNarrativeContent.content_id,
+                 ResumeNarrativeContent.resume_narrative_content_id,
+                 (RS, RS.resume_section_id == ResumeNarrativeContent.resume_section_id)),
+    _letter_link(CoverLetterNarrativeContent, CoverLetterNarrativeContent.content_id,
+                 CoverLetterNarrativeContent.cover_letter_narrative_content_id,
+                 (CS, CS.cover_letter_section_id
+                  == CoverLetterNarrativeContent.cover_letter_section_id)),
+]
+EDUCATION_LINKS = [
+    _resume_link(ResumeEducation, ResumeEducation.education_id,
+                 ResumeEducation.resume_education_id,
+                 (RS, RS.resume_section_id == ResumeEducation.resume_section_id)),
+    _letter_link(CoverLetterEducation, CoverLetterEducation.education_id,
+                 CoverLetterEducation.cover_letter_education_id,
+                 (CS, CS.cover_letter_section_id == CoverLetterEducation.cover_letter_section_id)),
+]
 
 
 def uses(db: Session, links: list[Link], item_ids: list[int]) -> dict[int, list[Use]]:
@@ -183,3 +204,23 @@ def touch(db: Session, doc: type[Resume] | type[CoverLetter], doc_ids: set[int])
     """Selections changed, so the documents were updated (join tables have no timestamps)."""
     if doc_ids:
         db.execute(update(doc).where(doc_id(doc).in_(doc_ids)).values(updated_at=func.now()))
+
+
+def column_uses(db: Session, columns: list[Any], item_ids: list[int]) -> dict[int, list[Use]]:
+    """Every resume and cover letter whose own column (tone_set_id, sign_off_id) holds each
+    item, resumes first."""
+    found: dict[int, list[Use]] = {item_id: [] for item_id in item_ids}
+    for column in columns:
+        doc = column.class_
+        kind = "resume" if doc is Resume else "cover_letter"
+        query = (select(column, doc_id(doc), doc.name, is_locked(doc))
+                 .where(column.in_(item_ids)).order_by(doc_id(doc)))
+        for item_id, document_id, name, locked in db.execute(query):
+            found[item_id].append(Use(kind=kind, id=document_id, name=name, locked=bool(locked)))
+    return found
+
+
+def switch_unsent_column(db: Session, column: Any, old_id: int, new_id: int) -> None:
+    """Point every unsent resume or cover letter whose column holds old_id at new_id."""
+    doc = column.class_
+    db.execute(update(doc).where(column == old_id, ~is_locked(doc)).values({column.key: new_id}))

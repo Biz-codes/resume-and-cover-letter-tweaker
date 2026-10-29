@@ -15,7 +15,8 @@ export const MODES: Mode[] = [
     path: '/library',
     name: 'Library',
     action: 'Browse your library',
-    description: 'Everything a resume or cover letter can draw from: headers, sections, skills, roles, projects, and bullets.',
+    description:
+      'Everything a resume or cover letter can draw from: headers, narrative content, skills, roles, projects, bullets, education, sign-offs, and the rules for writing them.',
   },
   {
     path: '/postings',

@@ -4,6 +4,9 @@
 - `record` (PostToolUse on Edit|Write): notes each edited component, page, stylesheet, or
   component test under frontend/src (not the shared helpers in src/test/) in a per-session
   list in the temp folder.
+- `reviewed` (PostToolUse on Skill): when the /a11y skill runs, clears the list, so edits
+  already reviewed don't block the stop. Edits the review itself makes are noted again, so
+  its fixes still get checked.
 - `remind` (Stop): if the list isn't empty, clears it and blocks the stop with exit code 2,
   telling Claude to run /a11y, starting with those files and then covering the whole front
   end. When Claude is already continuing because of
@@ -33,6 +36,12 @@ def record(data):
             pending.write(file_path + "\n")
 
 
+def reviewed(data):
+    skill = data.get("tool_input", {}).get("skill", "")
+    if skill.split(":")[-1] == "a11y":
+        pending_file(data.get("session_id")).unlink(missing_ok=True)
+
+
 def remind(data):
     pending = pending_file(data.get("session_id"))
     if not pending.exists():
@@ -53,7 +62,7 @@ def remind(data):
 
 def main():
     data = json.load(sys.stdin)
-    {"record": record, "remind": remind}[sys.argv[1]](data)
+    {"record": record, "reviewed": reviewed, "remind": remind}[sys.argv[1]](data)
 
 
 if __name__ == "__main__":

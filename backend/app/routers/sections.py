@@ -17,7 +17,9 @@ from app.library import check_ids, check_unique_name, copy_children, set_childre
 from app.models import (
     OTHER_CATEGORY_ID,
     BulletPoint,
+    Education,
     Experience,
+    NarrativeContent,
     Project,
     Section,
     SectionBulletPoint,
@@ -30,10 +32,14 @@ from app.models import (
 )
 from app.refs import (
     BulletRef,
+    EducationRef,
     ExperienceRef,
+    NarrativeRef,
     ProjectRef,
     bullet_refs,
+    education_refs,
     experience_refs,
+    narrative_refs,
     project_refs,
 )
 from app.schemas import RequiredText
@@ -59,11 +65,17 @@ class SectionOut(BaseModel):
     id: int
     title: str
     built_in: bool
+    narrative_content: list[NarrativeRef]
     skill_categories: list[CategoryRef]
     experience: list[ExperienceRef]
     projects: list[ProjectRef]
     bullets: list[BulletRef]
+    education: list[EducationRef]
     used_by: list[Use]
+
+
+class NarrativeList(BaseModel):
+    content_ids: list[int]
 
 
 class CategoryList(BaseModel):
@@ -80,6 +92,10 @@ class ProjectList(BaseModel):
 
 class BulletList(BaseModel):
     bullet_ids: list[int]
+
+
+class EducationList(BaseModel):
+    education_ids: list[int]
 
 
 def visible(account_id: int):
@@ -121,15 +137,19 @@ def categories_by_section(db: Session, section_ids: list[int],
 
 def to_out(db: Session, sections: list[Section], account_id: int) -> list[SectionOut]:
     ids = [section.id for section in sections]
+    narrative = narrative_refs(db, SectionNarrativeContent, "section_id", ids, account_id)
     categories = categories_by_section(db, ids, account_id)
     experience = experience_refs(db, SectionExperience, "section_id", ids, account_id)
     projects = project_refs(db, SectionProject, "section_id", ids, account_id)
     bullets = bullet_refs(db, SectionBulletPoint, "section_id", ids, account_id)
+    education = education_refs(db, SectionEducation, "section_id", ids, account_id)
     used_by = uses(db, SECTION_LINKS, ids)
     return [SectionOut(id=section.id, title=section.title, built_in=section.account_id is None,
+                       narrative_content=narrative[section.id],
                        skill_categories=categories[section.id],
                        experience=experience[section.id], projects=projects[section.id],
-                       bullets=bullets[section.id], used_by=used_by[section.id])
+                       bullets=bullets[section.id], education=education[section.id],
+                       used_by=used_by[section.id])
             for section in sections]
 
 
@@ -193,6 +213,14 @@ def rename_section(section_id: int, body: SectionIn, db: DbSession,
     return one_out(db, replacement, account_id)
 
 
+@router.put("/{section_id}/narrative-content")
+def set_section_narrative(section_id: int, body: NarrativeList, db: DbSession,
+                          account_id: AccountId) -> SectionOut:
+    """Replaces the narrative content the section lists, in order."""
+    return set_items(db, section_id, account_id, SectionNarrativeContent, NarrativeContent,
+                     body.content_ids, "content_ids")
+
+
 @router.put("/{section_id}/skill-categories")
 def set_section_categories(section_id: int, body: CategoryList, db: DbSession,
                            account_id: AccountId) -> SectionOut:
@@ -242,6 +270,14 @@ def set_section_bullets(section_id: int, body: BulletList, db: DbSession,
     """Replaces the bullets listed directly in the section (not under a role or project)."""
     return set_items(db, section_id, account_id, SectionBulletPoint, BulletPoint,
                      body.bullet_ids, "bullet_ids")
+
+
+@router.put("/{section_id}/education")
+def set_section_education(section_id: int, body: EducationList, db: DbSession,
+                          account_id: AccountId) -> SectionOut:
+    """Replaces the education entries the section lists, in order."""
+    return set_items(db, section_id, account_id, SectionEducation, Education,
+                     body.education_ids, "education_ids")
 
 
 @router.delete("/{section_id}", status_code=status.HTTP_204_NO_CONTENT)

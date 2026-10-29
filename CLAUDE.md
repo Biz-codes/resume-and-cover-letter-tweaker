@@ -6,7 +6,7 @@ Purpose: replace tailoring resumes in AI chat with an app that saves every versi
 
 Guiding principle: the app and AI do most of the heavy lifting (extracting, matching, suggesting, rewording), but the user has final control. The app suggests and the user decides. Nothing is added, changed, saved over, or deleted without the user's approval.
 
-Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech base, the Neptune resume, and the Neptune cover letter are loaded (more can be seeded any time); phase 3 (library management) in progress. The design lives in `docs/`. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up. **Start every build session with [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)**: work on the first unchecked item, check items off as they're done, and update this status line as phases finish.
+Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech base, the Neptune resume, and the Neptune cover letter are loaded (more can be seeded any time); phase 3 (library management) done; phase 4 (building resumes and cover letters by hand) next. The design lives in `docs/`. All planning questions in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) are decided; add new ones there if they come up. **Start every build session with [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)**: work on the first unchecked item, check items off as they're done, and update this status line as phases finish.
 
 ## Which doc to read
 - [docs/TECH_STACK.md](docs/TECH_STACK.md): Python/FastAPI, Postgres 18 (Homebrew) with SQLAlchemy and Alembic, React/TypeScript with Vite, project layout, API conventions, Claude Opus 5.5 through the `anthropic` SDK, running locally. Read before setting up or adding to the codebase, before adding an API endpoint or page, and before writing any Claude API code.
@@ -26,7 +26,7 @@ Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech ba
 - Hooks in `.claude/settings.json`:
   - A PreToolUse hook blocks access to `.env` files.
   - PostToolUse hooks run `ruff` on edited Python files, run `tsc` and `oxlint` (with jsx-a11y rules) on edited TypeScript files, and note edited front end components, pages, CSS, and tests.
-  - A Stop hook (`.claude/hooks/a11y_review.py`) blocks the end of a turn that changed front end files until `/a11y` has reviewed the front end.
+  - A Stop hook (`.claude/hooks/a11y_review.py`) blocks the end of a turn that changed front end files until `/a11y` has reviewed the front end. Running `/a11y` clears the list of changed files (a PostToolUse hook on Skill), so the Stop hook only fires for changes made after the last review.
 - Git pre-commit hook (`.githooks/pre-commit`, turned on with `git config core.hooksPath .githooks`): refuses to commit `.env` files, `db/seed_personal/`, or database dumps, then runs `scripts/check.sh`. A failing check blocks the commit.
 
 ## Conventions

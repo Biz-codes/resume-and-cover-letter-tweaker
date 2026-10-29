@@ -6,6 +6,7 @@ import { NavLink, Route, Routes, useLocation } from 'react-router'
 import { PAGE_HEADING_ID } from './hooks/useFocusLater'
 import { usePageTitle } from './hooks/usePageTitle'
 import BulletsPage from './pages/BulletsPage'
+import EducationPage from './pages/EducationPage'
 import ExperiencePage from './pages/ExperiencePage'
 import HeadersPage from './pages/HeadersPage'
 import { MODES } from './modes'
@@ -14,7 +15,11 @@ import HomePage from './pages/HomePage'
 import { LibraryHome, LibraryLayout } from './pages/LibraryPage'
 import ProjectsPage from './pages/ProjectsPage'
 import SectionsPage from './pages/SectionsPage'
+import NarrativeContentPage from './pages/NarrativeContentPage'
+import SignOffsPage from './pages/SignOffsPage'
 import SkillsPage from './pages/SkillsPage'
+import ToneSetsPage from './pages/ToneSetsPage'
+import WritingRulesPage from './pages/WritingRulesPage'
 
 function NotFound() {
   usePageTitle('Page not found')
@@ -69,10 +74,15 @@ function App() {
             <Route index element={<LibraryHome />} />
             <Route path="headers" element={<HeadersPage />} />
             <Route path="sections" element={<SectionsPage />} />
+            <Route path="narrative-content" element={<NarrativeContentPage />} />
             <Route path="skills" element={<SkillsPage />} />
             <Route path="experience" element={<ExperiencePage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="bullets" element={<BulletsPage />} />
+            <Route path="education" element={<EducationPage />} />
+            <Route path="sign-offs" element={<SignOffsPage />} />
+            <Route path="writing-rules" element={<WritingRulesPage />} />
+            <Route path="tone-sets" element={<ToneSetsPage />} />
           </Route>
           {MODES.filter((mode) => mode.comingIn).map((mode) => (
             <Route key={mode.path} path={mode.path} element={<ComingSoonPage mode={mode} />} />

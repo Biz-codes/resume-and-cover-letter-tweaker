@@ -35,7 +35,7 @@ const CLAUDE: Skill = {
 }
 const GEMINI: Skill = { ...CLAUDE, skill_id: 11, skill_name: 'Gemini', projects: [], used_by: [] }
 const SECTIONS: Section[] = [
-  { id: 2, title: 'Skills', built_in: true, skill_categories: [], experience: [], projects: [], bullets: [], used_by: [] },
+  { id: 2, title: 'Skills', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}) {

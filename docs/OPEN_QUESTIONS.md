@@ -14,7 +14,7 @@ Decisions and gaps to resolve before coding starts. When one is answered, record
 7. ~~**Thin tables**~~: decided.
    - ~~`project`~~: decided. Added optional `url` and `dates`. No description, since bullet points and skills cover it.
    - ~~`education`~~: decided. Added an optional `details` column. `degree` includes the field of study, and `graduation` includes any honors.
-   - ~~`narrative_content`~~: decided. No label. Each row is usually one sentence, and sections group and order them.
+   - ~~`narrative_content`~~: decided. No label. Each row holds anything from one sentence to a full paragraph (the user decides how to split text), and sections group and order them.
 8. ~~**Writing rules and tone rules**~~: decided. `writing_rule`, `tone_set`, and `tone_rule` tables, plus an optional `tone_set_id` on `resume` and `cover_letter`. See [DATABASE.md](DATABASE.md).
 
 ## Risks to plan for

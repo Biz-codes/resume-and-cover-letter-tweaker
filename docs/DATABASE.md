@@ -1,7 +1,7 @@
 # Database
 
 ## Overview
-Holds the user's library of resume and cover letter content (headers, sections, skills, roles, projects, bullets, sentences, education), their job postings, and every resume and cover letter built from them.
+Holds the user's library of resume and cover letter content (headers, sections, skills, roles, projects, bullets, narrative content, education), their job postings, and every resume and cover letter built from them.
 
 Every resume and cover letter is saved as its own version. There are two kinds:
 - **Base resumes / cover letters** have no job posting. They're ongoing starting points the user returns to and keeps updating over time.
@@ -22,7 +22,7 @@ Everything belongs to an `account`. Only one account exists for now (the app run
 
 The database has three layers:
 - **Tables** are a reusable library of content (sections, skills, experience, bullet points, etc.). Each item is written once and stands alone.
-- **Library Join Tables** let each parent list every child that can go under it, with a default order: a section lists its possible sentences, skill categories, roles, projects, bullets, and education; a skill category lists its skills; a role lists its bullets; a project lists its skills and bullets. One item can be listed under many parents, so two versions of a role can share the same bullets.
+- **Library Join Tables** let each parent list every child that can go under it, with a default order: a section lists its possible narrative content, skill categories, roles, projects, bullets, and education; a skill category lists its skills; a role lists its bullets; a project lists its skills and bullets. One item can be listed under many parents, so two versions of a role can share the same bullets.
 - **Join Tables** record what a specific resume or cover letter uses: which library items the user selected, how they nest, and in what order.
 
 All `updated_at` columns default to the time the row is created, and a database trigger on each table sets them whenever a row is edited.
@@ -180,7 +180,7 @@ Note: five built-in sections are created with the database, with fixed ids: "Sum
 
 Note: users can add any other sections they want (e.g. "Freelance and Consulting Experience", "Volunteer Experience", "Technical Skills", "EdTech paragraph").
 
-Note: there are no content rules. Any kind of content (sentences, skill categories, experience, projects, bullet points, education) can go in any section, including a mix of kinds in one section, and any section can be included in any resume. A new item is listed under the section it's created in. New skill categories, experience, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and the user can choose another.
+Note: there are no content rules. Any kind of content (narrative content, skill categories, experience, projects, bullet points, education) can go in any section, including a mix of kinds in one section, and any section can be included in any resume. A new item is listed under the section it's created in. New skill categories, experience, projects, and education entries default to the built-in "Skills", "Experience", "Projects", and "Education" sections, and the user can choose another.
 
 Note: the backend refuses to delete or rename a built-in section, and a database trigger blocks it as a backstop.
 
@@ -191,13 +191,13 @@ Note: titles are unique in the account, ignoring capitals and counting the built
 |------------|--------------|-----------------------------------------------------------|------------------------------------------|
 | content_id | SERIAL       | PRIMARY KEY                                               | unique narrative content id              |
 | account_id | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                     |
-| content    | TEXT         | NOT NULL                                                  | text of sentence(s)                      |
+| content    | TEXT         | NOT NULL                                                  | text of one sentence up to a paragraph   |
 | created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time narrative content added to db  |
 | updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time narrative content last updated |
 
-Note: each row is meant to hold one sentence, though nothing restricts it to one. Narrative sections, such as a resume summary or a cover letter paragraph, are built from sentences chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. No label column is needed, because sections list their sentences in `section_narrative_content`.
+Note: each row (an "excerpt" in the app) holds anything from one sentence to a full paragraph. Narrative sections, such as a resume summary or a cover letter paragraph, combine the excerpts chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. The user decides how to split text: for example, a paragraph used in many resumes with only its first sentence changed can be one row per first sentence plus one row for the rest of the paragraph. No label column is needed, because sections list their excerpts in `section_narrative_content`.
 
-Note: an accepted rewording is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new sentence.
+Note: an accepted rewording is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row.
 
 ### skill_category
 | Column        | Type         | Constraints                                      | Description                                      |
@@ -324,7 +324,7 @@ Note: a named group of tone rules. Each resume and cover letter can use one tone
 | created_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule added to db                       |
 | updated_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule last updated                      |
 
-Note: deleting a tone set deletes its rules.
+Note: deleting a tone set deletes its rules. Reordering a set's rules must send every rule in the set, once each; otherwise the app returns `VALIDATION_FAILED`. Tone sets and rules are never printed, so they're edited in place even when a sent version uses the set (see "Writing rules" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### sign_off
 | Column      | Type         | Constraints                                               | Description                                        |
@@ -336,6 +336,8 @@ Note: deleting a tone set deletes its rules.
 | updated_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time sign-off last updated                    |
 
 Note: each account starts with "Sincerely", and the user can add others (e.g. "Best regards"). A cover letter ends with its sign-off, a comma, and its `signature_name` (or its header's `full_name`) on the next line. No sign-off means no closing.
+
+Note: editing a sign-off a sent (locked) cover letter uses saves a new sign-off with the new text; unsent letters switch to it (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ## Library Join Tables
 Each parent lists every child that can go under it. These lists are what the app suggests from (e.g. a role's bullets, a category's skills), and `position` is the default order for a new resume. They don't limit where an item can go: a resume can still place any item in any section.
@@ -355,7 +357,9 @@ Conventions for every library join table:
 
 Primary key: (section_id, content_id)
 
-Note: the sentences that can go in this section, such as every summary sentence the user has written.
+Note: the narrative content that can go in this section, such as every summary sentence or paragraph the user has written.
+
+Note: rows are added and removed from either side: the Sections page edits a section's list, and the Narrative content page's add and edit forms choose every section that lists an excerpt. Choosing sections for an excerpt keeps its position where it's already listed and lists it last in newly chosen sections. Changing these rows never makes a new excerpt, since they aren't printed.
 
 ### section_skill_category
 | Column      | Type    | Constraints                                                       | Description                                |
@@ -462,7 +466,7 @@ Each join row has its own id so the next level down can reference that specific 
 
 Conventions for every join table:
 - `position` orders items under the same parent. Lower numbers appear first.
-- A section can mix item types (e.g. a sentence, then two experience items). Items directly in the same section share one numbering across all join tables (`resume_narrative_content`, `resume_skill_category`, `resume_experience`, `resume_project`, `resume_bullet_point`, `resume_education`, and the cover letter equivalents), so the app can interleave them. The app assigns these numbers, since the database can't check positions across tables.
+- A section can mix item types (e.g. a narrative content excerpt, then two experience items). Items directly in the same section share one numbering across all join tables (`resume_narrative_content`, `resume_skill_category`, `resume_experience`, `resume_project`, `resume_bullet_point`, `resume_education`, and the cover letter equivalents), so the app can interleave them. The app assigns these numbers, since the database can't check positions across tables.
 - A `Unique:` line lists columns whose combination can't repeat, so the same item can't be picked twice under one parent.
 - No `created_at`/`updated_at`. Changing a selection updates the parent resume's or cover letter's `updated_at`.
 
@@ -568,7 +572,7 @@ Unique: (resume_section_id, education_id)
 
 **Cover letter join tables**
 
-Cover letters use the same structure as resumes, so any kind of content can go in a cover letter section. Most cover letter sections are paragraphs of sentences, but the user can add skills, experience, projects, bullets, or education as they see fit.
+Cover letters use the same structure as resumes, so any kind of content can go in a cover letter section. Most cover letter sections are paragraphs built from narrative content, but the user can add skills, experience, projects, bullets, or education as they see fit.
 
 ### cover_letter_section
 | Column                  | Type         | Constraints                                                   | Description                      |

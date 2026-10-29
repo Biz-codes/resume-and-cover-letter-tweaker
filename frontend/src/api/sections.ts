@@ -10,11 +10,13 @@ export interface Section {
   title: string
   // The five built-in sections can't be renamed or deleted.
   built_in: boolean
+  narrative_content: { content_id: number; content: string }[]
   skill_categories: { category_id: number; category_name: string }[]
   experience: { experience_id: number; role_title: string; organization: string; dates: string | null }[]
   projects: { project_id: number; project_title: string; done_for: string | null }[]
   // Bullets listed directly in the section, not under a role or project.
   bullets: { bullet_id: number; content: string }[]
+  education: { education_id: number; degree: string; institution: string; graduation: string | null }[]
   used_by: Use[]
 }
 
@@ -23,6 +25,8 @@ export const sectionsApi = {
   create: (title: string) => api.post<Section>('/sections', { title }),
   // When a sent version uses the section, the new title is saved as a new section.
   rename: (id: number, title: string) => api.put<Section>(`/sections/${id}`, { title }),
+  setNarrativeContent: (id: number, contentIds: number[]) =>
+    api.put<Section>(`/sections/${id}/narrative-content`, { content_ids: contentIds }),
   setCategories: (id: number, categoryIds: number[]) =>
     api.put<Section>(`/sections/${id}/skill-categories`, { category_ids: categoryIds }),
   setExperience: (id: number, experienceIds: number[]) =>
@@ -31,5 +35,7 @@ export const sectionsApi = {
     api.put<Section>(`/sections/${id}/projects`, { project_ids: projectIds }),
   setBullets: (id: number, bulletIds: number[]) =>
     api.put<Section>(`/sections/${id}/bullets`, { bullet_ids: bulletIds }),
+  setEducation: (id: number, educationIds: number[]) =>
+    api.put<Section>(`/sections/${id}/education`, { education_ids: educationIds }),
   delete: (id: number) => api.delete(`/sections/${id}`),
 }

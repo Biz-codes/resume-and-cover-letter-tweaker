@@ -82,4 +82,23 @@ describe('FieldsForm', () => {
     fireEvent.click(screen.getByText('Cancel'))
     expect(onCancel).toHaveBeenCalled()
   })
+
+  it('shows a multiline field as a text area, and focuses the first field either way', async () => {
+    type Entry = { details: string | null; degree: string }
+    const fields: Field<Entry>[] = [
+      { name: 'details', label: 'Details', multiline: true },
+      { name: 'degree', label: 'Degree' },
+    ]
+    const onSave = vi.fn(() => Promise.resolve())
+    render(
+      <FieldsForm label="New entry" fields={fields} initial={{ details: null, degree: '' }} onSave={onSave} onCancel={vi.fn()} />,
+    )
+    const details = screen.getByLabelText('Details')
+    expect(details.tagName).toBe('TEXTAREA')
+    expect(details).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.change(details, { target: { value: 'Two lines\nof details' } })
+    fireEvent.click(screen.getByText('Save'))
+    expect(onSave).toHaveBeenCalledWith({ details: 'Two lines\nof details', degree: '' })
+  })
 })

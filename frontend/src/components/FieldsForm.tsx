@@ -1,6 +1,6 @@
-// A form for a library item with several fields (a role, a project). It opens in place of a
-// button or card, so focus moves to its first field, and it keeps the input on errors,
-// highlighting the field the error names.
+// A form for a library item with several fields (a role, a project, an education entry). It
+// opens in place of a button or card, so focus moves to its first field, and it keeps the input
+// on errors, highlighting the field the error names.
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 
@@ -9,6 +9,8 @@ export interface Field<T> {
   label: string
   required?: boolean
   type?: 'text' | 'url'
+  // A textarea, for text longer than a line (an education entry's details).
+  multiline?: boolean
 }
 
 export default function FieldsForm<T extends { [K in keyof T]: string | null }>({
@@ -40,7 +42,7 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   const noteId = useId()
   const formRef = useRef<HTMLFormElement>(null)
 
-  useEffect(() => formRef.current?.querySelector('input')?.focus(), [])
+  useEffect(() => formRef.current?.querySelector<HTMLElement>('input, textarea')?.focus(), [])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -69,20 +71,22 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
           {note}
         </p>
       )}
-      {fields.map(({ name, label: fieldLabel, required, type }) => (
-        <label key={name}>
-          {required ? `${fieldLabel} (required)` : fieldLabel}
-          <input
-            name={name}
-            type={type ?? 'text'}
-            value={values[name] ?? ''}
-            aria-required={required || undefined}
-            aria-invalid={error?.field === name}
-            aria-describedby={describedBy(name)}
-            onChange={(event) => setValues({ ...values, [name]: event.target.value })}
-          />
-        </label>
-      ))}
+      {fields.map(({ name, label: fieldLabel, required, type, multiline }) => {
+        const control = {
+          name,
+          value: values[name] ?? '',
+          'aria-required': required || undefined,
+          'aria-invalid': error?.field === name,
+          'aria-describedby': describedBy(name),
+          onChange: (event: { target: { value: string } }) => setValues({ ...values, [name]: event.target.value }),
+        }
+        return (
+          <label key={name}>
+            {required ? `${fieldLabel} (required)` : fieldLabel}
+            {multiline ? <textarea rows={3} {...control} /> : <input type={type ?? 'text'} {...control} />}
+          </label>
+        )
+      })}
       {children}
       {error && (
         <p role="alert" id={errorId}>

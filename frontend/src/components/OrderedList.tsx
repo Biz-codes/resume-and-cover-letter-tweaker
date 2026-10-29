@@ -10,7 +10,7 @@
 // Each step is announced in the list's live region. Focus never drops to the top of the
 // page: it stays on the moving item's handle, removing an item moves focus to the list, and
 // adding one moves it back to the picker.
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 
 export interface ListItem {
@@ -32,6 +32,8 @@ export default function OrderedList({
   items,
   choices,
   emptyText,
+  removable = true,
+  actions,
   onChange,
 }: {
   label: string
@@ -39,6 +41,11 @@ export default function OrderedList({
   // Items that can be added (the ones already listed are left out here).
   choices: ListItem[]
   emptyText: string
+  // Whether each row has a Remove button. A list of items that belong only to their parent (a
+  // tone set's rules) offers its own buttons instead, through `actions`.
+  removable?: boolean
+  // More buttons for each row, shown while nothing is moving.
+  actions?: (item: ListItem) => ReactNode
   onChange: (ids: number[]) => Promise<void>
 }) {
   const [error, setError] = useState<ApiError | null>(null)
@@ -276,7 +283,8 @@ export default function OrderedList({
               </button>
               <span className="item-name">{item.name}</span>
               <span className="row-actions">
-                {!moving && (
+                {!moving && actions?.(item)}
+                {!moving && removable && (
                   <button
                     type="button"
                     aria-label={`Remove ${labelOf(item)}`}

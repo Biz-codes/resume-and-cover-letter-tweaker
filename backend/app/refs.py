@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.orm import Session
 
-from app.models import BulletPoint, Experience, Project, Section
+from app.models import BulletPoint, Education, Experience, NarrativeContent, Project, Section
 
 
 class SectionRef(BaseModel):
@@ -36,6 +36,19 @@ class ProjectRef(BaseModel):
 class BulletRef(BaseModel):
     bullet_id: int
     content: str
+
+
+class NarrativeRef(BaseModel):
+    content_id: int
+    content: str
+
+
+class EducationRef(BaseModel):
+    education_id: int
+    degree: str
+    institution: str
+    # Versions of an entry can share a degree and institution, so this tells them apart.
+    graduation: str | None
 
 
 def _grouped[T: BaseModel](db: Session, link, key: str, key_ids: list[int], model,
@@ -80,3 +93,13 @@ def project_refs(db: Session, link, key: str, key_ids: list[int], account_id: in
 def bullet_refs(db: Session, link, key: str, key_ids: list[int],
                 account_id: int) -> dict[int, list[BulletRef]]:
     return _grouped(db, link, key, key_ids, BulletPoint, BulletRef, account_id)
+
+
+def narrative_refs(db: Session, link, key: str, key_ids: list[int],
+                  account_id: int) -> dict[int, list[NarrativeRef]]:
+    return _grouped(db, link, key, key_ids, NarrativeContent, NarrativeRef, account_id)
+
+
+def education_refs(db: Session, link, key: str, key_ids: list[int],
+                   account_id: int) -> dict[int, list[EducationRef]]:
+    return _grouped(db, link, key, key_ids, Education, EducationRef, account_id)

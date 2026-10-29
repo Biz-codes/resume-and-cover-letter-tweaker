@@ -28,7 +28,7 @@ Other signals that a word is a real term:
 The database will be seeded with the user's existing resume data, which may contain listed words.
 - **No automatic changes:** the app doesn't rewrite seeded content on import or without asking.
 - **When it shows up in a suggestion:** if a suggested item contains a listed word, the app applies the test above.
-  - **Filler:** it suggests a rewording. An accepted rewording is saved as a new bullet point or sentence, and the original stays in the library (see [APP_FLOW.md](APP_FLOW.md)).
+  - **Filler:** it suggests a rewording. An accepted rewording is saved as a new bullet point or narrative content excerpt, and the original stays in the library (see [APP_FLOW.md](APP_FLOW.md)).
   - **Real term:** it leaves the word alone.
 
 ## Tone rules

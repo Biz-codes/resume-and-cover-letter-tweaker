@@ -166,4 +166,30 @@ describe('OrderedList', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No other category lists Go.')
     await expectNoA11yViolations()
   })
+
+  it('can offer its own buttons in place of Remove, hiding them while an item moves', async () => {
+    const onEdit = vi.fn()
+    render(
+      <OrderedList
+        label="Tech rules"
+        items={ITEMS}
+        choices={[]}
+        emptyText="None."
+        removable={false}
+        actions={(item) => (
+          <button type="button" onClick={() => onEdit(item.id)}>
+            Edit {item.name}
+          </button>
+        )}
+        onChange={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    fireEvent.click(button('Edit Python'))
+    expect(onEdit).toHaveBeenCalledWith(2)
+    await expectNoA11yViolations()
+    fireEvent.click(button('Move Go'))
+    expect(screen.queryByRole('button', { name: 'Edit Python' })).not.toBeInTheDocument()
+  })
 })

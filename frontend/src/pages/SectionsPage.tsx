@@ -1,13 +1,15 @@
-// Library page for sections: add, rename, delete, and edit which skill categories, roles,
-// projects, and bullets each section lists. Built-in sections can't be renamed or deleted (docs/FRONTEND_CHECKS.md).
+// Library page for sections: add, rename, delete, and edit which narrative content, skill categories,
+// roles, projects, bullets, and education entries each section lists. Built-in sections can't be renamed or deleted (docs/FRONTEND_CHECKS.md).
 // Sections are grouped by whether their titles print: resume headings do, cover letter
 // section titles are labels only the user sees (docs/DATABASE.md, section notes).
 import { useCallback, useEffect, useState } from 'react'
-import { bulletsApi, type Bullet } from '../api/bullets'
+import { bulletsApi, shortBullet, type Bullet } from '../api/bullets'
 import { toApiError, type ApiError } from '../api/client'
+import { educationApi, educationLabel, type Education } from '../api/education'
 import { experienceLabel, experienceApi, type Experience } from '../api/experience'
 import { projectLabel, projectsApi, type Project } from '../api/projects'
 import { sectionsApi, type Section } from '../api/sections'
+import { narrativeApi, type NarrativeContent } from '../api/narrativeContent'
 import { skillCategoriesApi, type SkillCategory } from '../api/skills'
 import { anyLocked } from '../api/usage'
 import BulletList from '../components/BulletList'
@@ -49,6 +51,8 @@ export default function SectionsPage() {
   const [roles, setRoles] = useState<Experience[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [bullets, setBullets] = useState<Bullet[]>([])
+  const [narrative, setNarrative] = useState<NarrativeContent[]>([])
+  const [education, setEducation] = useState<Education[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [renaming, setRenaming] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
@@ -65,13 +69,17 @@ export default function SectionsPage() {
         experienceApi.list(),
         projectsApi.list(),
         bulletsApi.list(),
+        narrativeApi.list(),
+        educationApi.list(),
       ])
-        .then(([sectionList, categoryList, roleList, projectList, bulletList]) => {
+        .then(([sectionList, categoryList, roleList, projectList, bulletList, narrativeList, educationList]) => {
           setSections(sectionList)
           setCategories(categoryList)
           setRoles(roleList)
           setProjects(projectList)
           setBullets(bulletList)
+          setNarrative(narrativeList)
+          setEducation(educationList)
           setLoadError(null)
         })
         .catch((error: unknown) => setLoadError(toApiError(error))),
@@ -89,6 +97,13 @@ export default function SectionsPage() {
   const roleChoices = roles.map((role) => ({ id: role.experience_id, name: experienceLabel(role) }))
   const projectChoices = projects.map((project) => ({ id: project.project_id, name: projectLabel(project) }))
   const allBullets = bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))
+  const narrativeItem = (excerpt: { content_id: number; content: string }) => ({
+    id: excerpt.content_id,
+    name: excerpt.content,
+    label: `"${shortBullet(excerpt.content)}"`,
+  })
+  const narrativeChoices = narrative.map(narrativeItem)
+  const educationChoices = education.map((entry) => ({ id: entry.education_id, name: educationLabel(entry) }))
 
   async function create(title: string) {
     await sectionsApi.create(title)
@@ -175,6 +190,29 @@ export default function SectionsPage() {
                     </h4>
                   )}
 
+                  <Collapsible title="Narrative content it lists" count={section.narrative_content.length}>
+                    <OrderedList
+                      label={`${section.title} narrative content`}
+                      items={section.narrative_content.map(narrativeItem)}
+                      choices={narrativeChoices}
+                      emptyText="None."
+                      onChange={async (ids) => {
+                        await sectionsApi.setNarrativeContent(section.id, ids)
+                        await load()
+                      }}
+                    />
+                    <NameForm
+                      label={`New narrative content for ${section.title}`}
+                      field="content"
+                      submitLabel="Add narrative content"
+                      multiline
+                      onSave={async (content) => {
+                        await narrativeApi.create(content, [section.id])
+                        await load()
+                      }}
+                    />
+                  </Collapsible>
+
                   <Collapsible title="Skill categories it lists" count={section.skill_categories.length}>
                     <OrderedList
                       label={`${section.title} skill categories`}
@@ -234,6 +272,19 @@ export default function SectionsPage() {
                       await load()
                     }}
                   />
+
+                  <Collapsible title="Education it lists" count={section.education.length}>
+                    <OrderedList
+                      label={`${section.title} education`}
+                      items={section.education.map((entry) => ({ id: entry.education_id, name: educationLabel(entry) }))}
+                      choices={educationChoices}
+                      emptyText="None."
+                      onChange={async (ids) => {
+                        await sectionsApi.setEducation(section.id, ids)
+                        await load()
+                      }}
+                    />
+                  </Collapsible>
 
                   <UsedBy uses={section.used_by} />
 

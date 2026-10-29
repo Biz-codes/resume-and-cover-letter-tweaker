@@ -68,6 +68,17 @@ def append(db: Session, link, parent_col: str, parent_id: int, child_col: str,
                                      "position": (last or 0) + 1}))
 
 
+def set_parents(db: Session, link, parent_col: str, child_col: str, child_id: int,
+                parent_ids: list[int]) -> None:
+    """List the child under exactly these parents: unlisted from the others, kept in place
+    where it's already listed, and listed last under the new ones."""
+    table = link.__table__
+    db.execute(delete(table).where(table.c[child_col] == child_id,
+                                   table.c[parent_col].not_in(parent_ids)))
+    for parent_id in parent_ids:
+        append(db, link, parent_col, parent_id, child_col, child_id)
+
+
 def set_children(db: Session, link, parent_col: str, parent_id: int, child_col: str,
                  child_ids: list[int], visible: Any = None) -> None:
     """Replace the parent's list with child_ids, in order.

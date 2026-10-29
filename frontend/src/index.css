@@ -72,7 +72,8 @@ form.card label {
   margin-bottom: 8px;
 }
 
-form.card input {
+form.card input,
+form.card textarea {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -219,6 +220,15 @@ form.card label select {
 .row-actions {
   display: flex;
   gap: 4px;
+}
+
+.rules li {
+  margin: 6px 0;
+}
+
+/* Keeps the line breaks typed into a multiline field. */
+.card p.details {
+  white-space: pre-line;
 }
 
 .card h4.bullet-text {

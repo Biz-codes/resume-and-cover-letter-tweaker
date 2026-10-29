@@ -38,8 +38,8 @@ const bullet = (ref: { bullet_id: number; content: string }): Bullet => ({
   used_by: [],
 })
 const SECTIONS: Section[] = [
-  { id: 3, title: 'Experience', built_in: true, skill_categories: [], experience: [], projects: [], bullets: [], used_by: [] },
-  { id: 6, title: 'Freelance', built_in: false, skill_categories: [], experience: [], projects: [], bullets: [], used_by: [] },
+  { id: 3, title: 'Experience', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { id: 6, title: 'Freelance', built_in: false, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}, roles = [ENGINEER, GIG]) {

@@ -27,7 +27,7 @@ const skill = (id: number, name: string): Skill => ({
   used_by: [],
 })
 const SECTIONS: Section[] = [
-  { id: 4, title: 'Projects', built_in: true, skill_categories: [], experience: [], projects: [], bullets: [], used_by: [] },
+  { id: 4, title: 'Projects', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}, projects = [TWEAKER]) {
