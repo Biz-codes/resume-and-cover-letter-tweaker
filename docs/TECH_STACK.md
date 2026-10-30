@@ -38,6 +38,13 @@ From `frontend/`:
 - `npm run dev`: start the app at http://localhost:5173 (it forwards `/api` to the backend)
 - `npm test`: run the front end tests
 
+### Commit messages
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat: ...`, `fix: ...`) and describe only the staged changes. There are two ways to get one written, and both ask the commit's type (feat, fix, refactor, docs, or chore) and then the message's length (succinct, highlights, verbose, or write your own):
+- **`git commit` in a terminal:** the `prepare-commit-msg` hook asks in the terminal, has Claude write the message, and opens the editor with it to review. Its suggested type comes from the staged files' paths alone, so it answers instantly: docs for docs only, chore for tooling only, feat when the app gains a new file, and no suggestion otherwise. It can't tell a fix from a refactor, or notice that a change to app code is really a fix.
+- **`/commit-message` in Claude Code:** Claude reads the whole staged diff before asking, so its recommended type is an informed judgment. It shows the message for you to copy.
+
+**For a better type recommendation, run `/commit-message` first.** Use its message, or note its recommended type and pick that at the hook's prompt. The hook's suggestion is fine when the staged files make the type obvious (only docs, or only tooling).
+
 ## API conventions
 Every library table follows the pattern set by headers (`backend/app/routers/headers.py`, `frontend/src/pages/HeadersPage.tsx`):
 - **Routes** live under `/api`, one router module per table in `backend/app/routers/`: `GET /api/<items>` lists, `GET /api/<items>/{id}` gets one, `POST` creates (201), `PUT /api/<items>/{id}` replaces the editable fields, and `DELETE` removes (204).
