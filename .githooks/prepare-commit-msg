@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Git prepare-commit-msg hook. Turned on with the other hooks: git config core.hooksPath .githooks
+# On a plain `git commit` in a terminal, asks "What type of commit message do you want to add?":
+#   1 succinct, 2 highlights, 3 verbose, or 4 (the default) write your own.
+# For 1 to 3, Claude writes it from the staged changes with the /commit-message skill
+# (.claude/skills/commit-message/SKILL.md). Either way the editor opens next, so you can review
+# and change it; an empty message cancels the commit, as usual.
+# Skipped, leaving git's usual message, for `git commit -m` or `-F`, merges, squashes, amends,
+# nothing staged, and when there's no terminal to ask in (such as VS Code's commit box), or no
+# `claude` command.
+
+MSG_FILE="$1"
+SOURCE="$2"
+
+# Only a plain commit, whose message comes from the editor.
+[ -z "$SOURCE" ] || exit 0
+# Only when there's a terminal to ask in.
+( : </dev/tty ) 2>/dev/null || exit 0
+command -v claude >/dev/null 2>&1 || exit 0
+# Nothing staged, nothing to describe.
+git diff --cached --quiet && exit 0
+
+{
+    echo
+    echo "What type of commit message do you want to add?"
+    echo "  1) Succinct: one line"
+    echo "  2) Highlights: a subject, plus one line per significant change"
+    echo "  3) Verbose: a subject, plus every meaningful change"
+    echo "  4) Write my own"
+    printf "Choose 1-4 [4]: "
+} >/dev/tty
+read -r choice </dev/tty
+case "$choice" in
+    1) level=succinct ;;
+    2) level=highlights ;;
+    3) level=verbose ;;
+    *) exit 0 ;;
+esac
+
+echo "Claude is writing a $level message from the staged changes..." >/dev/tty
+ROOT="$(git rev-parse --show-toplevel)"
+# Only read-only git commands are allowed, so it can't change anything.
+message=$(cd "$ROOT" && claude -p "/commit-message $level --raw" \
+    --allowedTools "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Read" 2>/dev/null \
+    | sed -e '/^```/d' -e '/^Co-Authored-By:/d')  # In case of a code block or trailer anyway.
+if [ -z "$message" ]; then
+    echo "Couldn't write one, so it's yours to write." >/dev/tty
+    exit 0
+fi
+
+# The message goes above git's own comments (the list of files, and so on).
+{ printf '%s\n' "$message"; cat "$MSG_FILE"; } >"$MSG_FILE.tmp" && mv "$MSG_FILE.tmp" "$MSG_FILE"
