@@ -1,6 +1,7 @@
 // The resumes or cover letters page: base versions first, then the ones made for job postings,
-// each linking to its own page (DocumentPage). A new base version starts empty, with the
-// default header (and for a letter, greeting and sign-off), and opens on its own page.
+// each linking to its own page (DocumentPage). A new base version starts with the default
+// header (and for a letter, greeting and sign-off) and the default sections and their contents
+// (docs/FRONTEND_CHECKS.md, "Defaults"), and opens on its own page.
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toApiError, type ApiError } from '../api/client'

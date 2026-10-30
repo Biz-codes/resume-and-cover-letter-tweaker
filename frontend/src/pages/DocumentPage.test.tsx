@@ -253,7 +253,9 @@ describe('DocumentPage', () => {
     expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
     expect(screen.getByText('Tone: None')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Header' }))
-    expect(screen.queryByRole('button', { name: 'Save header' })).not.toBeInTheDocument()
+    // The header's values are listed, with nothing to pick.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
     const name = screen.getByLabelText('New name for "Acme resume"')
     await expectNoA11yViolations()

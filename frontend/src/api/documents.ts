@@ -116,8 +116,9 @@ export function docsApi(kind: DocKind) {
     // Most recently updated first.
     list: () => api.get<Raw[]>(path).then((list) => list.map((raw) => withId<Doc>(kind, raw))),
     get: (id: number) => one(api.get<Raw>(`${path}/${id}`)),
-    // A new, empty base version. Only the name is sent, so the backend fills in the defaults:
-    // the most recently used header, and for a letter "Hiring Team" and "Sincerely".
+    // A new base version. Only the name is sent, so the backend fills in the defaults: the most
+    // recently used header, for a letter "Hiring Team" and "Sincerely", and the sections (each
+    // with its items) of the latest document of the same kind.
     create: (name: string) => one(api.post<Raw>(path, { name })),
     // A sent version can only be renamed (VERSION_LOCKED otherwise).
     update: (id: number, fields: DocFields) => one(api.put<Raw>(`${path}/${id}`, fields)),

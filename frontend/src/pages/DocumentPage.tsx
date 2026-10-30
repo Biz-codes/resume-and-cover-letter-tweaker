@@ -1,10 +1,11 @@
 // One resume or cover letter, built in place: its tone at the top, then a tree whose levels open
 // and close (Header; Sections, each opening to its items, and those to their skills and bullets;
 // and for a letter, Greeting and Sign-off), then its plain text to preview and copy
-// (docs/APP_FLOW.md, "Output"). Renaming, copying, and deleting sit under its name. See
-// "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a sent version is shown
-// read-only and can only be renamed, and a base version is shown read-only until the user
-// chooses to edit it in place rather than copy it, once per version each time the app is opened.
+// (docs/APP_FLOW.md, "Output"). Renaming, copying, "Done editing", and deleting sit under its
+// name. See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a sent version
+// is shown read-only and can only be renamed, and a base version is shown read-only until the
+// user chooses to edit it in place rather than copy it, once per version while the app is open,
+// until "Done editing" shows it read-only again.
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../api/client'

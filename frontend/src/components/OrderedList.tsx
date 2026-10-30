@@ -9,7 +9,8 @@
 //   another row.
 // Each step is announced in the list's live region. Focus never drops to the top of the
 // page: it stays on the moving item's handle, removing an item moves focus to the list, and
-// adding one moves it back to the picker.
+// adding one moves it back to the picker (with `moreOptions`, it stays on Add, or goes to the
+// list once nothing is left to add).
 //
 // A row can also open and close (`details`): its name becomes a disclosure button that shows
 // what's under the item (a section's contents, a role's bullets) below the row. A row can also

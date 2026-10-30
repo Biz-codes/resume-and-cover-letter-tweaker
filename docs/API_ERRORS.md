@@ -17,7 +17,7 @@ Every error response has an HTTP status and this body:
 
 - **`code`:** one of the fixed codes below. The front end branches on this, never on the message text.
 - **`message`:** plain English, safe to show the user as is. It never includes stack traces, SQL, or API keys.
-- **`field`:** for `VALIDATION_FAILED`, the input field that failed (e.g. `"title"`), so the front end can highlight it. Otherwise `null`.
+- **`field`:** the input field that failed (e.g. `"title"`), so the front end can highlight it: for `VALIDATION_FAILED`, and for `DUPLICATE`, `NOT_FOUND`, or `CROSS_ACCOUNT_LINK` when it's about a name or id the request sent (e.g. `"item_id"`). Otherwise `null`.
 
 ## Error codes
 | Code                   | HTTP status | When                                                                                                              |
@@ -48,7 +48,7 @@ Every error response has an HTTP status and this body:
 
 ## Front end rules
 - **Keep the user's input.** An error never clears a form, an edit in progress, or a suggestion the user was reviewing.
-- **Show the message** near what failed. For `VALIDATION_FAILED`, highlight the `field`.
+- **Show the message** near what failed. When the error names a `field`, highlight it.
 - **Offer the next step:**
   - `POSTING_FETCH_FAILED`: show the box for pasting in the job description.
   - `VERSION_LOCKED`: shouldn't happen, since locked versions aren't editable in the UI. If it does, offer to make a copy (a new base version, or a version for another posting).

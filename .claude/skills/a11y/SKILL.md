@@ -63,5 +63,5 @@ Every component and page is tested for accessibility from the start. Every test 
 - Respect `prefers-reduced-motion` for any animation.
 
 **Content**
-- Collapsibles use `Collapsible` (native `<details>`), which keyboards and screen readers already handle.
+- Parts of a library card that open and close use `Collapsible` (native `<details>`), which keyboards and screen readers already handle. The levels of a resume's or cover letter's tree use `Disclosure` or `OrderedList`'s `details` (a button with `aria-expanded` and `aria-controls`, whose content renders only while open), and "More options" uses `MoreOptions`, built on `Disclosure`.
 - Text a screen reader hears out of context still makes sense ("Used by (2)", not "(2)").

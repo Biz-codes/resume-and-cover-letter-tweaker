@@ -2,11 +2,14 @@
 header's values, its sections in order, the items placed directly in each section (any mix of
 kinds, in one order), a category's or project's skills, and a role's or project's bullets.
 Writing a new item in place (narrative content, a bullet, a role, a project, an education entry,
-or a skill category) saves it to the library, listed under its section, role, or project
-(docs/FRONTEND_CHECKS.md, "New items are listed under their parent"), and places it.
+a skill category, or a skill under a category or project) saves it to the library, listed under
+its section, category, role, or project (docs/FRONTEND_CHECKS.md, "New items are listed under
+their parent"), and places it; a new version of a bullet or narrative content takes the
+original's place. A section added, or an item placed without its skills or bullets, starts with
+its defaults (app/defaults.py).
 
-Like the library lists, each change sends the whole list in its new order. Rows that stay keep
-their ids, so what's under them stays too; rows left out are removed with everything under
+Like the library lists, a change to a list sends the whole list in its new order. Rows that stay
+keep their ids, so what's under them stays too; rows left out are removed with everything under
 them. A sent version can't change (VERSION_LOCKED), and every change updates the document's
 updated_at. Both kinds of document get the same endpoints through add_tree_routes.
 """
