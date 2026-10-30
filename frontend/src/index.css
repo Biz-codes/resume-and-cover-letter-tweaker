@@ -15,6 +15,71 @@ body {
   padding: 24px 16px;
 }
 
+/* Layout across screen sizes. The styles are written for narrow screens first and never need
+   sideways scrolling (WCAG 1.4.10, reflow at 320px). Breakpoints, used the same way site-wide:
+   - small: under 640px (phones), where rows stack and spacing tightens;
+   - medium: 640px and up (tablets, narrow windows), the default layout;
+   - large: 1024px and up (desktops), where the page can widen.
+   Media queries can't read custom properties, so these numbers are repeated in each query. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* A control never grows past its container: a dropdown is otherwise as wide as its longest
+   option, such as a whole bullet point. */
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+pre,
+p,
+li,
+dd {
+  overflow-wrap: anywhere;
+}
+
+/* A fieldset is otherwise at least as wide as its widest content. */
+fieldset {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .app {
+    padding: 16px 12px;
+  }
+
+  /* Each row's buttons go on their own line, under the item's name. */
+  .ordered-list li .row-actions {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ordered-list ol,
+  .disclosure-body,
+  .ordered-list .item-body {
+    padding-left: 12px;
+  }
+
+  .details-list {
+    grid-template-columns: 1fr;
+  }
+
+  .details-list dd {
+    margin-bottom: 8px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app {
+    max-width: 1100px;
+  }
+}
+
 nav {
   display: flex;
   flex-wrap: wrap;
@@ -104,8 +169,15 @@ h2[tabindex='-1']:focus {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* A list's picker shares a row with its Add button, and shrinks before the page would scroll. */
+.actions select {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 
 .uses {
@@ -134,14 +206,15 @@ h2[tabindex='-1']:focus {
   border-radius: 4px;
 }
 
-form.card .choice label {
+/* One checkbox per line, wherever a group of them appears. */
+.choice label {
   display: flex;
   gap: 6px;
   align-items: baseline;
   margin: 4px 0 0;
 }
 
-form.card .choice input {
+.choice input {
   display: inline;
   width: auto;
 }
@@ -185,6 +258,7 @@ form.card label select {
 
 .ordered-list .item-name {
   flex: 1;
+  min-width: 0;
 }
 
 /* The grip handle: dragged with a pointer, or a toggle for picking an item up by keyboard. */
@@ -219,6 +293,7 @@ form.card label select {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -307,4 +382,75 @@ form.card label select {
   font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A resume's or cover letter's tree: nested lists whose levels open and close (Disclosure, and
+   OrderedList rows with `details`). The marker is decoration; aria-expanded says open or closed. */
+.tree {
+  list-style: none;
+  padding: 0;
+}
+
+.tree > li {
+  margin: 8px 0;
+}
+
+.disclosure-toggle {
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disclosure-toggle::before {
+  content: '▸ ' / '';
+}
+
+.disclosure-toggle[aria-expanded='true']::before {
+  content: '▾ ' / '';
+}
+
+.tree > li > .disclosure > .disclosure-toggle {
+  font-weight: 600;
+}
+
+.disclosure-body,
+.ordered-list .item-body {
+  padding-left: 24px;
+}
+
+.ordered-list li {
+  flex-wrap: wrap;
+}
+
+.ordered-list .item-body {
+  flex-basis: 100%;
+}
+
+/* A form of fields stacked one above the next (a header's values, a letter's sign-off). */
+.stacked-form label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.stacked-form select,
+.stacked-form input {
+  display: block;
+  padding: 6px;
+  font: inherit;
+}
+
+/* A label above its list in a tree level (a project's skills, then its bullets). */
+.list-label {
+  margin: 8px 0 0;
+  font-weight: 600;
+}
+
+.tone select {
+  display: block;
+  padding: 6px;
+  font: inherit;
 }

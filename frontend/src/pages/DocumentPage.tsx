@@ -1,9 +1,11 @@
-// One resume or cover letter: its details (header, tone set, and a letter's greeting and
-// sign-off), its plain-text output with copy buttons (docs/APP_FLOW.md, "Output"), and editing,
-// copying, and deleting it, per "Versions" and "Sent versions are locked" in
-// docs/FRONTEND_CHECKS.md. A sent version can only be renamed. Editing a base version first warns
-// that the change can't be undone, once per version each time the app is opened.
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+// One resume or cover letter, built in place: its tone at the top, then a tree whose levels open
+// and close (Header; Sections, each opening to its items, and those to their skills and bullets;
+// and for a letter, Greeting and Sign-off), then its plain text to preview and copy
+// (docs/APP_FLOW.md, "Output"). Renaming, copying, and deleting sit under its name. See
+// "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a sent version is shown
+// read-only and can only be renamed, and a base version is shown read-only until the user
+// chooses to edit it in place rather than copy it, once per version each time the app is opened.
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../api/client'
 import { docsApi, fieldsOf, KINDS, type DocDetail, type DocFields, type DocKind } from '../api/documents'
@@ -11,6 +13,10 @@ import { headersApi, type Header } from '../api/headers'
 import { signOffsApi, type SignOff } from '../api/signOffs'
 import { toneSetsApi, type ToneSet } from '../api/toneSets'
 import ConfirmDelete from '../components/ConfirmDelete'
+import Disclosure from '../components/Disclosure'
+import DocumentTree from '../components/DocumentTree'
+import HeaderFields from '../components/HeaderFields'
+import { Greeting, SignOffPart } from '../components/LetterParts'
 import NameForm from '../components/NameForm'
 import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -20,195 +26,31 @@ import type { ListState } from './DocumentsPage'
 // isn't repeated ("Warn before editing a base resume / cover letter").
 const editingInPlace = new Set<string>()
 
-// The buttons that open each form, where focus returns when it closes.
-const BUTTON_IDS = { edit: 'doc-edit', copy: 'doc-copy', delete: 'doc-delete' }
+// The buttons that open each form, where focus returns when it closes, the tone picker, where
+// focus goes once editing starts, and "Edit this one", where it goes once editing is done.
+const BUTTON_IDS = { rename: 'doc-rename', copy: 'doc-copy', delete: 'doc-delete' }
+const TONE_ID = 'doc-tone'
+const EDIT_ID = 'doc-edit'
 
-type Mode = 'warn' | 'edit' | 'copy' | 'delete'
+type Mode = 'rename' | 'copy' | 'delete'
 
 const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
 
-// Names a header in a list of headers; several can share a name and headline.
-const headerName = (header: Header) =>
-  [header.full_name, header.headline, header.email ?? header.phone].filter(Boolean).join(', ')
-
-function DetailsForm({
-  kind,
-  doc,
-  headers,
-  toneSets,
-  signOffs,
-  onSave,
-  onCancel,
-}: {
-  kind: DocKind
-  doc: DocDetail
-  headers: Header[]
-  toneSets: ToneSet[]
-  signOffs: SignOff[]
-  onSave: (fields: DocFields) => Promise<void>
-  onCancel: () => void
-}) {
-  const [fields, setFields] = useState(fieldsOf(kind, doc))
-  const [error, setError] = useState<ApiError | null>(null)
-  const [saving, setSaving] = useState(false)
-  const errorId = useId()
-  const noteId = useId()
-  const formRef = useRef<HTMLFormElement>(null)
-  const letter = kind === 'cover_letter'
-
-  useEffect(() => formRef.current?.querySelector('input')?.focus(), [])
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    if (saving) return
-    setSaving(true)
-    setError(null)
-    try {
-      await onSave(fields)
-    } catch (caught) {
-      setError(toApiError(caught))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Links a field to the error that names it (and the name field to the locked note).
-  const control = (name: keyof DocFields) => ({
-    name,
-    'aria-invalid': error?.field === name,
-    'aria-describedby':
-      [doc.locked && name === 'name' ? noteId : null, error?.field === name ? errorId : null]
-        .filter(Boolean)
-        .join(' ') || undefined,
-  })
-  const text = (name: 'addressee' | 'signature_name') => ({
-    ...control(name),
-    value: fields[name] ?? '',
-    onChange: (event: { target: { value: string } }) => setFields({ ...fields, [name]: event.target.value }),
-  })
-  const choice = (name: 'header_id' | 'tone_set_id' | 'sign_off_id') => ({
-    ...control(name),
-    value: fields[name] ?? '',
-    onChange: (event: { target: { value: string } }) =>
-      setFields({ ...fields, [name]: event.target.value ? Number(event.target.value) : null }),
-  })
-
-  return (
-    <form className="card" ref={formRef} onSubmit={submit} aria-label={`Edit details of "${doc.name}"`}>
-      {doc.locked && (
-        <p className="note" id={noteId}>
-          This {KINDS[kind].singular} was sent, so only its name can change.
-        </p>
-      )}
-      <label>
-        Name (required)
-        <input
-          {...control('name')}
-          value={fields.name}
-          aria-required="true"
-          onChange={(event) => setFields({ ...fields, name: event.target.value })}
-        />
-      </label>
-      {!doc.locked && (
-        <>
-          <label>
-            Header
-            <select {...choice('header_id')}>
-              <option value="">No header</option>
-              {headers.map((header) => (
-                <option key={header.header_id} value={header.header_id}>
-                  {headerName(header)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Tone set
-            <select {...choice('tone_set_id')}>
-              <option value="">No tone set</option>
-              {toneSets.map((toneSet) => (
-                <option key={toneSet.tone_set_id} value={toneSet.tone_set_id}>
-                  {toneSet.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {letter && (
-            <>
-              <label>
-                Greeting: who it's addressed to, after "Dear"
-                <input {...text('addressee')} />
-              </label>
-              <label>
-                Sign-off
-                <select {...choice('sign_off_id')}>
-                  <option value="">No sign-off</option>
-                  {signOffs.map((signOff) => (
-                    <option key={signOff.sign_off_id} value={signOff.sign_off_id}>
-                      {signOff.text}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Name under the sign-off (leave empty to use the header's name)
-                <input {...text('signature_name')} autoComplete="name" />
-              </label>
-            </>
-          )}
-        </>
-      )}
-      {error && (
-        <p role="alert" id={errorId}>
-          {error.message}
-        </p>
-      )}
-      <div className="actions">
-        {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
-        <button type="submit" aria-disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button type="button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  )
-}
-
-// The warning before the first edit of a base version: edits can't be undone.
-function BaseWarning({
-  singular,
-  onEdit,
-  onCopy,
-  onCancel,
-}: {
-  singular: string
-  onEdit: () => void
-  onCopy: () => void
-  onCancel: () => void
-}) {
+// Shown on a base version until the user chooses: edits can't be undone.
+function BaseWarning({ singular, onEdit, onCopy }: { singular: string; onEdit: () => void; onCopy: () => void }) {
   const questionId = useId()
-  const copyRef = useRef<HTMLButtonElement>(null)
-
-  // The safe choice takes focus.
-  useEffect(() => copyRef.current?.focus(), [])
-
   return (
     <div className="confirm" role="group" aria-labelledby={questionId}>
       <p id={questionId}>
-        This is a base {singular}, so edits change it in place and its earlier state can't be recovered.
-        Edit it anyway, or make a copy to edit instead?
+        This is a base {singular}, so changes save right away and its earlier state can't be recovered. Edit it in
+        place, or make a copy to edit instead?
       </p>
       <div className="actions">
-        <button type="button" onClick={onEdit}>
+        <button type="button" id={EDIT_ID} onClick={onEdit}>
           Edit this one
         </button>
-        <button type="button" ref={copyRef} onClick={onCopy}>
+        <button type="button" onClick={onCopy}>
           Make a copy instead
-        </button>
-        <button type="button" onClick={onCancel}>
-          Cancel
         </button>
       </div>
     </div>
@@ -227,7 +69,9 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const [mode, setMode] = useState<Mode | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
+  const [toneError, setToneError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [inPlace, setInPlace] = useState(() => editingInPlace.has(`${kind}-${id}`))
   const focusLater = useFocusLater()
   usePageTitle(doc?.name ?? capitalize(singular))
 
@@ -268,21 +112,67 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     setDeleteError(null)
   }
 
-  function close(returnTo: keyof typeof BUTTON_IDS) {
+  function close(returnTo: Mode) {
     setMode(null)
     focusLater(BUTTON_IDS[returnTo])
   }
 
-  function startEditing() {
-    const key = `${kind}-${id}`
-    open(doc?.job_posting || editingInPlace.has(key) ? 'edit' : 'warn')
+  function editInPlace() {
+    editingInPlace.add(`${kind}-${id}`)
+    setInPlace(true)
+    focusLater(TONE_ID)
   }
 
-  async function save(fields: DocFields) {
-    const saved = await docsApi(kind).update(id, fields)
-    setDoc(saved)
-    setNotice('Saved.')
-    close('edit')
+  // Back to showing it, as before editing. Every change is already saved.
+  function doneEditing() {
+    editingInPlace.delete(`${kind}-${id}`)
+    setInPlace(false)
+    setNotice(`Done editing. Your changes to this ${singular} are saved.`)
+    focusLater(EDIT_ID)
+  }
+
+  // Saves some of the document's own fields, keeping the rest. Changes save as they're made, so
+  // saves run one at a time, each from the document as the last one left it, and two quick changes
+  // in a row don't undo each other.
+  const latest = useRef(doc)
+  useEffect(() => {
+    latest.current = doc
+  }, [doc])
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  function inTurn(save: (current: DocDetail) => Promise<DocDetail>, saved: string) {
+    const run = queue.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (!latest.current) return
+        const next = await save(latest.current)
+        latest.current = next
+        setDoc(next)
+        setNotice(saved)
+      })
+    queue.current = run
+    return run
+  }
+  const update = (changes: Partial<DocFields>, saved: string) =>
+    inTurn((current) => docsApi(kind).update(id, { ...fieldsOf(kind, current), ...changes }), saved)
+
+  async function rename(name: string) {
+    await update({ name }, 'Renamed.')
+    close('rename')
+  }
+
+  async function changeTone(toneSetId: number | null) {
+    setToneError(null)
+    try {
+      await update({ tone_set_id: toneSetId }, 'Tone saved.')
+    } catch (error) {
+      setToneError(toApiError(error))
+    }
+  }
+
+  async function saveHeader(fields: Parameters<ReturnType<typeof docsApi>['setHeader']>[1]) {
+    await inTurn(() => docsApi(kind).setHeader(id, fields), 'Header saved.')
+    // A new combination of values is a new saved header.
+    setHeaders(await headersApi.list())
   }
 
   async function copy(name: string) {
@@ -314,7 +204,9 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
   const header = headers.find((item) => item.header_id === doc?.header_id)
   const toneSet = toneSets.find((item) => item.tone_set_id === doc?.tone_set_id)
-  const signOff = signOffs.find((item) => item.sign_off_id === doc?.sign_off_id)
+  // Sent versions never change; base versions wait for the user's choice.
+  const needsChoice = Boolean(doc && !doc.locked && !doc.job_posting && !inPlace)
+  const readOnly = !doc || doc.locked || needsChoice
 
   return (
     <section>
@@ -357,47 +249,14 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             </p>
           )}
 
-          {mode === 'edit' ? (
-            <DetailsForm
-              kind={kind}
-              doc={doc}
-              headers={headers}
-              toneSets={toneSets}
-              signOffs={signOffs}
-              onSave={save}
-              onCancel={() => close('edit')}
-            />
-          ) : (
-            <>
-              <h3>Details</h3>
-              <dl className="details-list">
-                <dt>Header</dt>
-                <dd>{header ? headerName(header) : 'None'}</dd>
-                <dt>Tone set</dt>
-                <dd>{toneSet?.name ?? 'None'}</dd>
-                {kind === 'cover_letter' && (
-                  <>
-                    <dt>Greeting</dt>
-                    <dd>{doc.addressee ? `Dear ${doc.addressee},` : 'None'}</dd>
-                    <dt>Sign-off</dt>
-                    <dd>{signOff?.text ?? 'None'}</dd>
-                    <dt>Name under the sign-off</dt>
-                    <dd>{doc.signature_name ?? "The header's name"}</dd>
-                  </>
-                )}
-              </dl>
-            </>
-          )}
-
-          {mode === 'warn' && (
-            <BaseWarning
-              singular={singular}
-              onEdit={() => {
-                editingInPlace.add(`${kind}-${id}`)
-                setMode('edit')
-              }}
-              onCopy={() => setMode('copy')}
-              onCancel={() => close('edit')}
+          {mode === 'rename' && (
+            <NameForm
+              label={`New name for "${doc.name}"`}
+              field="name"
+              initial={doc.name}
+              submitLabel="Rename"
+              onSave={(name) => rename(name)}
+              onCancel={() => close('rename')}
             />
           )}
           {mode === 'copy' && (
@@ -405,7 +264,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               label="Name of the copy"
               field="name"
               initial={`Copy of ${doc.name}`.slice(0, 100)}
-              lockedNote={`The copy is a new base ${singular} with the same details, sections, and selections.`}
+              lockedNote={`The copy is a new base ${singular} with the same tone, header, sections, and selections.`}
               submitLabel="Make copy"
               onSave={copy}
               onCancel={() => close('copy')}
@@ -426,22 +285,89 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
-              <button type="button" id={BUTTON_IDS.edit} onClick={startEditing}>
-                {doc.locked ? 'Rename' : 'Edit details'}
+              <button type="button" id={BUTTON_IDS.rename} onClick={() => open('rename')}>
+                Rename
               </button>
               <button type="button" id={BUTTON_IDS.copy} onClick={() => open('copy')}>
                 Make a copy
               </button>
+              {inPlace && !readOnly && (
+                <button type="button" onClick={doneEditing}>
+                  Done editing
+                </button>
+              )}
               <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
                 Delete
               </button>
             </div>
           )}
 
-          <h3>Plain text</h3>
+          <h3>Contents</h3>
+          {needsChoice && mode !== 'copy' && (
+            <BaseWarning singular={singular} onEdit={editInPlace} onCopy={() => open('copy')} />
+          )}
+          {readOnly ? (
+            <p>Tone: {toneSet?.name ?? 'None'}</p>
+          ) : (
+            <label className="tone">
+              Tone
+              <select
+                id={TONE_ID}
+                value={doc.tone_set_id ?? ''}
+                aria-invalid={Boolean(toneError)}
+                onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
+              >
+                <option value="">None</option>
+                {toneSets.map((item) => (
+                  <option key={item.tone_set_id} value={item.tone_set_id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {toneError && <p role="alert">{toneError.message}</p>}
+
+          <ul className="tree">
+            <li>
+              <Disclosure title="Header">
+                <HeaderFields header={header} headers={headers} readOnly={readOnly} onSave={saveHeader} />
+              </Disclosure>
+            </li>
+            <li>
+              <Disclosure title={`Sections (${doc.sections.length})`}>
+                <DocumentTree kind={kind} doc={doc} readOnly={readOnly} onChange={setDoc} onNotice={setNotice} />
+              </Disclosure>
+            </li>
+            {kind === 'cover_letter' && (
+              <>
+                <li>
+                  <Disclosure title="Greeting">
+                    <Greeting
+                      doc={doc}
+                      readOnly={readOnly}
+                      onSave={(fields) => update(fields, 'Greeting saved.')}
+                    />
+                  </Disclosure>
+                </li>
+                <li>
+                  <Disclosure title="Sign-off">
+                    <SignOffPart
+                      doc={doc}
+                      signOffs={signOffs}
+                      readOnly={readOnly}
+                      onSave={(fields) => update(fields, 'Sign-off saved.')}
+                    />
+                  </Disclosure>
+                </li>
+              </>
+            )}
+          </ul>
+
+          <h3>Preview and copy</h3>
           <p className="muted">
             Copy it into your own document or an application form.
-            {kind === 'cover_letter' && ' The section names are for you only; they aren\'t part of the letter.'}
+            {kind === 'cover_letter' && " The section names are for you only; they aren't part of the letter."}
           </p>
           {copyError && <p role="alert">{copyError}</p>}
           {doc.output.parts.length === 0 ? (

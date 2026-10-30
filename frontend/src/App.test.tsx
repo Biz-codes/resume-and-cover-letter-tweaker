@@ -40,7 +40,7 @@ describe('App', () => {
     ['/library/education', 'Education', 'No education yet.'],
     ['/library/sign-offs', 'Sign-offs', 'No sign-offs yet.'],
     ['/library/writing-rules', 'Writing rules', 'None yet.'],
-    ['/library/tone-sets', 'Tone sets', 'No tone sets yet.'],
+    ['/library/tones', 'Tones', 'No tones yet.'],
   ])('shows %s as a whole page, marked current in the nav', async (path, page, loadedText) => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json([]))))
     renderAt(path)
@@ -85,6 +85,7 @@ describe('App', () => {
       locked: false,
       copies: [],
       updated_at: null,
+      sections: [],
       output: { parts: [{ label: 'Summary', text: 'Summary\nEngineer.' }], text: 'Summary\nEngineer.' },
     }
     vi.stubGlobal(

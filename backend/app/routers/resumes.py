@@ -3,7 +3,8 @@
 A resume with no job posting is a base resume, an ongoing starting point edited in place. A
 resume for a posting that was applied to is locked: only its name can change
 (docs/FRONTEND_CHECKS.md, "Versions" and "Sent versions are locked"). app/documents.py reads
-and copies its sections and selections.
+and copies its sections and selections, and app/routers/document_tree.py adds the endpoints
+that build them.
 """
 
 from fastapi import APIRouter, status
@@ -15,6 +16,7 @@ from app.db import DbSession
 from app.documents import (
     RESUME,
     DocInfo,
+    SectionTree,
     check_link,
     copy_tree,
     doc_info,
@@ -25,6 +27,7 @@ from app.documents import (
 )
 from app.models import Header, Resume, ToneSet
 from app.plain_text import Output, resume_output
+from app.routers.document_tree import add_tree_routes, fill_document
 from app.schemas import RequiredText
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
@@ -49,6 +52,7 @@ class ResumeOut(ResumeIn, DocInfo):
 
 
 class ResumeDetail(ResumeOut):
+    sections: list[SectionTree]
     output: Output
 
 
@@ -61,8 +65,9 @@ def to_out(db: Session, resumes: list[Resume]) -> list[ResumeOut]:
 
 def detail(db: Session, resume: Resume) -> ResumeDetail:
     header = db.get(Header, resume.header_id) if resume.header_id else None
-    output = resume_output(header, load_tree(db, RESUME, resume.resume_id))
-    return ResumeDetail(**to_out(db, [resume])[0].model_dump(), output=output)
+    sections = load_tree(db, RESUME, resume.resume_id)
+    return ResumeDetail(**to_out(db, [resume])[0].model_dump(), sections=sections,
+                        output=resume_output(header, sections))
 
 
 def check_links(db: Session, body: ResumeIn, account_id: int) -> None:
@@ -83,13 +88,15 @@ def get_resume(resume_id: int, db: DbSession, account_id: AccountId) -> ResumeDe
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> ResumeDetail:
-    """A new, empty base resume."""
+    """A new base resume, starting with the default sections and their defaults: what the
+    latest resume used (app/defaults.py)."""
     if "header_id" not in body.model_fields_set:
         body.header_id = latest_header_id(db, account_id)
     check_links(db, body, account_id)
     resume = Resume(account_id=account_id, **body.model_dump())
     db.add(resume)
     db.flush()
+    fill_document(db, RESUME, resume.resume_id, account_id)
     db.refresh(resume)
     return detail(db, resume)
 
@@ -127,3 +134,6 @@ def copy_resume(resume_id: int, body: CopyIn, db: DbSession,
 def delete_resume(resume_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes its own selections only. Copies made from it are kept."""
     db.delete(get_owned(db, Resume, resume_id, account_id))
+
+
+add_tree_routes(router, RESUME, detail)

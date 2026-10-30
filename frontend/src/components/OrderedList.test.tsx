@@ -160,6 +160,32 @@ describe('OrderedList', () => {
     await vi.waitFor(() => expect(select).toHaveFocus())
   })
 
+  it('takes string ids and shows choices under their groups', async () => {
+    const onChange = vi.fn(() => Promise.resolve())
+    render(
+      <OrderedList<string>
+        label="Items in Experience"
+        items={[{ id: 'experience:1', name: 'Role: Engineer, Acme' }]}
+        choices={[
+          { id: 'bullet:1', name: 'Bullet: Led the redesign.', group: 'Listed under Experience' },
+          { id: 'education:1', name: 'Education: B.A., State', group: 'Education' },
+          { id: 'bullet:2', name: 'Bullet: Cut load time.', group: 'Listed under Experience' },
+        ]}
+        emptyText="None."
+        onChange={onChange}
+      />,
+    )
+    const select = screen.getByLabelText('Add to Items in Experience')
+    expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
+      'Listed under Experience',
+      'Education',
+    ])
+    await expectNoA11yViolations()
+    fireEvent.change(select, { target: { value: 'bullet:2' } })
+    fireEvent.click(button('Add'))
+    expect(onChange).toHaveBeenLastCalledWith(['experience:1', 'bullet:2'])
+  })
+
   it('shows the error when saving fails', async () => {
     renderList(vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'No other category lists Go.', null, 422))))
     fireEvent.click(button('Remove Go'))

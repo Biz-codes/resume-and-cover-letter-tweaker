@@ -10,59 +10,99 @@
 // Each step is announced in the list's live region. Focus never drops to the top of the
 // page: it stays on the moving item's handle, removing an item moves focus to the list, and
 // adding one moves it back to the picker.
+//
+// A row can also open and close (`details`): its name becomes a disclosure button that shows
+// what's under the item (a section's contents, a role's bullets) below the row. A row can also
+// show something of its own below it (`under`), such as a form one of its `actions` opened. With
+// `readOnly`, only the names (and what opens under them) are shown.
+//
+// Adding is from a picker, or with `moreOptions`, from checkboxes behind a "More options" level
+// (MoreOptions), for the lists in a resume's or cover letter's tree, which start with defaults.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../api/client'
+import MoreOptions from './MoreOptions'
 
-export interface ListItem {
-  id: number
+// Ids are numbers, or strings for a list that mixes kinds of item (a section's items in a
+// resume, where a role and a bullet can share a number).
+export type ListKey = number | string
+
+export interface ListItem<K extends ListKey = number> {
+  id: K
   name: string
   // A shorter name for the buttons' labels, when the name is long (a bullet point).
   label?: string
+  // For choices: the heading the picker shows it under. Groups appear in the order first seen.
+  group?: string
 }
 
-const labelOf = (item: ListItem) => item.label ?? item.name
+const labelOf = (item: ListItem<ListKey>) => item.label ?? item.name
 
 // How far a pointer moves before a press on the handle becomes a drag, in pixels.
 const DRAG_THRESHOLD = 4
 
-type Moving = { id: number; order: number[]; dragging: boolean }
+type Moving<K> = { id: K; order: K[]; dragging: boolean }
 
-export default function OrderedList({
+// Choices in their groups, in the order each group first appears.
+function grouped<K extends ListKey>(choices: ListItem<K>[]) {
+  const groups = new Map<string, ListItem<K>[]>()
+  for (const choice of choices) {
+    const group = choice.group ?? ''
+    groups.set(group, [...(groups.get(group) ?? []), choice])
+  }
+  return [...groups]
+}
+
+export default function OrderedList<K extends ListKey = number>({
   label,
   items,
   choices,
   emptyText,
   removable = true,
   actions,
+  details,
+  under,
+  readOnly = false,
+  moreOptions = false,
+  onAdd,
   onChange,
 }: {
   label: string
-  items: ListItem[]
+  items: ListItem<K>[]
   // Items that can be added (the ones already listed are left out here).
-  choices: ListItem[]
+  choices: ListItem<K>[]
   emptyText: string
   // Whether each row has a Remove button. A list of items that belong only to their parent (a
-  // tone set's rules) offers its own buttons instead, through `actions`.
+  // tone's rules) offers its own buttons instead, through `actions`.
   removable?: boolean
   // More buttons for each row, shown while nothing is moving.
-  actions?: (item: ListItem) => ReactNode
-  onChange: (ids: number[]) => Promise<void>
+  actions?: (item: ListItem<K>) => ReactNode
+  // What opens under a row, or null for a row that has nothing under it.
+  details?: (item: ListItem<K>) => ReactNode | null
+  // Shown below a row while nothing is moving, or null for nothing (a form an action opened).
+  under?: (item: ListItem<K>) => ReactNode | null
+  // Names only: no reordering, adding, or removing (a sent version, or before editing starts).
+  readOnly?: boolean
+  // Add any number of the choices at once, from checkboxes, instead of one from a picker.
+  moreOptions?: boolean
+  // Saves added items, when adding isn't saving the whole list (placing items with defaults).
+  onAdd?: (ids: K[]) => Promise<void>
+  onChange: (ids: K[]) => Promise<void>
 }) {
   const [error, setError] = useState<ApiError | null>(null)
   const [adding, setAdding] = useState('')
-  const [moving, setMoving] = useState<Moving | null>(null)
+  const [moving, setMoving] = useState<Moving<K> | null>(null)
   // The order just dropped, shown until the saved list comes back, so rows don't jump back.
-  const [saving, setSaving] = useState<number[] | null>(null)
+  const [saving, setSaving] = useState<K[] | null>(null)
   const [announcement, setAnnouncement] = useState('')
-  const [focusId, setFocusId] = useState<{ id: number } | null>(null)
+  const [focusId, setFocusId] = useState<{ id: K } | null>(null)
   const groupRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLSelectElement>(null)
-  const handles = useRef(new Map<number, HTMLButtonElement>())
-  const rows = useRef(new Map<number, HTMLLIElement>())
+  const handles = useRef(new Map<K, HTMLButtonElement>())
+  const rows = useRef(new Map<K, HTMLLIElement>())
   // A press on a handle that may become a drag (order is set once it does). Its pointer moves
   // are followed on the window: the dragged row moves in the page as the list rearranges, and
   // an element that moves loses the pointer it was tracking.
-  const drag = useRef<{ item: ListItem; y: number; order: number[] | null } | null>(null)
+  const drag = useRef<{ item: ListItem<K>; y: number; order: K[] | null } | null>(null)
   // The click that follows the end of a drag isn't a click on the handle.
   const suppressClick = useRef(false)
   const pointer = useRef({
@@ -74,10 +114,20 @@ export default function OrderedList({
     end: (event: globalThis.PointerEvent) => pointer.current.end(event),
   })
   const instructionsId = useId()
+  const bodyIdBase = useId()
+  // The rows opened to show what's under them. All start closed.
+  const [open, setOpen] = useState<Set<K>>(new Set())
+
+  function toggle(id: K) {
+    const next = new Set(open)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setOpen(next)
+  }
 
   const byId = new Map(items.map((item) => [item.id, item]))
   const order = moving?.order ?? saving ?? items.map((item) => item.id)
-  const shown = order.map((id) => byId.get(id)).filter((item): item is ListItem => Boolean(item))
+  const shown = order.map((id) => byId.get(id)).filter((item): item is ListItem<K> => Boolean(item))
   const available = choices.filter((choice) => !byId.has(choice.id))
   const movingItem = moving ? byId.get(moving.id) : undefined
 
@@ -86,25 +136,37 @@ export default function OrderedList({
     if (focusId) handles.current.get(focusId.id)?.focus()
   }, [focusId, order])
 
-  const position = (ids: number[], id: number) => `position ${ids.indexOf(id) + 1} of ${ids.length}`
+  const position = (ids: K[], id: K) => `position ${ids.indexOf(id) + 1} of ${ids.length}`
 
-  async function save(ids: number[], focusAfter?: HTMLElement | null) {
+  async function save(ids: K[], focusAfter?: HTMLElement | null, request = onChange) {
     setError(null)
     try {
-      await onChange(ids)
+      await request(ids)
       focusAfter?.focus()
+      return true
     } catch (caught) {
       setError(toApiError(caught))
+      return false
     }
   }
 
-  function pickUp(item: ListItem, dragging = false) {
+  // Added ones go last. When none are left to add, the options close, so focus goes to the list.
+  async function addChecked(ids: K[]) {
+    const focusAfter = ids.length === available.length ? groupRef.current : null
+    const added = onAdd
+      ? await save(ids, focusAfter, onAdd)
+      : await save([...items.map((item) => item.id), ...ids], focusAfter)
+    if (added) setAnnouncement(`Added ${ids.length} to ${label}.`)
+    return added
+  }
+
+  function pickUp(item: ListItem<K>, dragging = false) {
     const ids = items.map((other) => other.id)
     setMoving({ id: item.id, order: ids, dragging })
     setAnnouncement(`Picked up ${labelOf(item)}, ${position(ids, item.id)}.`)
   }
 
-  function moveTo(ids: number[]) {
+  function moveTo(ids: K[]) {
     if (!moving || !movingItem) return
     setMoving({ ...moving, order: ids })
     setAnnouncement(`${labelOf(movingItem)}, ${position(ids, moving.id)}.`)
@@ -125,7 +187,7 @@ export default function OrderedList({
     if (moving && movingItem) void dropAt(movingItem, moving.order)
   }
 
-  async function dropAt(item: ListItem, ids: number[]) {
+  async function dropAt(item: ListItem<K>, ids: K[]) {
     const unchanged = ids.every((id, index) => id === items[index]?.id)
     setMoving(null)
     setFocusId({ id: item.id })
@@ -149,7 +211,7 @@ export default function OrderedList({
   }
 
   // "Move here" on a row: the moving item takes that row's place.
-  function placeAt(target: number) {
+  function placeAt(target: K) {
     if (!moving) return
     const ids = moving.order.filter((id) => id !== moving.id)
     ids.splice(moving.order.indexOf(target), 0, moving.id)
@@ -164,7 +226,7 @@ export default function OrderedList({
     }
   }
 
-  function onHandleKeyDown(event: KeyboardEvent, item: ListItem) {
+  function onHandleKeyDown(event: KeyboardEvent, item: ListItem<K>) {
     if (moving?.id !== item.id) return
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
       event.preventDefault()
@@ -176,7 +238,7 @@ export default function OrderedList({
   }
 
   // Space and Enter click a button, so the keyboard and a plain click share this.
-  function onHandleClick(item: ListItem) {
+  function onHandleClick(item: ListItem<K>) {
     if (suppressClick.current) {
       suppressClick.current = false
       return
@@ -193,7 +255,7 @@ export default function OrderedList({
 
   useEffect(() => stopFollowing, [])
 
-  function onPointerDown(event: PointerEvent<HTMLButtonElement>, item: ListItem) {
+  function onPointerDown(event: PointerEvent<HTMLButtonElement>, item: ListItem<K>) {
     if (event.button !== 0) return
     drag.current = { item, y: event.clientY, order: null }
     window.addEventListener('pointermove', follow.current.move)
@@ -256,69 +318,97 @@ export default function OrderedList({
         <p className="muted">{emptyText}</p>
       ) : (
         <ol>
-          {shown.map((item, index) => (
-            <li
-              key={item.id}
-              className={moving?.id === item.id ? 'moving' : undefined}
-              ref={(row) => {
-                if (row) rows.current.set(item.id, row)
-                else rows.current.delete(item.id)
-              }}
-            >
-              <button
-                type="button"
-                className="handle"
-                ref={(handle) => {
-                  if (handle) handles.current.set(item.id, handle)
-                  else handles.current.delete(item.id)
+          {shown.map((item, index) => {
+            const body = details?.(item) ?? null
+            const opened = open.has(item.id) && !moving
+            const bodyId = `${bodyIdBase}-${String(item.id)}`
+            return (
+              <li
+                key={item.id}
+                className={moving?.id === item.id ? 'moving' : undefined}
+                ref={(row) => {
+                  if (row) rows.current.set(item.id, row)
+                  else rows.current.delete(item.id)
                 }}
-                aria-label={`Move ${labelOf(item)}`}
-                aria-pressed={moving?.id === item.id}
-                aria-describedby={instructionsId}
-                onClick={() => onHandleClick(item)}
-                onKeyDown={(event) => onHandleKeyDown(event, item)}
-                onPointerDown={(event) => onPointerDown(event, item)}
               >
-                <span aria-hidden="true">⠿</span>
-              </button>
-              <span className="item-name">{item.name}</span>
-              <span className="row-actions">
-                {!moving && actions?.(item)}
-                {!moving && removable && (
+                {!readOnly && (
                   <button
                     type="button"
-                    aria-label={`Remove ${labelOf(item)}`}
-                    onClick={() =>
-                      void save(
-                        items.filter((other) => other.id !== item.id).map((other) => other.id),
-                        groupRef.current,
-                      )
-                    }
+                    className="handle"
+                    ref={(handle) => {
+                      if (handle) handles.current.set(item.id, handle)
+                      else handles.current.delete(item.id)
+                    }}
+                    aria-label={`Move ${labelOf(item)}`}
+                    aria-pressed={moving?.id === item.id}
+                    aria-describedby={instructionsId}
+                    onClick={() => onHandleClick(item)}
+                    onKeyDown={(event) => onHandleKeyDown(event, item)}
+                    onPointerDown={(event) => onPointerDown(event, item)}
                   >
-                    Remove
+                    <span aria-hidden="true">⠿</span>
                   </button>
                 )}
-                {moving && !moving.dragging && movingItem && moving.id !== item.id && (
+                {body === null ? (
+                  <span className="item-name">{item.name}</span>
+                ) : (
                   <button
                     type="button"
-                    aria-label={`Move ${labelOf(movingItem)} here, to position ${index + 1}`}
-                    onClick={() => placeAt(item.id)}
-                    onKeyDown={cancelOnEscape}
+                    className="item-name disclosure-toggle"
+                    aria-expanded={opened}
+                    aria-controls={bodyId}
+                    onClick={() => toggle(item.id)}
                   >
-                    Move here
+                    {item.name}
                   </button>
                 )}
-                {moving && !moving.dragging && moving.id === item.id && (
-                  <button type="button" onClick={cancel} onKeyDown={cancelOnEscape}>
-                    Cancel move
-                  </button>
+                {!readOnly && (
+                  <span className="row-actions">
+                    {!moving && actions?.(item)}
+                    {!moving && removable && (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${labelOf(item)}`}
+                        onClick={() =>
+                          void save(
+                            items.filter((other) => other.id !== item.id).map((other) => other.id),
+                            groupRef.current,
+                          )
+                        }
+                      >
+                        Remove
+                      </button>
+                    )}
+                    {moving && !moving.dragging && movingItem && moving.id !== item.id && (
+                      <button
+                        type="button"
+                        aria-label={`Move ${labelOf(movingItem)} here, to position ${index + 1}`}
+                        onClick={() => placeAt(item.id)}
+                        onKeyDown={cancelOnEscape}
+                      >
+                        Move here
+                      </button>
+                    )}
+                    {moving && !moving.dragging && moving.id === item.id && (
+                      <button type="button" onClick={cancel} onKeyDown={cancelOnEscape}>
+                        Cancel move
+                      </button>
+                    )}
+                  </span>
                 )}
-              </span>
-            </li>
-          ))}
+                {!readOnly && !moving && under?.(item)}
+                {body !== null && (
+                  <div className="item-body" id={bodyId} hidden={!opened}>
+                    {opened && body}
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ol>
       )}
-      {available.length > 0 && !moving && (
+      {!readOnly && moreOptions && !moving && <MoreOptions label={label} choices={available} onAdd={addChecked} />}
+      {!readOnly && !moreOptions && available.length > 0 && !moving && (
         <div className="actions">
           <select
             ref={pickerRef}
@@ -327,18 +417,28 @@ export default function OrderedList({
             onChange={(event) => setAdding(event.target.value)}
           >
             <option value="">Choose one to add…</option>
-            {available.map((choice) => (
-              <option key={choice.id} value={choice.id}>
-                {choice.name}
-              </option>
-            ))}
+            {grouped(available).map(([group, options]) => {
+              const rendered = options.map((choice) => (
+                <option key={choice.id} value={String(choice.id)}>
+                  {choice.name}
+                </option>
+              ))
+              return group ? (
+                <optgroup key={group} label={group}>
+                  {rendered}
+                </optgroup>
+              ) : (
+                rendered
+              )
+            })}
           </select>
           <button
             type="button"
             aria-disabled={!adding}
             onClick={() => {
-              if (!adding) return
-              void save([...items.map((item) => item.id), Number(adding)], pickerRef.current)
+              const chosen = available.find((choice) => String(choice.id) === adding)
+              if (!chosen) return
+              void save([...items.map((item) => item.id), chosen.id], pickerRef.current)
               setAdding('')
             }}
           >

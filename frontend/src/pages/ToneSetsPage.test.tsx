@@ -34,7 +34,7 @@ describe('ToneSetsPage', () => {
   it('shows each set with its rules in order, and what uses it', async () => {
     stub()
     render(<ToneSetsPage />)
-    expect(document.title).toBe('Tone sets – Resume Tweaker')
+    expect(document.title).toBe('Tones – Resume Tweaker')
     const card = await techCard()
     const rules = within(card).getByRole('group', { name: 'Tech rules' })
     expect(within(rules).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
@@ -54,8 +54,8 @@ describe('ToneSetsPage', () => {
       'POST /api/tone-sets/4/rules': [{ status: 201, body: TEACHING }],
     })
     render(<ToneSetsPage />)
-    fireEvent.change(await screen.findByLabelText('New tone set name'), { target: { value: 'Writing' } })
-    fireEvent.click(screen.getByText('Add tone set'))
+    fireEvent.change(await screen.findByLabelText('New tone name'), { target: { value: 'Writing' } })
+    fireEvent.click(screen.getByText('Add tone'))
     expect(await screen.findByRole('status')).toHaveTextContent('Added "Writing".')
     fireEvent.change(screen.getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
     fireEvent.click(within(screen.getByRole('heading', { name: 'Teaching' }).closest('article') as HTMLElement).getByText('Add rule'))
@@ -105,14 +105,14 @@ describe('ToneSetsPage', () => {
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted the rule "Keep bullets short.".')
-    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Tone sets' })).toHaveFocus())
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Tones' })).toHaveFocus())
   })
 
   it('renames a set', async () => {
     const fetchMock = stub({ 'PUT /api/tone-sets/3': [{ status: 200, body: { ...TECH, name: 'Engineering' } }] })
     render(<ToneSetsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Rename "Tech"' }))
-    const field = screen.getByLabelText('Tone set name')
+    const field = screen.getByLabelText('Tone name')
     expect(field).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Engineering' } })
@@ -133,7 +133,7 @@ describe('ToneSetsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete "Tech"' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Tech"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
-    expect(confirm).toHaveTextContent('Used by: Acme resume. They keep going with no tone set.')
+    expect(confirm).toHaveTextContent('Used by: Acme resume. They keep going with no tone.')
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await within(confirm).findByRole('alert')).toHaveTextContent('Nothing was changed.')
     await expectNoA11yViolations()
@@ -162,9 +162,9 @@ describe('ToneSetsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Tech' })).toBeInTheDocument()
   })
 
-  it('says when there are no tone sets yet', async () => {
+  it('says when there are no tones yet', async () => {
     stub({}, [])
     render(<ToneSetsPage />)
-    expect(await screen.findByText('No tone sets yet.')).toBeInTheDocument()
+    expect(await screen.findByText('No tones yet.')).toBeInTheDocument()
   })
 })

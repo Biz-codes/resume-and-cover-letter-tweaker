@@ -15,6 +15,7 @@ from app.db import DbSession
 from app.documents import (
     COVER_LETTER,
     DocInfo,
+    SectionTree,
     check_link,
     copy_tree,
     doc_info,
@@ -25,6 +26,7 @@ from app.documents import (
 )
 from app.models import CoverLetter, Header, SignOff, ToneSet
 from app.plain_text import Output, letter_output
+from app.routers.document_tree import add_tree_routes, fill_document
 from app.routers.resumes import CopyIn
 from app.schemas import OptionalText, RequiredText
 
@@ -53,6 +55,7 @@ class LetterOut(LetterIn, DocInfo):
 
 
 class LetterDetail(LetterOut):
+    sections: list[SectionTree]
     output: Output
 
 
@@ -70,10 +73,11 @@ def to_out(db: Session, letters: list[CoverLetter]) -> list[LetterOut]:
 def detail(db: Session, letter: CoverLetter) -> LetterDetail:
     header = db.get(Header, letter.header_id) if letter.header_id else None
     sign_off = db.get(SignOff, letter.sign_off_id) if letter.sign_off_id else None
-    output = letter_output(header, load_tree(db, COVER_LETTER, letter.letter_id),
-                           letter.addressee, sign_off.text if sign_off else None,
-                           letter.signature_name)
-    return LetterDetail(**to_out(db, [letter])[0].model_dump(), output=output)
+    sections = load_tree(db, COVER_LETTER, letter.letter_id)
+    output = letter_output(header, sections, letter.addressee,
+                           sign_off.text if sign_off else None, letter.signature_name)
+    return LetterDetail(**to_out(db, [letter])[0].model_dump(), sections=sections,
+                        output=output)
 
 
 def check_links(db: Session, body: LetterIn, account_id: int) -> None:
@@ -102,7 +106,8 @@ def get_letter(letter_id: int, db: DbSession, account_id: AccountId) -> LetterDe
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> LetterDetail:
-    """A new, empty base cover letter."""
+    """A new base cover letter, starting with the default sections and their defaults: what the
+    latest cover letter used (app/defaults.py)."""
     given = body.model_fields_set
     if "header_id" not in given:
         body.header_id = latest_header_id(db, account_id)
@@ -114,6 +119,7 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
     letter = CoverLetter(account_id=account_id, **body.model_dump())
     db.add(letter)
     db.flush()
+    fill_document(db, COVER_LETTER, letter.letter_id, account_id)
     db.refresh(letter)
     return detail(db, letter)
 
@@ -153,3 +159,6 @@ def copy_letter(letter_id: int, body: CopyIn, db: DbSession,
 def delete_letter(letter_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes its own selections only. Copies made from it are kept."""
     db.delete(get_owned(db, CoverLetter, letter_id, account_id))
+
+
+add_tree_routes(router, COVER_LETTER, detail)

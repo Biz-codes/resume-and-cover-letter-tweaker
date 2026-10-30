@@ -197,7 +197,7 @@ Note: titles are unique in the account, ignoring capitals and counting the built
 
 Note: each row (an "excerpt" in the app) holds anything from one sentence to a full paragraph. Narrative sections, such as a resume summary or a cover letter paragraph, combine the excerpts chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. The user decides how to split text: for example, a paragraph used in many resumes with only its first sentence changed can be one row per first sentence plus one row for the rest of the paragraph. No label column is needed, because sections list their excerpts in `section_narrative_content`.
 
-Note: an accepted rewording is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row.
+Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row. A new version must differ from the original (`VALIDATION_FAILED`).
 
 ### skill_category
 | Column        | Type         | Constraints                                      | Description                                      |
@@ -274,7 +274,7 @@ Note: each version of a project is its own row, like a role's versions. A versio
 
 Note: a bullet is listed under roles (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
 
-Note: an accepted rewording is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume switches to the new bullet.
+Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume or cover letter switches to the new bullet. A new version must differ from the original (`VALIDATION_FAILED`).
 
 ### education
 | Column       | Type         | Constraints                                               | Description                                                              |
@@ -312,7 +312,7 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 | created_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set added to db                   |
 | updated_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set last updated                  |
 
-Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`.
+Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
 
 ### tone_rule
 | Column       | Type         | Constraints                                                 | Description                                           |

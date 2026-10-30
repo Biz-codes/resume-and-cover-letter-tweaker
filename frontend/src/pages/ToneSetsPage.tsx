@@ -1,4 +1,5 @@
-// Library page for tone sets: named groups of tone rules (docs/WRITING_RULES.md, "Tone rules").
+// Library page for tones: named groups of tone rules (docs/WRITING_RULES.md, "Tone rules"). The
+// database and API call a tone a tone set (tone_set); the app says "tone".
 // Add, rename, and delete sets, and add, edit, reorder, and delete each set's rules. A resume or
 // cover letter can use one set. Tone rules only steer suggestions and are never printed, so
 // edits are always made in place, even when a sent version uses the set.
@@ -31,7 +32,7 @@ export default function ToneSetsPage() {
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
-  usePageTitle('Tone sets')
+  usePageTitle('Tones')
 
   const load = useCallback(
     () =>
@@ -99,7 +100,7 @@ export default function ToneSetsPage() {
       <article key={id} className="card">
         {here?.kind === 'rename' ? (
           <NameForm
-            label="Tone set name"
+            label="Tone name"
             field="name"
             initial={toneSet.name}
             onSave={(text) => rename(toneSet, text)}
@@ -137,7 +138,7 @@ export default function ToneSetsPage() {
           <ConfirmDelete
             what={name}
             uses={toneSet.used_by}
-            effect="They keep going with no tone set."
+            effect="They keep going with no tone."
             error={deleteError}
             onConfirm={() =>
               void confirmDelete(() => toneSetsApi.delete(id), `Deleted ${name} and its rules.`)
@@ -233,12 +234,12 @@ export default function ToneSetsPage() {
   return (
     <section>
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
-        Tone sets
+        Tones
       </h2>
       <p className="muted">
         Different kinds of jobs call for different word choice: a tech resume might lead with tools and metrics, a
-        teaching one with students and outcomes. Each resume or cover letter can use one tone set, and its rules guide
-        every suggestion for it.
+        teaching one with students and outcomes. Each resume or cover letter can use one tone, and its rules guide every
+        suggestion for it.
       </p>
       <p role="status">{notice}</p>
       {loadError && (
@@ -251,8 +252,8 @@ export default function ToneSetsPage() {
       )}
       {!sets && !loadError && <p>Loading…</p>}
 
-      {sets && <NameForm label="New tone set name" field="name" submitLabel="Add tone set" onSave={create} />}
-      {sets && sets.length === 0 && <p>No tone sets yet.</p>}
+      {sets && <NameForm label="New tone name" field="name" submitLabel="Add tone" onSave={create} />}
+      {sets && sets.length === 0 && <p>No tones yet.</p>}
       {sets?.map(card)}
     </section>
   )

@@ -60,7 +60,7 @@ Goal: the full resume and cover letter tree works without AI.
 
 Build it in steps, each with its API endpoints, pages, and tests together:
 1. [x] **Resumes and cover letters:** list them (base versions, then ones for postings), show each as plain text with copy buttons, create base versions with the default header (and a letter's greeting and sign-off), edit their details, copy one to a new base version (the whole tree), and delete, with sent versions locked except for their name.
-2. [ ] **Building the tree:** add, remove, and reorder sections, the items in each section (mixed kinds, one order), a category's and project's skills, and a role's or project's bullets, with the warning before editing a base version. Write new bullets and narrative content in place.
+2. [x] **Building the tree:** add, remove, and reorder sections, the items in each section (mixed kinds, one order), a category's and project's skills, and a role's or project's bullets, with the warning before editing a base version. Write new bullets and narrative content in place.
 3. [ ] **Job postings by hand:** create and edit a posting from a pasted description, pick its header, and start its resumes and cover letters from a copy or fresh, each with the posting's header (use, edit, or pick another).
 4. [ ] **Tracking and locking:** applied, rejection, and hire dates, contacts, and interviews shared across postings. Recording the applied date locks the posting's versions; clearing it warns first.
 
@@ -75,8 +75,8 @@ What the steps cover:
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
 1. **Job posting:** fetch and extract a posting from a url, with the paste-in fallback, and let the user correct the result.
-2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the role title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting.
-3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone set.
+2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the role title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting. They replace the "last used" defaults in `backend/app/defaults.py`, filling the same lists, with the rest under "More options". Add a "Build from scratch" choice that starts a document with no defaults (empty lists sent explicitly).
+3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone.
 4. **Final review** of the resume and cover letter together.
 5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.
 

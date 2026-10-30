@@ -6,12 +6,12 @@ join tables mirror the resume ones, with "cover_letter" in place of "resume" in 
 a Kind names one set of tables and the same code reads and copies either kind.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from sqlalchemy import insert, select, union_all
+from sqlalchemy import ColumnElement, and_, insert, select, union_all
 from sqlalchemy.orm import Session
 
 from app.errors import AppError, ErrorCode
@@ -106,8 +106,11 @@ LIBRARY: dict[EntryKind, tuple[Any, str, list[str]]] = {
 }
 
 
-@dataclass
-class Child:
+# The tree is sent to the page as is, so these are pydantic models. row_id is the join row's
+# id, which the endpoints that change the tree take (app/routers/document_tree.py).
+
+
+class Child(BaseModel):
     """A skill under a category or project, or a bullet under a role or project."""
 
     row_id: int
@@ -116,8 +119,7 @@ class Child:
     text: str
 
 
-@dataclass
-class Entry:
+class Entry(BaseModel):
     """An item placed directly in a section, with the library values it prints."""
 
     kind: EntryKind
@@ -125,12 +127,11 @@ class Entry:
     item_id: int
     position: int
     values: dict[str, str | None]
-    skills: list[Child] = field(default_factory=list)
-    bullets: list[Child] = field(default_factory=list)
+    skills: list[Child] = []
+    bullets: list[Child] = []
 
 
-@dataclass
-class SectionTree:
+class SectionTree(BaseModel):
     row_id: int
     section_id: int
     title: str
@@ -146,7 +147,7 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
     section_table = kind.section.__table__
     section_pk = _primary_key(kind.section)
     sections = [
-        SectionTree(row_id, section_id, title, [])
+        SectionTree(row_id=row_id, section_id=section_id, title=title, entries=[])
         for row_id, section_id, title in db.execute(
             select(section_pk, section_table.c.section_id, Section.title)
             .join(Section, Section.id == section_table.c.section_id)
@@ -176,10 +177,12 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
                 experience_row, project_row = parents
                 parent = (entries.get(("experience", experience_row)) if experience_row
                           else entries.get(("project", project_row)))
-                nested_bullets.append((parent, Child(row_id, item_id, position,
-                                                     values["content"] or "")))
+                nested_bullets.append((parent, Child(row_id=row_id, item_id=item_id,
+                                                     position=position,
+                                                     text=values["content"] or "")))
                 continue
-            entry = Entry(entry_kind, row_id, item_id, position, values)
+            entry = Entry(kind=entry_kind, row_id=row_id, item_id=item_id, position=position,
+                          values=values)
             entries[(entry_kind, row_id)] = entry
             by_section[section_row].entries.append(entry)
 
@@ -197,7 +200,7 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
                  .where(parent_column.in_(parent_ids)))
         for row_id, parent_row, position, skill_id, name in db.execute(query):
             entries[(parent_kind, parent_row)].skills.append(
-                Child(row_id, skill_id, position, name))
+                Child(row_id=row_id, item_id=skill_id, position=position, text=name))
 
     for entry in entries.values():
         entry.skills.sort(key=lambda child: child.position)
@@ -205,6 +208,19 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
     for section in sections:
         section.entries.sort(key=lambda entry: entry.position)
     return sections
+
+
+def standalone_bullets(kind: Kind) -> ColumnElement[bool]:
+    """Bullets placed directly in a section, not under a role or project."""
+    table = kind.bullet.__table__
+    return and_(table.c[kind.column("experience")].is_(None),
+                table.c[kind.column("project")].is_(None))
+
+
+def in_section(kind: Kind, model, section_row: int) -> ColumnElement[bool]:
+    """The section's own rows in an entry table (for bullets, only the standalone ones)."""
+    condition = model.__table__.c[kind.column("section")] == section_row
+    return and_(condition, standalone_bullets(kind)) if model is kind.bullet else condition
 
 
 def _copy_rows(db: Session, model, by: str, remap: dict[str, dict[int, int]]) -> dict[int, int]:

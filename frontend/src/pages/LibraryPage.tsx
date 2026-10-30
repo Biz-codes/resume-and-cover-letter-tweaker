@@ -20,7 +20,7 @@ export const LIBRARY_PAGES = [
   { path: 'education', name: 'Education', description: 'Degrees, certificates, and other schooling.' },
   { path: 'sign-offs', name: 'Sign-offs', description: 'Closings for cover letters, like "Sincerely".' },
   { path: 'writing-rules', name: 'Writing rules', description: 'Filler words and patterns kept out of every suggestion.' },
-  { path: 'tone-sets', name: 'Tone sets', description: 'Word choice and style rules for different kinds of jobs.' },
+  { path: 'tones', name: 'Tones', description: 'Word choice and style rules for different kinds of jobs.' },
 ]
 
 export function LibraryLayout() {

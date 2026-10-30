@@ -84,7 +84,7 @@ function App() {
             <Route path="education" element={<EducationPage />} />
             <Route path="sign-offs" element={<SignOffsPage />} />
             <Route path="writing-rules" element={<WritingRulesPage />} />
-            <Route path="tone-sets" element={<ToneSetsPage />} />
+            <Route path="tones" element={<ToneSetsPage />} />
           </Route>
           <Route path="/resumes" element={<DocumentsPage key="resume" kind="resume" />} />
           <Route path="/resumes/:id" element={<DocumentRoute kind="resume" />} />
