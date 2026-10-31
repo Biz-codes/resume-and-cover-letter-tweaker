@@ -52,7 +52,7 @@ describe('BulletsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
     const field = screen.getByLabelText('Bullet text')
     expect(field).toHaveFocus()
-    expect(field).toHaveAccessibleDescription(/saved as a new bullet/)
+    expect(field).toHaveAccessibleDescription(/A sent version uses this bullet, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Shipped it' } })
     fireEvent.click(screen.getByText('Save'))

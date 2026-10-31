@@ -37,11 +37,7 @@ const EMPTY: ProjectFields = {
   dates: null,
 }
 
-const VERSION_NOTE =
-  'Adds a new version listing the same skills and bullets. This one stays as it is, and resumes and cover letters keep the version they use until you pick another.'
-
-const SENT_NOTE =
-  'A sent version uses this project, so your change will be saved as a new version. Sent versions keep this one.'
+const SENT_NOTE = 'A sent version uses this project, so saving adds a new version. The sent version keeps this one.'
 
 // Which form is open: a new project, or editing a project or adding a version of it.
 type Form = { kind: 'new' } | { kind: 'edit' | 'version'; id: number }
@@ -235,7 +231,6 @@ export default function ProjectsPage() {
             label={`New version of "${label}"`}
             fields={FIELDS}
             initial={fieldsOf(project)}
-            note={VERSION_NOTE}
             submitLabel="Add version"
             onSave={(fields) => addVersion(project, fields)}
             onCancel={() => close(buttonId(project.project_id, 'version'))}

@@ -30,23 +30,12 @@ export default function HomePage() {
         What do you want to do?
       </h2>
       <ul className="choices">
-        {/* Each link is described by its tag and description, so moving from link to link
-            still says which ones are coming soon. */}
+        {/* Each link is described by its description, read when moving from link to link. */}
         {MODES.map((mode, index) => (
           <li key={mode.path}>
-            <Link
-              to={mode.path}
-              aria-describedby={[mode.comingIn && `${id}-tag-${index}`, `${id}-description-${index}`]
-                .filter(Boolean)
-                .join(' ')}
-            >
+            <Link to={mode.path} aria-describedby={`${id}-description-${index}`}>
               {mode.action}
             </Link>
-            {mode.comingIn && (
-              <span className="tag" id={`${id}-tag-${index}`}>
-                coming soon
-              </span>
-            )}
             <p className="muted" id={`${id}-description-${index}`}>
               {mode.description}
             </p>

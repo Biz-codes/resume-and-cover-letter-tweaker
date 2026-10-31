@@ -30,10 +30,8 @@ describe('Greeting', () => {
   it('saves who the letter is addressed to, or none, when the field is left', async () => {
     const onSave = vi.fn(() => Promise.resolve())
     render(<Greeting doc={LETTER} readOnly={false} onSave={onSave} />)
-    const field = screen.getByLabelText(/Who it's addressed to/)
+    const field = screen.getByLabelText('Addressed to (after "Dear")')
     expect(field).toHaveValue('Hiring Team')
-    // How it saves is shown, and read with the field.
-    expect(field).toHaveAccessibleDescription('Saves when you leave the field or press Enter.')
     await expectNoA11yViolations()
     // Unchanged, nothing saves.
     fireEvent.blur(field)
@@ -46,12 +44,12 @@ describe('Greeting', () => {
   it('shows a refusal on its field', async () => {
     const onSave = vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'Too long.', 'addressee', 422)))
     render(<Greeting doc={LETTER} readOnly={false} onSave={onSave} />)
-    const field = screen.getByLabelText(/Who it's addressed to/)
+    const field = screen.getByLabelText('Addressed to (after "Dear")')
     fireEvent.change(field, { target: { value: 'The hiring team at a very long name' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(await screen.findByRole('alert')).toHaveTextContent('Too long.')
-    expect(screen.getByLabelText(/Who it's addressed to/)).toHaveAccessibleDescription(
-      'Saves when you leave the field or press Enter. Too long.',
+    expect(screen.getByLabelText('Addressed to (after "Dear")')).toHaveAccessibleDescription(
+      'Too long.',
     )
     await expectNoA11yViolations()
   })
@@ -74,7 +72,7 @@ describe('SignOffPart', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByRole('combobox', { name: 'Sign-off' }), { target: { value: '4' } })
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith({ sign_off_id: 4 }))
-    const name = screen.getByLabelText(/Name under the sign-off/)
+    const name = screen.getByLabelText('Name under the sign-off')
     fireEvent.change(name, { target: { value: 'Sam' } })
     fireEvent.blur(name)
     await vi.waitFor(() => expect(onSave).toHaveBeenLastCalledWith({ signature_name: 'Sam' }))

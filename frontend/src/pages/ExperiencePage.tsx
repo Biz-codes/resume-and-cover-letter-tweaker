@@ -31,11 +31,7 @@ const EMPTY: ExperienceFields = {
   dates: null,
 }
 
-const VERSION_NOTE =
-  'Adds a new version listing the same bullets. This one stays as it is, and resumes and cover letters keep the version they use until you pick another.'
-
-const SENT_NOTE =
-  'A sent version uses this role, so your change will be saved as a new version. Sent versions keep this one.'
+const SENT_NOTE = 'A sent version uses this role, so saving adds a new version. The sent version keeps this one.'
 
 // Which form is open: a new role, or editing a role or adding a version of it.
 type Form = { kind: 'new' } | { kind: 'edit' | 'version'; id: number }
@@ -224,7 +220,6 @@ export default function ExperiencePage() {
             label={`New version of "${label}"`}
             fields={FIELDS}
             initial={fieldsOf(role)}
-            note={VERSION_NOTE}
             submitLabel="Add version"
             onSave={(fields) => addVersion(role, fields)}
             onCancel={() => close(buttonId(role.experience_id, 'version'))}

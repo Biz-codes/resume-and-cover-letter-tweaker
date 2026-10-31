@@ -17,7 +17,7 @@ import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
 
 const lockedNote = (what: string) =>
-  `A sent version uses this ${what}, so the new name will be saved as a new ${what}. Sent versions keep the old name; unsent ones switch to the new one.`
+  `A sent version uses this ${what}, so the new name is saved as a new ${what}. The sent version keeps the old one.`
 
 type Target = { kind: 'category' | 'skill'; id: number }
 

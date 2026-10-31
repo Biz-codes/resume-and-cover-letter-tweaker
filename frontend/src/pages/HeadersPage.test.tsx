@@ -84,7 +84,7 @@ describe('HeadersPage', () => {
     fireEvent.click(within(await cardFor('Front-End Engineer')).getByText('Edit'))
     // Focus lands on the first field, past the note, so the note describes that field.
     expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
-    expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription(/saved as a new header/)
+    expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription(/so saving adds a new header/)
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
     fireEvent.click(screen.getByText('Save'))

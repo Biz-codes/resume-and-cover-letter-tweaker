@@ -13,6 +13,7 @@ export default function ConfirmDelete({
   locked = anyLocked(uses),
   lockedNote = 'A sent version uses it, so deleting it changes the record of what you sent.',
   error,
+  children,
   onConfirm,
   onCancel,
 }: {
@@ -26,6 +27,8 @@ export default function ConfirmDelete({
   locked?: boolean
   lockedNote?: string
   error: ApiError | null
+  // More of what the delete affects (e.g. a posting's interviews), read as part of the question.
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -42,6 +45,7 @@ export default function ConfirmDelete({
           {usesLabel}: {uses.map((use) => use.name).join('; ')}. {effect}
         </p>
       )}
+      {children}
       {locked && <p>{lockedNote}</p>}
       {error && <p role="alert">{error.message}</p>}
       <div className="actions">

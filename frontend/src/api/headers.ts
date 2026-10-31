@@ -21,6 +21,10 @@ export interface Header extends HeaderFields {
   used_by: HeaderUse[]
 }
 
+// Tells saved headers apart in a picker: the name, headline, and email.
+export const headerLabel = (header: HeaderFields) =>
+  [header.full_name, header.headline, header.email].filter(Boolean).join(', ')
+
 export const headersApi = {
   list: () => api.get<Header[]>('/headers'),
   // Returns the identical existing header instead of adding a duplicate.

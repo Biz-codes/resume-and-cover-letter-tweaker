@@ -167,6 +167,13 @@ h2[tabindex='-1']:focus {
   color: #b3261e;
 }
 
+/* The links back to where a page was reached from, side by side. */
+.back-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -345,6 +352,12 @@ form.card label select {
 }
 
 /* The resumes or cover letters on their page. */
+/* A job posting's pasted description keeps its own line breaks. */
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .doc-list li {
   margin: 6px 0;
 }

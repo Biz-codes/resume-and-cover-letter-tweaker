@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 
-export type Reply = { status: number; body?: unknown }
+// `delayMs` holds the reply back, as a slow request would, so the page renders before it arrives.
+export type Reply = { status: number; body?: unknown; delayMs?: number }
 
 // Answers each request from the replies for its method and path ("PUT /api/skills/3"), in order.
 export function stubApi(replies: Record<string, Reply[]>) {
@@ -8,11 +9,10 @@ export function stubApi(replies: Record<string, Reply[]>) {
     const key = `${init?.method ?? 'GET'} ${url}`
     const reply = replies[key]?.shift()
     if (!reply) throw new Error(`unexpected request: ${key}`)
-    return Promise.resolve(
-      reply.status === 204
-        ? new Response(null, { status: 204 })
-        : Response.json(reply.body, { status: reply.status }),
-    )
+    const response =
+      reply.status === 204 ? new Response(null, { status: 204 }) : Response.json(reply.body, { status: reply.status })
+    if (!reply.delayMs) return Promise.resolve(response)
+    return new Promise<Response>((resolve) => setTimeout(() => resolve(response), reply.delayMs))
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock

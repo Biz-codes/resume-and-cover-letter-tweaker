@@ -21,6 +21,7 @@ import { sectionsApi } from '../api/sections'
 import { skillCategoriesApi } from '../api/skills'
 import { useFocusLater } from '../hooks/useFocusLater'
 import AddContent from './AddContent'
+import FieldsForm from './FieldsForm'
 import NameForm from './NameForm'
 import OrderedList, { type ListItem, type ListKey } from './OrderedList'
 import {
@@ -29,10 +30,12 @@ import {
   KIND_NAMES,
   KINDS_IN_ORDER,
   listedIds,
+  NEW_FIELDS,
   placedItem,
   savedItems,
   SHOWN_FIELDS,
   type Library,
+  type NewField,
 } from './treeItems'
 
 // A button for each thing that can be written here, each opening its own form. Focus moves into
@@ -48,7 +51,6 @@ interface WriteOption {
   // A textarea, for text longer than a name.
   multiline: boolean
   submit: string
-  note: string
 }
 
 function Writer({
@@ -75,7 +77,6 @@ function Writer({
       <NameForm
         label={writing.field}
         field={writing.name}
-        lockedNote={writing.note}
         submitLabel={writing.submit}
         multiline={writing.multiline}
         onSave={async (content) => {
@@ -103,18 +104,31 @@ function Writer({
   )
 }
 
-// "New version" on each row of a list of text (bullets, or narrative content): a form under the
-// row that starts from its text. Changed text saves as a new library item, listed right after the
-// original, and takes the original's place here; the original stays in the library. Unchanged
-// text saves nothing. Focus moves into the form, and back to the row's button when it closes (the
-// new version's, after saving, since it takes the same place).
+// What a row's new version starts from: the fields to edit, and their values now.
+interface VersionSpec {
+  fields: NewField[]
+  values: Record<string, string>
+}
+
+type Values = Record<string, string | null>
+
+const same = (values: Values, before: Record<string, string>) =>
+  Object.keys(before).every((name) => (values[name] ?? '').trim() === before[name].trim())
+
+// "New version" on each row of a list (sections, the items in a section, skills, bullets): a form
+// under the row that starts from its values. A change saves as a new library item, listed right
+// after the original, and takes the original's place here; the original stays in the library.
+// Nothing changed saves nothing. Focus moves into the form, and back to the row's button when it
+// closes (the new version's, after saving, since it takes the same place). See "New versions in a
+// resume or cover letter" in docs/FRONTEND_CHECKS.md.
 function useNewVersion<K extends ListKey>(
   // Makes the buttons' ids unique on the page.
   idBase: string,
   items: ListItem<K>[],
-  // A row's text, or null for a row that isn't text (a role in a section).
-  textOf: (item: ListItem<K>) => string | null,
-  onSave: (item: ListItem<K>, content: string) => Promise<void>,
+  // What a row's new version edits, or null for a row that has none.
+  specOf: (item: ListItem<K>) => VersionSpec | null,
+  // Empty fields come as null.
+  onSave: (item: ListItem<K>, values: Values) => Promise<void>,
   onNotice: (notice: string) => void,
 ) {
   const [editing, setEditing] = useState<K | null>(null)
@@ -128,7 +142,7 @@ function useNewVersion<K extends ListKey>(
 
   return {
     actions: (item: ListItem<K>) =>
-      textOf(item) === null || editing === item.id ? null : (
+      specOf(item) === null || editing === item.id ? null : (
         <button
           type="button"
           id={buttonId(item)}
@@ -139,19 +153,24 @@ function useNewVersion<K extends ListKey>(
         </button>
       ),
     under: (item: ListItem<K>) => {
-      const text = textOf(item)
-      if (editing !== item.id || text === null) return null
+      const spec = specOf(item)
+      if (editing !== item.id || spec === null) return null
       return (
-        <NameForm
-          label="New version"
-          field="content"
-          initial={text}
-          lockedNote="Change the text, then save. The new version is saved to your library next to the original, and takes its place here. The original stays in your library."
+        <FieldsForm<Values>
+          label={`New version of ${item.label ?? item.name}`}
+          fields={spec.fields}
+          initial={spec.values}
           submitLabel="Save new version"
-          multiline
-          onSave={async (content) => {
-            if (content.trim() === text.trim()) onNotice('The text is unchanged, so nothing was saved.')
-            else await onSave(item, content.trim())
+          onSave={async (values) => {
+            if (same(values, spec.values)) {
+              onNotice('Nothing changed, so nothing was saved.')
+            } else {
+              const cleaned = Object.fromEntries(
+                Object.entries(values).map(([name, value]) => [name, value?.trim() || null]),
+              )
+              await onSave(item, cleaned)
+              onNotice('Saved the new version. The original is still in your library.')
+            }
             close(item)
           }}
           onCancel={() => close(item)}
@@ -160,6 +179,13 @@ function useNewVersion<K extends ListKey>(
     },
   }
 }
+
+// The values a placed item shows now, for its new version's form.
+const valuesOf = (fields: NewField[], values: Record<string, string | null | undefined>) =>
+  Object.fromEntries(fields.map((field) => [field.name, values[field.name] ?? '']))
+
+const SKILL_FIELDS: NewField[] = [{ name: 'skill_name', label: 'Name', required: true }]
+const TITLE_FIELDS: NewField[] = [{ name: 'title', label: 'Title', required: true }]
 
 // What opens under a role, project, or education entry (its fields, as the library has them),
 // and a category's or project's skills and a role's or project's bullets here.
@@ -171,6 +197,7 @@ function EntryChildren({
   taken,
   onWriteBullet,
   onWriteSkill,
+  onVersionSkill,
   onNotice,
 }: {
   entry: TreeEntry
@@ -183,6 +210,8 @@ function EntryChildren({
   // A new bullet, or with `replaces`, a new version of one shown here.
   onWriteBullet: (content: string, replaces?: number) => Promise<void>
   onWriteSkill: (skillName: string) => Promise<void>
+  // A new version of a skill shown here, by its row.
+  onVersionSkill: (skillRow: number, skillName: string) => Promise<void>
   onNotice: (notice: string) => void
 }) {
   const name = placedItem(entry).name.replace(/^[^:]*: /, '')
@@ -209,11 +238,23 @@ function EntryChildren({
     label: `"${shortBullet(bullet.text)}"`,
   }))
 
-  const versions = useNewVersion(
+  const skills = entry.skills.map((skill) => ({ id: skill.item_id, name: skill.text }))
+
+  const bulletVersions = useNewVersion(
     `${entry.kind}-${entry.row_id}`,
     bullets,
-    (item) => item.name,
-    (item, content) => onWriteBullet(content, item.id),
+    (item) => ({ fields: NEW_FIELDS.bullet, values: { content: item.name } }),
+    (item, values) => onWriteBullet(values.content ?? '', item.id),
+    onNotice,
+  )
+  const skillVersions = useNewVersion(
+    `${entry.kind}-${entry.row_id}-skill`,
+    skills,
+    (item) => ({ fields: SKILL_FIELDS, values: { skill_name: item.name } }),
+    async (item, values) => {
+      const row = entry.skills.find((skill) => skill.item_id === item.id)
+      if (row) await onVersionSkill(row.row_id, values.skill_name ?? '')
+    },
     onNotice,
   )
 
@@ -236,11 +277,13 @@ function EntryChildren({
           <p className="list-label">Skills</p>
           <OrderedList
             label={`${name} skills`}
-            items={entry.skills.map((skill) => ({ id: skill.item_id, name: skill.text }))}
+            items={skills}
             choices={skillChoices}
             emptyText={`No skills shown with ${name} yet.`}
             readOnly={readOnly}
             moreOptions
+            actions={skillVersions.actions}
+            under={skillVersions.under}
             onChange={onSkills}
           />
           {!readOnly && (
@@ -255,10 +298,6 @@ function EntryChildren({
                   name: 'skill_name',
                   multiline: false,
                   submit: 'Add skill',
-                  note:
-                    entry.kind === 'category'
-                      ? `It's saved to your library, listed under ${name}, and shown last here.`
-                      : `It's saved to your library, listed under ${name} and the "Other" skill category, and shown last here.`,
                 },
               ]}
               onWrite={(_, skillName) => onWriteSkill(skillName)}
@@ -276,8 +315,8 @@ function EntryChildren({
             emptyText={`No bullets shown with ${name} yet.`}
             readOnly={readOnly}
             moreOptions
-            actions={versions.actions}
-            under={versions.under}
+            actions={bulletVersions.actions}
+            under={bulletVersions.under}
             onChange={onBullets}
           />
           {!readOnly && (
@@ -292,7 +331,6 @@ function EntryChildren({
                   name: 'content',
                   multiline: true,
                   submit: 'Add bullet',
-                  note: `It's saved to your library, listed under ${name}, and shown last here.`,
                 },
               ]}
               onWrite={(_, content) => onWriteBullet(content)}
@@ -306,8 +344,6 @@ function EntryChildren({
 
 // Narrative content and bullets are their text; every other kind opens to more.
 const opens = (kind: EntryKind) => kind !== 'narrative' && kind !== 'bullet'
-
-const NEW_VERSION_SAVED = 'Saved the new version. The original is still in your library.'
 
 // What opens under one of the document's sections: the items placed in it, each opening to
 // what's under it, then adding more.
@@ -326,7 +362,8 @@ function SectionBody({
   // Null when read-only.
   library: Library | null
   saved: (request: Promise<DocDetail>) => Promise<void>
-  written: (request: Promise<DocDetail>, notice: string) => Promise<void>
+  // Without a notice, the caller gives its own.
+  written: (request: Promise<DocDetail>, notice?: string) => Promise<void>
   onNotice: (notice: string) => void
 }) {
   const api = docsApi(kind)
@@ -356,14 +393,16 @@ function SectionBody({
     items,
     (item) => {
       const entry = entryOf(item)
-      return entry && !opens(entry.kind) ? (entry.values.content ?? '') : null
+      return entry ? { fields: NEW_FIELDS[entry.kind], values: valuesOf(NEW_FIELDS[entry.kind], entry.values) } : null
     },
-    async (item, content) => {
+    async (item, values) => {
       const entry = entryOf(item)
       if (!entry) return
+      // Text takes the original's place through writing; the other kinds have their own version.
       await written(
-        api.write(doc.id, section.row_id, { kind: entry.kind, content }, entry.item_id),
-        NEW_VERSION_SAVED,
+        opens(entry.kind)
+          ? api.versionItem(doc.id, entry.row_id, { kind: entry.kind, ...values })
+          : api.write(doc.id, section.row_id, { kind: entry.kind, content: values.content }, entry.item_id),
       )
     },
     onNotice,
@@ -404,7 +443,12 @@ function SectionBody({
               onWriteBullet={(content, replaces) =>
                 written(
                   api.writeBullet(doc.id, parent, entry.row_id, content, replaces),
-                  replaces === undefined ? "Added the new bullet. It's saved in your library too." : NEW_VERSION_SAVED,
+                  replaces === undefined ? "Added the new bullet. It's saved in your library too." : undefined,
+                )
+              }
+              onVersionSkill={(skillRow, skillName) =>
+                written(
+                  api.versionSkill(doc.id, entry.kind === 'project' ? 'project' : 'category', skillRow, skillName),
                 )
               }
               onNotice={onNotice}
@@ -476,12 +520,25 @@ export default function DocumentTree({
   // Each change sends the whole list and gets the document back.
   const saved = async (request: Promise<DocDetail>) => onChange(await request)
 
-  // Writing adds to the library too, so its lists are read again.
-  async function written(request: Promise<DocDetail>, notice: string) {
+  // Writing adds to the library too, so its lists are read again. Without a notice, the caller
+  // gives its own (a new version).
+  async function written(request: Promise<DocDetail>, notice?: string) {
     onChange(await request)
-    onNotice(notice)
+    if (notice) onNotice(notice)
     void load()
   }
+
+  const sectionItems = doc.sections.map((section) => ({ id: section.section_id, name: section.title }))
+  const sectionVersions = useNewVersion(
+    'sections',
+    sectionItems,
+    (item) => ({ fields: TITLE_FIELDS, values: { title: item.name } }),
+    async (item, values) => {
+      const section = doc.sections.find((placed) => placed.section_id === item.id)
+      if (section) await written(api.versionSection(doc.id, section.row_id, values.title ?? ''))
+    },
+    onNotice,
+  )
 
   if (!readOnly && loadError) {
     return (
@@ -500,11 +557,13 @@ export default function DocumentTree({
     <>
       <OrderedList
         label="Sections"
-        items={doc.sections.map((section) => ({ id: section.section_id, name: section.title }))}
+        items={sectionItems}
         choices={shown ? shown.sections.map((section) => ({ id: section.id, name: section.title })) : []}
         emptyText={readOnly ? 'No sections.' : 'No sections yet. Add one to start.'}
         readOnly={readOnly}
         moreOptions
+        actions={sectionVersions.actions}
+        under={sectionVersions.under}
         details={(item) => {
           const section = doc.sections.find((placed) => placed.section_id === item.id)
           return section ? (

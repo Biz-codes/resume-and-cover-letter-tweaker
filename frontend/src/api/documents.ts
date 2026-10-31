@@ -34,6 +34,12 @@ export interface Doc extends DocFields {
   updated_at: string | null
 }
 
+// A version for a job posting, which uses the posting's header. An applied posting returns
+// VERSION_LOCKED, and one with no header VALIDATION_FAILED.
+export interface ForPosting {
+  job_posting_id: number
+}
+
 // The kinds of item placed directly in a section, which can mix in any order.
 export type EntryKind = 'narrative' | 'category' | 'experience' | 'project' | 'bullet' | 'education'
 
@@ -116,14 +122,17 @@ export function docsApi(kind: DocKind) {
     // Most recently updated first.
     list: () => api.get<Raw[]>(path).then((list) => list.map((raw) => withId<Doc>(kind, raw))),
     get: (id: number) => one(api.get<Raw>(`${path}/${id}`)),
-    // A new base version. Only the name is sent, so the backend fills in the defaults: the most
-    // recently used header, for a letter "Hiring Team" and "Sincerely", and the sections (each
+    // A new base version, or with `forPosting`, one for that posting. What's left out is filled
+    // in by the backend: the posting's header (or for a base version the most recently used
+    // one), for a letter "[organization] Hiring Team" and "Sincerely", and the sections (each
     // with its items) of the latest document of the same kind.
-    create: (name: string) => one(api.post<Raw>(path, { name })),
+    create: (name: string, forPosting?: ForPosting) => one(api.post<Raw>(path, { name, ...forPosting })),
     // A sent version can only be renamed (VERSION_LOCKED otherwise).
     update: (id: number, fields: DocFields) => one(api.put<Raw>(`${path}/${id}`, fields)),
-    // A new base version with the original's fields, sections, and selections.
-    copy: (id: number, name: string) => one(api.post<Raw>(`${path}/${id}/copies`, { name })),
+    // A new version with the original's fields, sections, and selections: a base version, or
+    // with `forPosting`, one for that posting, with the posting's header.
+    copy: (id: number, name: string, forPosting?: ForPosting) =>
+      one(api.post<Raw>(`${path}/${id}/copies`, { name, ...forPosting })),
     delete: (id: number) => api.delete(`${path}/${id}`),
 
     // Building the header and tree (backend/app/routers/document_tree.py). Each call sends the whole list in
@@ -167,6 +176,17 @@ export function docsApi(kind: DocKind) {
       content: string,
       replaces?: number,
     ) => one(api.post<Raw>(`${path}/${id}/items/${entryKind}/${entryRow}/written`, { content, replaces })),
+    // New versions (docs/FRONTEND_CHECKS.md, "New versions in a resume or cover letter"): each must
+    // differ from the original (VALIDATION_FAILED), is saved next to it wherever it's listed, and
+    // takes its place in this document only, keeping what's under it. Names and titles must be
+    // new (DUPLICATE).
+    versionSection: (id: number, sectionRow: number, title: string) =>
+      one(api.post<Raw>(`${path}/${id}/sections/${sectionRow}/version`, { title })),
+    // A role, project, education entry, or skill category placed in a section, with its fields.
+    versionItem: (id: number, entryRow: number, item: NewItem) =>
+      one(api.post<Raw>(`${path}/${id}/items/${entryRow}/version`, item)),
+    versionSkill: (id: number, parent: 'category' | 'project', skillRow: number, skillName: string) =>
+      one(api.post<Raw>(`${path}/${id}/skills/${parent}/${skillRow}/version`, { skill_name: skillName })),
     // A new skill: saved to the library, listed under the category (a project's under "Other" and
     // the project), and shown last under it. Its name must be new (DUPLICATE).
     writeSkill: (id: number, entryKind: 'category' | 'project', entryRow: number, skillName: string) =>

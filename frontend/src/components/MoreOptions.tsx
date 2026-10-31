@@ -24,7 +24,7 @@ export default function MoreOptions<K extends ListKey>({
   if (choices.length === 0) {
     return (
       <p className="muted">
-        No more options<span className="visually-hidden"> for {label}</span>: everything listed here is already shown.
+        No more options<span className="visually-hidden"> for {label}</span>.
       </p>
     )
   }

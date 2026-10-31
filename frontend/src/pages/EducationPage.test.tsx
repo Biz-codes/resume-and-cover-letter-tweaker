@@ -90,7 +90,7 @@ describe('EducationPage', () => {
     const form = screen.getByRole('form', { name: `Edit "${LABEL}"` })
     const degree = within(form).getByLabelText(/^Degree and field of study/)
     expect(degree).toHaveFocus()
-    expect(degree).toHaveAccessibleDescription(/saved as a new entry/)
+    expect(degree).toHaveAccessibleDescription(/A sent version uses this entry, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
     fireEvent.click(within(form).getByText('Save'))

@@ -93,7 +93,7 @@ describe('ProjectsPage', () => {
     render(<ProjectsPage />)
     fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
     const title = screen.getByLabelText('Project title (required)')
-    expect(title).toHaveAccessibleDescription(/saved as a new version/)
+    expect(title).toHaveAccessibleDescription(/so saving adds a new version/)
     await expectNoA11yViolations()
     fireEvent.change(title, { target: { value: 'Resume Tweaker' } })
     fireEvent.click(screen.getByText('Save'))

@@ -75,12 +75,13 @@ export default function AddContent({
         <button
           type="button"
           id={buttonId}
+          aria-label={`Add content to ${section.title}`}
           onClick={() => {
             setOpen(true)
             setFocusType(true)
           }}
         >
-          Add content to {section.title}
+          Add content
         </button>
       </div>
     )
@@ -160,7 +161,6 @@ export default function AddContent({
       {writing && (
         <fieldset>
           <legend>New {names?.lower}</legend>
-          <p className="muted">It's saved to your library, listed under {section.title}, and placed last here.</p>
           {NEW_FIELDS[kind].map((field) => {
             const control = {
               value: values[field.name] ?? '',

@@ -42,8 +42,7 @@ function groupOf(section: Section): Group {
   return section.used_by.some((use) => use.kind === 'cover_letter') ? 'letter' : 'unused'
 }
 
-const LOCKED_NOTE =
-  'A sent version uses this section, so the new title will be saved as a new section. Sent versions keep the old title; unsent ones switch to the new one.'
+const LOCKED_NOTE = 'A sent version uses this section, so the new title is saved as a new section. The sent version keeps the old one.'
 
 export default function SectionsPage() {
   const [sections, setSections] = useState<Section[] | null>(null)

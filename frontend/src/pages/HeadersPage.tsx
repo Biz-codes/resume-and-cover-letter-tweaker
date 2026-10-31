@@ -93,8 +93,7 @@ function HeaderForm({
     >
       {locked && (
         <p className="note" id={noteId}>
-          A sent version uses this header, so your changes will be saved as a new header.
-          Everything that uses this one keeps it; pick the new header where you want it.
+          A sent version uses this header, so saving adds a new header. Everything using this one keeps it.
         </p>
       )}
       {FIELDS.map(({ name, label, type, autoComplete }) => (

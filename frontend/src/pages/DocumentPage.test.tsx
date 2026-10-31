@@ -65,6 +65,11 @@ function stub(id: number, doc: object, extra: Record<string, Reply[]> = {}) {
   })
 }
 
+// Opens the preview, which starts closed, once the page has loaded.
+async function openPreview() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Preview and copy' }))
+}
+
 function renderAt(path: string) {
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -87,8 +92,8 @@ describe('DocumentPage', () => {
   it('shows the tone, a tree that opens level by level, and the preview in parts', async () => {
     stub(1, resume(1, { tone_set_id: 2 }))
     renderAt('/resumes/1')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base' })).toBeInTheDocument()
-    expect(document.title).toBe('Tech base – Resume Tweaker')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
+    expect(document.title).toBe('Tech base Resume – Resume Tweaker')
     expect(screen.getByText('Base resume')).toBeInTheDocument()
     expect(screen.getByText('Tone: Tech')).toBeInTheDocument()
     const header = screen.getByRole('button', { name: 'Header' })
@@ -96,7 +101,12 @@ describe('DocumentPage', () => {
     expect(screen.getByRole('button', { name: 'Sections (0)' })).toBeInTheDocument()
     fireEvent.click(header)
     expect(screen.getByText('sam@example.com')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 3, name: 'Preview and copy' })).toBeInTheDocument()
+    // The preview is one closed level too, its button in a heading so it's found by heading.
+    const preview = screen.getByRole('button', { name: 'Preview and copy' })
+    expect(screen.getByRole('heading', { level: 3, name: 'Preview and copy' })).toContainElement(preview)
+    expect(preview).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('heading', { level: 4, name: 'Experience' })).not.toBeInTheDocument()
+    fireEvent.click(preview)
     expect(screen.getByRole('heading', { level: 4, name: 'Experience' })).toBeInTheDocument()
     expect(screen.getByText('Empty.')).toBeInTheDocument()
     await expectNoA11yViolations()
@@ -106,6 +116,7 @@ describe('DocumentPage', () => {
     stub(2, resume(2))
     const writeText = stubClipboard()
     renderAt('/resumes/2')
+    await openPreview()
     fireEvent.click(await screen.findByRole('button', { name: 'Copy the whole resume' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Copied the whole resume.')
     expect(writeText).toHaveBeenCalledWith(OUTPUT.text)
@@ -118,6 +129,7 @@ describe('DocumentPage', () => {
     stub(3, resume(3))
     stubClipboard(vi.fn(() => Promise.reject(new Error('denied'))))
     renderAt('/resumes/3')
+    await openPreview()
     fireEvent.click(await screen.findByRole('button', { name: 'Copy Header' }))
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't copy.")
     await expectNoA11yViolations()
@@ -186,25 +198,39 @@ describe('DocumentPage', () => {
 
   it("saves the header's values and reads the saved headers again", async () => {
     const teaching = { ...SAM, header_id: 5, headline: 'English Teacher' }
-    const fetchMock = stub(19, resume(19, { job_posting: SENT.job_posting }), {
+    const fetchMock = stub(19, resume(19), {
       'PUT /api/resumes/19/header': [{ status: 200, body: resume(19, { header_id: 5 }) }],
       'GET /api/headers': [{ status: 200, body: [SAM] }, { status: 200, body: [teaching, SAM] }],
     })
     renderAt('/resumes/19')
-    // A version for a posting isn't a base version, so it's editable right away, with no
-    // read-only view to go back to.
-    fireEvent.click(await screen.findByRole('button', { name: 'Header' }))
-    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Header' }))
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: '\u0000new' } })
     fireEvent.change(screen.getByLabelText('New headline'), { target: { value: 'English Teacher' } })
-    // A typed value saves when the field is left.
-    fireEvent.blur(screen.getByLabelText('New headline'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save header' }))
     await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Header saved.'))
     expect(sentBody(fetchMock, 'PUT /api/resumes/19/header')).toMatchObject({
       full_name: 'Sam Rivera',
       headline: 'English Teacher',
     })
     await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/headers')).toHaveLength(2))
+  })
+
+  it("shows a posting's header, changed on the posting", async () => {
+    stub(23, resume(23, { job_posting: SENT.job_posting }))
+    renderAt('/resumes/23')
+    // A version for a posting isn't a base version, so it's editable right away, with no
+    // read-only view to go back to.
+    fireEvent.click(await screen.findByRole('button', { name: 'Application header' }))
+    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Tone')).toBeInTheDocument()
+    expect(screen.getByText('Engineer')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save header' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Change the application header on the posting' })).toHaveAttribute(
+      'href',
+      '/postings/4',
+    )
+    await expectNoA11yViolations()
   })
 
   it('opens the sections to build them', async () => {
@@ -247,12 +273,13 @@ describe('DocumentPage', () => {
       'PUT /api/resumes/7': [{ status: 200, body: resume(7, { ...SENT, name: 'Acme (sent)' }) }],
     })
     renderAt('/resumes/7')
-    expect(await screen.findByText('For Acme: Engineer')).toBeInTheDocument()
+    // Its posting, linked.
+    expect(await screen.findByRole('link', { name: 'Back to job posting' })).toHaveAttribute('href', '/postings/4')
     expect(screen.getByText(/so it's a record of what went out/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
     expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
     expect(screen.getByText('Tone: None')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Header' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Application header' }))
     // The header's values are listed, with nothing to pick.
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
@@ -261,7 +288,7 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(name, { target: { value: 'Acme (sent)' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Acme (sent)' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Acme (sent) Resume' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/resumes/7').name).toBe('Acme (sent)')
   })
 
@@ -277,10 +304,9 @@ describe('DocumentPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Make a copy' }))
     const name = screen.getByLabelText('Name of the copy')
     expect(name).toHaveFocus()
-    expect(name).toHaveAccessibleDescription(/a new base resume with the same tone, header/)
     fireEvent.change(name, { target: { value: 'Tech copy' } })
     fireEvent.click(screen.getByRole('button', { name: 'Make copy' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy Resume' })).toBeInTheDocument()
     await vi.waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Copied to a new base resume, "Tech copy".'),
     )
@@ -340,10 +366,11 @@ describe('DocumentPage', () => {
       ],
     })
     renderAt('/cover-letters/13')
-    expect(await screen.findByText(/section names are for you only/)).toBeInTheDocument()
+    await openPreview()
+    expect(await screen.findByText("Section names aren't printed in the letter.")).toBeInTheDocument()
     // A letter for a posting isn't a base version, so there's no warning.
     fireEvent.click(screen.getByRole('button', { name: 'Greeting' }))
-    const greeting = screen.getByLabelText(/Who it's addressed to/)
+    const greeting = screen.getByLabelText('Addressed to (after "Dear")')
     fireEvent.change(greeting, { target: { value: 'Ms. Lee' } })
     fireEvent.blur(greeting)
     // Changed right away, before the greeting's save comes back.
@@ -364,6 +391,7 @@ describe('DocumentPage', () => {
   it('says when there is nothing in it yet', async () => {
     stub(14, resume(14, { output: { parts: [], text: '' } }))
     renderAt('/resumes/14')
+    await openPreview()
     expect(await screen.findByText('Nothing in this resume yet.')).toBeInTheDocument()
   })
 
@@ -388,7 +416,7 @@ describe('DocumentPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
   })
 
   it('links back to the list when the resume does not exist', async () => {

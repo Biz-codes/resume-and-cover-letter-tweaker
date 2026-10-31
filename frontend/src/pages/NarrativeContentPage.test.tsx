@@ -71,7 +71,7 @@ describe('NarrativeContentPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
     const field = screen.getByLabelText('Narrative content text (required)')
     expect(field).toHaveFocus()
-    expect(field).toHaveAccessibleDescription(/saved as a new excerpt/)
+    expect(field).toHaveAccessibleDescription(/A sent version uses this excerpt, so saving adds a new one/)
     // It opens with the sections that list it checked.
     expect(screen.getByRole('checkbox', { name: 'Summary' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Intro paragraph' })).toBeChecked()

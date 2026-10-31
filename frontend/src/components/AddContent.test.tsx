@@ -84,6 +84,8 @@ describe('AddContent', () => {
   it('adds a saved item (with its defaults), leaving out the ones already placed, then closes to its button', async () => {
     const { onAdd } = renderForm(PLACED)
     const open = screen.getByRole('button', { name: 'Add content to Experience' })
+    // Short on screen, like "New bullet"; its name says which section.
+    expect(open).toHaveTextContent(/^Add content$/)
     fireEvent.click(open)
     await vi.waitFor(() => expect(screen.getByLabelText('Type of content')).toHaveFocus())
     expect(options(screen.getByLabelText('Role'))).not.toContain('Engineer, Acme')

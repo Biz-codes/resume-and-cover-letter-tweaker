@@ -318,18 +318,19 @@ describe('DocumentTree', () => {
     expect(button()).toHaveTextContent(/^New version$/)
     fireEvent.click(button())
     // Starts from the bullet's text, under its row.
-    const field = screen.getByLabelText('New version')
+    expect(screen.getByRole('form', { name: 'New version of "Led the redesign."' })).toBeInTheDocument()
+    const field = screen.getByLabelText('Bullet text (required)')
     expect(field).toHaveFocus()
     expect(field).toHaveValue('Led the redesign.')
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: ' Led the redesign. ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
-    await vi.waitFor(() => expect(onNotice).toHaveBeenCalledWith('The text is unchanged, so nothing was saved.'))
+    await vi.waitFor(() => expect(onNotice).toHaveBeenCalledWith('Nothing changed, so nothing was saved.'))
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
     await vi.waitFor(() => expect(button()).toHaveFocus())
 
     fireEvent.click(button())
-    fireEvent.change(screen.getByLabelText('New version'), { target: { value: 'Led the checkout redesign.' } })
+    fireEvent.change(screen.getByLabelText('Bullet text (required)'), { target: { value: 'Led the checkout redesign.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
     await vi.waitFor(() =>
       expect(onNotice).toHaveBeenLastCalledWith('Saved the new version. The original is still in your library.'),
@@ -349,7 +350,7 @@ describe('DocumentTree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(button()).toHaveFocus())
     fireEvent.click(button())
-    fireEvent.change(screen.getByLabelText('New version'), { target: { value: 'Engineer with 5 years.' } })
+    fireEvent.change(screen.getByLabelText('Text (required)'), { target: { value: 'Engineer with 5 years.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/100/written')).toEqual({
@@ -358,9 +359,54 @@ describe('DocumentTree', () => {
         replaces: 5,
       }),
     )
-    // A role isn't text, so it has no new version.
+  })
+
+  it("saves a new version of a role with its fields, in the role's place", async () => {
+    const fetchMock = stub({ 'POST /api/resumes/1/items/300/version': [{ status: 201, body: saved }] }, 2)
+    const { onNotice } = renderTree()
     await expand('Experience')
-    expect(screen.queryByRole('button', { name: /^New version of Role/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'New version of Role: Engineer, Acme' }))
+    const title = screen.getByLabelText('Role title (required)')
+    expect(title).toHaveFocus()
+    expect(title).toHaveValue('Engineer')
+    expect(screen.getByLabelText('Organization (required)')).toHaveValue('Acme')
+    await expectNoA11yViolations()
+    fireEvent.change(title, { target: { value: 'Senior Engineer' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    await vi.waitFor(() =>
+      expect(onNotice).toHaveBeenCalledWith('Saved the new version. The original is still in your library.'),
+    )
+    expect(sentBody(fetchMock, 'POST /api/resumes/1/items/300/version')).toEqual({
+      kind: 'experience',
+      role_title: 'Senior Engineer',
+      organization: 'Acme',
+      location: null,
+      dates: null,
+    })
+  })
+
+  it('saves a new version of a section and of a skill', async () => {
+    const fetchMock = stub(
+      {
+        'POST /api/resumes/1/sections/101/version': [{ status: 201, body: saved }],
+        'POST /api/resumes/1/skills/category/401/version': [{ status: 201, body: saved }],
+      },
+      3,
+    )
+    renderTree()
+    fireEvent.click(await screen.findByRole('button', { name: 'New version of Experience' }))
+    fireEvent.change(screen.getByLabelText('Title (required)'), { target: { value: 'Teaching Experience' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/101/version')).toEqual({ title: 'Teaching Experience' }),
+    )
+    await openExperience()
+    fireEvent.click(screen.getByRole('button', { name: 'New version of React' }))
+    fireEvent.change(screen.getByLabelText('Name (required)'), { target: { value: 'React 19' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'POST /api/resumes/1/skills/category/401/version')).toEqual({ skill_name: 'React 19' }),
+    )
   })
 
   it("writes a new skill under a category, in one line", async () => {

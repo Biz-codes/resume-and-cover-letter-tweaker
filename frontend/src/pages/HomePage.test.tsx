@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
@@ -13,19 +13,17 @@ const renderHome = () =>
   )
 
 describe('HomePage', () => {
-  it('asks what the user wants to do, marking what is coming soon', async () => {
+  it('asks what the user wants to do', async () => {
     stubPendingApi()
     renderHome()
     expect(screen.getByRole('heading', { level: 2, name: 'What do you want to do?' })).toBeInTheDocument()
     const library = screen.getByRole('link', { name: 'Browse your library' })
     expect(library).toHaveAttribute('href', '/library')
-    expect(library.parentElement).not.toHaveTextContent('coming soon')
-    expect(library).toHaveAccessibleDescription(/^Everything a resume or cover letter can draw from/)
-    expect(screen.getByRole('link', { name: 'Create a resume' }).parentElement).not.toHaveTextContent('coming soon')
-    const posting = screen.getByRole('link', { name: 'Create a job posting' })
-    expect(within(posting.parentElement as HTMLElement).getByText('coming soon')).toBeInTheDocument()
     // Read with the link, for screen reader users moving from link to link.
-    expect(posting).toHaveAccessibleDescription(/^coming soon Save a posting to tailor/)
+    expect(library).toHaveAccessibleDescription(/^Everything a resume or cover letter can draw from/)
+    const posting = screen.getByRole('link', { name: 'Create a job posting' })
+    expect(posting).toHaveAttribute('href', '/postings')
+    expect(posting).toHaveAccessibleDescription(/^Save a posting to tailor/)
     await expectNoA11yViolations()
   })
 

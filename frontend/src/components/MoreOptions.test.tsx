@@ -67,7 +67,7 @@ describe('MoreOptions', () => {
   it('says when there is nothing more, in the same place', async () => {
     render(<MoreOptions label="Sections" choices={[]} onAdd={vi.fn()} />)
     expect(screen.getByText(/^No more options/)).toHaveTextContent(
-      'No more options for Sections: everything listed here is already shown.',
+      'No more options for Sections.',
     )
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     await expectNoA11yViolations()

@@ -16,8 +16,7 @@ import UsedBy from '../components/UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
 
-const LOCKED_NOTE =
-  'A sent version uses this bullet, so your change will be saved as a new bullet, listed right after this one. Sent versions keep this one; unsent ones switch to the new one.'
+const LOCKED_NOTE = 'A sent version uses this bullet, so saving adds a new one. The sent version keeps this one.'
 
 const buttonId = (id: number, action: 'edit' | 'delete') => `bullet-${id}-${action}`
 

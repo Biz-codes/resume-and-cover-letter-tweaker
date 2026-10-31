@@ -12,12 +12,13 @@ import EducationPage from './pages/EducationPage'
 import ExperiencePage from './pages/ExperiencePage'
 import HeadersPage from './pages/HeadersPage'
 import { MODES } from './modes'
-import ComingSoonPage from './pages/ComingSoonPage'
 import HomePage from './pages/HomePage'
 import { LibraryHome, LibraryLayout } from './pages/LibraryPage'
 import ProjectsPage from './pages/ProjectsPage'
 import SectionsPage from './pages/SectionsPage'
 import NarrativeContentPage from './pages/NarrativeContentPage'
+import PostingRoute from './pages/PostingPage'
+import PostingsPage from './pages/PostingsPage'
 import SignOffsPage from './pages/SignOffsPage'
 import SkillsPage from './pages/SkillsPage'
 import ToneSetsPage from './pages/ToneSetsPage'
@@ -86,13 +87,12 @@ function App() {
             <Route path="writing-rules" element={<WritingRulesPage />} />
             <Route path="tones" element={<ToneSetsPage />} />
           </Route>
+          <Route path="/postings" element={<PostingsPage />} />
+          <Route path="/postings/:id" element={<PostingRoute />} />
           <Route path="/resumes" element={<DocumentsPage key="resume" kind="resume" />} />
           <Route path="/resumes/:id" element={<DocumentRoute kind="resume" />} />
           <Route path="/cover-letters" element={<DocumentsPage key="cover_letter" kind="cover_letter" />} />
           <Route path="/cover-letters/:id" element={<DocumentRoute kind="cover_letter" />} />
-          {MODES.filter((mode) => mode.comingIn).map((mode) => (
-            <Route key={mode.path} path={mode.path} element={<ComingSoonPage mode={mode} />} />
-          ))}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

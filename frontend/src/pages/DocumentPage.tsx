@@ -1,7 +1,8 @@
 // One resume or cover letter, built in place: its tone at the top, then a tree whose levels open
 // and close (Header; Sections, each opening to its items, and those to their skills and bullets;
 // and for a letter, Greeting and Sign-off), then its plain text to preview and copy
-// (docs/APP_FLOW.md, "Output"). Renaming, copying, "Done editing", and deleting sit under its
+// (docs/APP_FLOW.md, "Output"). A version for a posting shows the posting's header, which is
+// changed on the posting. Renaming, copying, "Done editing", and deleting sit under its
 // name. See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a sent version
 // is shown read-only and can only be renamed, and a base version is shown read-only until the
 // user chooses to edit it in place rather than copy it, once per version while the app is open,
@@ -74,7 +75,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [inPlace, setInPlace] = useState(() => editingInPlace.has(`${kind}-${id}`))
   const focusLater = useFocusLater()
-  usePageTitle(doc?.name ?? capitalize(singular))
+  const title = doc ? `${doc.name} ${capitalize(singular)}` : capitalize(singular)
+  usePageTitle(title)
 
   const load = useCallback(
     () =>
@@ -211,11 +213,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
   return (
     <section>
-      <p>
+      <p className="back-links">
         <Link to={path}>All {plural.toLowerCase()}</Link>
+        {doc?.job_posting && <Link to={`/postings/${doc.job_posting.job_posting_id}`}>Back to job posting</Link>}
       </p>
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
-        {doc?.name ?? capitalize(singular)}
+        {title}
       </h2>
       <p role="status">{notice}</p>
       {loadError && (
@@ -232,12 +235,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
       {doc && (
         <>
-          <p>
-            {doc.job_posting
-              ? `For ${doc.job_posting.organization}: ${doc.job_posting.role_title}`
-              : `Base ${singular}`}
-            {doc.locked && <span className="tag">sent</span>}
-          </p>
+          {(!doc.job_posting || doc.locked) && (
+            <p>
+              {!doc.job_posting && `Base ${singular}`}
+              {doc.locked && <span className="tag">sent</span>}
+            </p>
+          )}
           {doc.based_on && (
             <p className="muted">
               Copied from <Link to={`${path}/${doc.based_on.id}`}>{doc.based_on.name}</Link>
@@ -265,7 +268,6 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               label="Name of the copy"
               field="name"
               initial={`Copy of ${doc.name}`.slice(0, 100)}
-              lockedNote={`The copy is a new base ${singular} with the same tone, header, sections, and selections.`}
               submitLabel="Make copy"
               onSave={copy}
               onCancel={() => close('copy')}
@@ -331,8 +333,20 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
           <ul className="tree">
             <li>
-              <Disclosure title="Header">
-                <HeaderFields header={header} headers={headers} readOnly={readOnly} onSave={saveHeader} />
+              <Disclosure title={doc.job_posting ? 'Application header' : 'Header'}>
+                {/* A version for a posting uses the posting's header, so it's changed there. */}
+                <HeaderFields
+                  header={header}
+                  headers={headers}
+                  readOnly={readOnly || Boolean(doc.job_posting)}
+                  onSave={saveHeader}
+                  label={doc.job_posting ? 'Application header' : 'Header'}
+                />
+                {doc.job_posting && !doc.locked && (
+                  <p>
+                    <Link to={`/postings/${doc.job_posting.job_posting_id}`}>Change the application header on the posting</Link>
+                  </p>
+                )}
               </Disclosure>
             </li>
             <li>
@@ -365,36 +379,34 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             )}
           </ul>
 
-          <h3>Preview and copy</h3>
-          <p className="muted">
-            Copy it into your own document or an application form.
-            {kind === 'cover_letter' && " The section names are for you only; they aren't part of the letter."}
-          </p>
-          {copyError && <p role="alert">{copyError}</p>}
-          {doc.output.parts.length === 0 ? (
-            <p>Nothing in this {singular} yet.</p>
-          ) : (
-            <>
-              <button type="button" onClick={() => void copyText(doc.output.text, `the whole ${singular}`)}>
-                Copy the whole {singular}
-              </button>
-              {doc.output.parts.map((part) => (
-                <div key={part.label} className="output-part">
-                  <div className="card-header">
-                    <h4>{part.label}</h4>
-                    <button
-                      type="button"
-                      aria-label={`Copy ${part.label}`}
-                      onClick={() => void copyText(part.text, part.label)}
-                    >
-                      Copy
-                    </button>
+          <Disclosure title="Preview and copy" heading={3}>
+            {kind === 'cover_letter' && <p className="muted">Section names aren&apos;t printed in the letter.</p>}
+            {copyError && <p role="alert">{copyError}</p>}
+            {doc.output.parts.length === 0 ? (
+              <p>Nothing in this {singular} yet.</p>
+            ) : (
+              <>
+                <button type="button" onClick={() => void copyText(doc.output.text, `the whole ${singular}`)}>
+                  Copy the whole {singular}
+                </button>
+                {doc.output.parts.map((part) => (
+                  <div key={part.label} className="output-part">
+                    <div className="card-header">
+                      <h4>{part.label}</h4>
+                      <button
+                        type="button"
+                        aria-label={`Copy ${part.label}`}
+                        onClick={() => void copyText(part.text, part.label)}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {part.text ? <pre>{part.text}</pre> : <p className="muted">Empty.</p>}
                   </div>
-                  {part.text ? <pre>{part.text}</pre> : <p className="muted">Empty.</p>}
-                </div>
-              ))}
-            </>
-          )}
+                ))}
+              </>
+            )}
+          </Disclosure>
         </>
       )}
     </section>

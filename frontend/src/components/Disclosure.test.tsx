@@ -22,4 +22,17 @@ describe('Disclosure', () => {
     fireEvent.click(toggle)
     expect(screen.queryByText('Summary')).not.toBeInTheDocument()
   })
+
+  it('can sit in a heading, so it is found by heading', async () => {
+    render(
+      <Disclosure title="Preview and copy" heading={3}>
+        <h4>Summary</h4>
+      </Disclosure>,
+    )
+    const toggle = screen.getByRole('button', { name: 'Preview and copy' })
+    expect(screen.getByRole('heading', { level: 3, name: 'Preview and copy' })).toContainElement(toggle)
+    fireEvent.click(toggle)
+    expect(screen.getByRole('heading', { level: 4, name: 'Summary' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
 })

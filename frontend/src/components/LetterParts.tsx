@@ -13,7 +13,6 @@ type LetterFields = Partial<Pick<DocFields, 'addressee' | 'sign_off_id' | 'signa
 function useSave(onSave: (fields: LetterFields) => Promise<void>) {
   const [error, setError] = useState<ApiError | null>(null)
   const errorId = useId()
-  const hintId = useId()
 
   async function save(fields: LetterFields) {
     setError(null)
@@ -24,22 +23,16 @@ function useSave(onSave: (fields: LetterFields) => Promise<void>) {
     }
   }
 
-  // Typed fields are described by the hint, so how they save is read with them.
-  const control = (name: keyof LetterFields, typed = false) => ({
+  const control = (name: keyof LetterFields) => ({
     'aria-invalid': error?.field === name,
-    'aria-describedby': [typed && hintId, error?.field === name && errorId].filter(Boolean).join(' ') || undefined,
+    'aria-describedby': error?.field === name ? errorId : undefined,
   })
-  const hint = (text: string) => (
-    <p className="muted" id={hintId}>
-      {text}
-    </p>
-  )
   const alert = error && (
     <p role="alert" id={errorId}>
       {error.message}
     </p>
   )
-  return { save, control, alert, hint }
+  return { save, control, alert }
 }
 
 // Typed text saves when the user leaves the field or presses Enter, if it changed.
@@ -62,18 +55,17 @@ export function Greeting({
   onSave: (fields: LetterFields) => Promise<void>
 }) {
   const [addressee, setAddressee] = useState(doc.addressee ?? '')
-  const { save, control, alert, hint } = useSave(onSave)
+  const { save, control, alert } = useSave(onSave)
   if (readOnly) return <p>{doc.addressee ? `Dear ${doc.addressee},` : 'No greeting.'}</p>
   const commit = () => {
     if (addressee !== (doc.addressee ?? '')) void save({ addressee: addressee || null })
   }
   return (
     <div className="stacked-form">
-      {hint('Saves when you leave the field or press Enter.')}
       <label>
-        Who it's addressed to, after "Dear" (leave empty for no greeting)
+        Addressed to (after &quot;Dear&quot;)
         <input
-          {...control('addressee', true)}
+          {...control('addressee')}
           value={addressee}
           onChange={(event) => setAddressee(event.target.value)}
           {...commitOn(commit)}
@@ -97,7 +89,7 @@ export function SignOffPart({
 }) {
   const [signOffId, setSignOffId] = useState(doc.sign_off_id ?? null)
   const [name, setName] = useState(doc.signature_name ?? '')
-  const { save, control, alert, hint } = useSave(onSave)
+  const { save, control, alert } = useSave(onSave)
   if (readOnly) {
     const text = signOffs.find((item) => item.sign_off_id === doc.sign_off_id)?.text
     return (
@@ -111,7 +103,6 @@ export function SignOffPart({
   }
   return (
     <div className="stacked-form">
-      {hint('The sign-off saves when you choose it, and the name when you leave its field or press Enter.')}
       <label>
         Sign-off
         <select
@@ -132,9 +123,9 @@ export function SignOffPart({
         </select>
       </label>
       <label>
-        Name under the sign-off (leave empty to use the header's name)
+        Name under the sign-off
         <input
-          {...control('signature_name', true)}
+          {...control('signature_name')}
           value={name}
           autoComplete="name"
           onChange={(event) => setName(event.target.value)}

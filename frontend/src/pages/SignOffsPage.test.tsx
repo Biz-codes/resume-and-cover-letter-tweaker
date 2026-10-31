@@ -52,7 +52,7 @@ describe('SignOffsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sincerely"' }))
     const field = screen.getByLabelText('Sign-off')
     expect(field).toHaveFocus()
-    expect(field).toHaveAccessibleDescription(/saved as a new sign-off/)
+    expect(field).toHaveAccessibleDescription(/A sent version uses this sign-off, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Sincerely yours' } })
     fireEvent.click(screen.getByText('Save'))

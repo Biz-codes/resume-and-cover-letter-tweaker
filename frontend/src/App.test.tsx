@@ -64,6 +64,7 @@ describe('App', () => {
   })
 
   it.each([
+    ['/postings', 'Job postings', 'No job postings yet.'],
     ['/resumes', 'Resumes', 'No base resumes yet.'],
     ['/cover-letters', 'Cover letters', 'No base cover letters yet.'],
   ])('shows %s as a whole page', async (path, page, loadedText) => {
@@ -93,17 +94,35 @@ describe('App', () => {
       vi.fn((url: string) => Promise.resolve(Response.json(url === '/api/resumes/1' ? resume : []))),
     )
     renderAt('/resumes/1')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Resumes' })).toHaveAttribute('aria-current', 'true')
-    expect(document.title).toBe('Tech base – Resume Tweaker')
+    // The title is set once the page has its name, just after the heading shows it.
+    await vi.waitFor(() => expect(document.title).toBe('Tech base Resume – Resume Tweaker'))
     await expectNoA11yViolations({ page: true })
   })
 
-  it.each([['/postings', 'Job postings']])('shows %s as coming soon', async (path, page) => {
-    vi.stubGlobal('fetch', vi.fn())
-    renderAt(path)
-    expect(screen.getByRole('heading', { level: 2, name: page })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: page })).toHaveAttribute('aria-current', 'page')
+  it('shows a job posting as a whole page, under Job postings in the nav', async () => {
+    const posting = {
+      job_posting_id: 9,
+      url: 'https://example.com/jobs/9',
+      organization: 'Lincoln High',
+      role_title: 'English Teacher',
+      description: 'Teach ninth grade English.',
+      header_id: null,
+      applied_on: null,
+      locked: false,
+      versions: [],
+      updated_at: null,
+      suggested_header: null,
+      lone_interviews: 0,
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => Promise.resolve(Response.json(url === '/api/job-postings/9' ? posting : []))),
+    )
+    renderAt('/postings/9')
+    expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Job postings' })).toHaveAttribute('aria-current', 'true')
     await expectNoA11yViolations({ page: true })
   })
 

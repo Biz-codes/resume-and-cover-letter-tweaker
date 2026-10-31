@@ -6,8 +6,6 @@ export interface Mode {
   // What Home offers to do there.
   action: string
   description: string
-  // Not built yet: its page says which phase brings it.
-  comingIn?: string
 }
 
 export const MODES: Mode[] = [
@@ -23,7 +21,6 @@ export const MODES: Mode[] = [
     name: 'Job postings',
     action: 'Create a job posting',
     description: 'Save a posting to tailor a resume and cover letter to, and track the application.',
-    comingIn: 'phase 4',
   },
   {
     path: '/resumes',

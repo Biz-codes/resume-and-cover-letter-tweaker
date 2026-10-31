@@ -22,8 +22,7 @@ const FIELDS: Field<EducationFields>[] = [
 
 const EMPTY: EducationFields = { degree: '', institution: '', details: null, graduation: null }
 
-const SENT_NOTE =
-  'A sent version uses this entry, so your change will be saved as a new entry, listed right after this one. Sent versions keep this one; unsent ones switch to the new one.'
+const SENT_NOTE = 'A sent version uses this entry, so saving adds a new one. The sent version keeps this one.'
 
 // Which form is open: a new entry, or editing one.
 type Form = { kind: 'new' } | { kind: 'edit'; id: number }
