@@ -61,7 +61,7 @@ Note: one row for now (the app's owner). Login fields such as a password will be
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header added to db   |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header last updated  |
 
-Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, starting with the posting's header.
+Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, always the posting's header.
 
 Note: headers are library items with versions, like roles. A different headline or contact detail is a new row, and identical headers are reused. Sent resumes and cover letters keep the header they went out with, so changing a phone number later means adding a header, not editing the old one (see "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
@@ -70,7 +70,7 @@ Note: headers are library items with versions, like roles. A different headline 
 |----------------|--------------|-----------------------------------------------------------|-------------------------------------------------|
 | job_posting_id | SERIAL       | PRIMARY KEY                                               | unique job posting id                           |
 | account_id     | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                            |
-| url            | TEXT         | NOT NULL                                                  | url of the job posting                          |
+| url            | TEXT         | NOT NULL                                                  | link to the posting, or its primary contact     |
 | organization   | VARCHAR(100) | NOT NULL                                                  | name of hiring company or organization          |
 | role_title     | VARCHAR(100) | NOT NULL                                                  | title of the position                           |
 | description    | TEXT         | NOT NULL                                                  | job description text extracted from the posting |
@@ -82,6 +82,8 @@ Note: headers are library items with versions, like roles. A different headline 
 | created_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting added to db               |
 | updated_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting last updated              |
 
+Note: `url` holds a link to the posting, or, for a job with no posting online (a referral, or a description sent by email), how to reach its primary contact. It's free text: the app shows it as a link only when it's a web address, and phase 5 fetches a posting only from one.
+
 Note: `description` holds the extracted text after the user has checked and corrected it, so the posting can be reviewed again after the page goes offline.
 
 Note: `applied_on`, `rejected_on`, and `hired_on` track what happened with the application, along with its interviews (`job_posting_interview`). They can be recorded or changed at any time, including after the posting's versions are locked.
@@ -90,7 +92,9 @@ Note: `contacts` is free-form text for the people connected to the posting, such
 
 Note: recording `applied_on` locks the posting's resumes and cover letters: they're a record of what was sent. The app refuses changes to them (`VERSION_LOCKED`), and editing a library item they use saves a new row instead of changing the original. Clearing the date unlocks them. See "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
-Note: `header_id` is the header the user chose for this posting, right after creating it. Every new resume and cover letter for the posting starts with it, and the user can keep it, edit it, or pick another saved header. It uses `ON DELETE SET NULL`, so deleting a header never deletes a posting.
+Note: `header_id` is the header the user chose for this posting, right after creating it. Every resume and cover letter for the posting uses it: changing it changes theirs, and they can't pick another (`VALIDATION_FAILED`). Once `applied_on` is set it's locked with them (`VERSION_LOCKED`). It uses `ON DELETE SET NULL`, so deleting a header never deletes a posting.
+
+Note: a new resume or cover letter for a posting needs the posting to have a header (`VALIDATION_FAILED` otherwise), and a posting with `applied_on` set gets no new ones (`VERSION_LOCKED`). See "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 ### interview
 | Column       | Type      | Constraints                                               | Description                         |
@@ -129,7 +133,7 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 
 Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. organization and role title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
 
-Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting starts with the posting's header, and the user can keep it, edit it, or pick another saved header (e.g. a different headline). A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
+Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting uses the posting's header, which is changed only on the posting. A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
 Note: `based_on_resume_id` uses `ON DELETE SET NULL`, an exception to cascading deletes. Deleting an older version shouldn't delete every resume copied from it.
 
@@ -155,7 +159,7 @@ Note: base resumes can be edited directly at any time, but the database keeps no
 
 Note: works the same way as `resume`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
 
-Note: there's no direct link between a resume and a cover letter. Both are created under a job posting (`job_posting_id`) and start with the posting's header, so they match; deleting one leaves the other in place.
+Note: there's no direct link between a resume and a cover letter. Both are created under a job posting (`job_posting_id`) and use the posting's header, so they match; deleting one leaves the other in place.
 
 Note: `sign_off_id` picks the closing (e.g. "Sincerely," then the name). New cover letters default to the account's "Sincerely". It uses `ON DELETE SET NULL`, so deleting a sign-off never deletes a cover letter.
 
@@ -185,6 +189,8 @@ Note: there are no content rules. Any kind of content (narrative content, skill 
 Note: the backend refuses to delete or rename a built-in section, and a database trigger blocks it as a backstop.
 
 Note: titles are unique in the account, ignoring capitals and counting the built-in titles (the database checks exact matches; the app checks the rest and returns `DUPLICATE`). Renaming a section that a sent (locked) resume or cover letter uses saves a new section with the new title and the same lists; unsent versions switch to it (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
+Note: "New version" on a resume or cover letter saves a new section with a new title and the same lists (only the account's items, for a built-in section), in the original's place there. It must change the title (`VALIDATION_FAILED`), and the title must be new (`DUPLICATE`). See "New versions in a resume or cover letter" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 ### narrative_content
 | Column     | Type         | Constraints                                               | Description                              |
@@ -216,6 +222,8 @@ Note: a built-in "Other" category is created with the database, with the fixed i
 
 Note: when a category is deleted, the app first lists any of its skills that no other category lists under "Other", and moves its resume and cover letter selections under "Other" in the same section, so no skill is left without a category and no resume loses skills. See "Deleting a skill category" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
+Note: "New version" on a resume or cover letter saves a new category with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in its sections and listing the same skills (only the account's, for "Other"), in the original's place there.
+
 ### skill
 | Column     | Type         | Constraints                                               | Description                  |
 |------------|--------------|-----------------------------------------------------------|------------------------------|
@@ -231,6 +239,8 @@ Note: names are unique in the account, ignoring capitals. The app checks this an
 
 Note: every skill is listed under at least one category. Taking a skill out of its only category lists it under "Other" (an app rule; see "Suggesting and adding items" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
+Note: "New version" on a resume or cover letter saves a new skill with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in every category and project, in the original's place there.
+
 ### experience
 | Column        | Type         | Constraints                                               | Description                            |
 |---------------|--------------|-----------------------------------------------------------|----------------------------------------|
@@ -244,6 +254,8 @@ Note: every skill is listed under at least one category. Taking a skill out of i
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated      |
 
 Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
+Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
 ### project
 | Column        | Type         | Constraints                                               | Description                                                 |
@@ -262,6 +274,8 @@ Note: a project lists its skills in `project_skill` and its bullets in `project_
 Note: `done_for` is optional free text naming who or what the project is affiliated with, printed as written (e.g. "McGraw Hill", "Freelance", "Independent project"). Empty means the project line shows nothing there.
 
 Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
+Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the skills and bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
 ### bullet_point
 | Column     | Type         | Constraints                                               | Description                         |
@@ -287,6 +301,8 @@ Note: an accepted rewording, or a new version written on a resume or cover lette
 | graduation   | VARCHAR(100) |                                                           | graduation date and honors as displayed (e.g. May 2015, magna cum laude) |
 | created_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education added to db                                          |
 | updated_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education last updated                                         |
+
+Note: "New version" on a resume or cover letter saves a new entry, listed right after the original in its sections, in the original's place there. It must change something (`VALIDATION_FAILED`).
 
 ### writing_rule
 | Column          | Type              | Constraints                                               | Description                                        |

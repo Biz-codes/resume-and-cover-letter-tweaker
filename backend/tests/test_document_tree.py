@@ -530,3 +530,104 @@ def test_write_a_skill_under_a_category_or_project(client: TestClient, db: Sessi
     # Every skill has a category: a project's new one is listed under "Other".
     assert db.scalar(select(SkillCategorySkill.category_id)
                      .where(SkillCategorySkill.skill_id == vite)) == OTHER_CATEGORY_ID
+
+
+# New versions at every level
+
+
+def test_a_new_version_of_a_section_takes_its_place(client: TestClient, db: Session,
+                                                    account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    mine = role(db, account_id)
+    add(db, SectionExperience(section_id=EXPERIENCE_SECTION_ID,
+                              experience_id=mine.experience_id, position=1))
+    # Another account's role is listed under the shared built-in section too.
+    other = add(db, Account())
+    theirs = add(db, Experience(account_id=other.account_id, role_title="Chef",
+                                organization="Diner"))
+    add(db, SectionExperience(section_id=EXPERIENCE_SECTION_ID,
+                              experience_id=theirs.experience_id, position=2))
+    before = tree(client, doc.resume_id)[2]
+    url = f"/api/resumes/{doc.resume_id}/sections/{before['row_id']}/version"
+    saved = client.post(url, json={"title": "Teaching Experience"})
+    assert saved.status_code == 201
+    after = saved.json()["sections"][2]
+    # The same row and contents, under the new section.
+    assert (after["row_id"], after["title"], after["entries"]) == (
+        before["row_id"], "Teaching Experience", before["entries"])
+    assert after["section_id"] != EXPERIENCE_SECTION_ID
+    assert list(db.scalars(select(SectionExperience.experience_id)
+                           .where(SectionExperience.section_id == after["section_id"]))) == [
+        mine.experience_id]
+    assert error(client.post(url, json={"title": "Teaching Experience"})) == (
+        422, "VALIDATION_FAILED", "title")
+    assert error(client.post(url, json={"title": "summary"}))[:3] == (
+        409, "DUPLICATE", "title")
+
+
+def test_a_new_version_of_a_placed_item_takes_its_place(client: TestClient, db: Session,
+                                                        account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    work = tree(client, doc.resume_id)[2]
+    placed = work["entries"][0]
+    url = f"/api/resumes/{doc.resume_id}/items/{placed['row_id']}/version"
+    values = {"kind": "experience", "role_title": "Senior Engineer", "organization": "Acme",
+              "location": None, "dates": "2020 - Present"}
+    saved = client.post(url, json=values)
+    assert saved.status_code == 201
+    entry = saved.json()["sections"][2]["entries"][0]
+    # The new role, in the same row, with the same bullets shown under it.
+    assert (entry["row_id"], entry["values"]["role_title"], entry["bullets"]) == (
+        placed["row_id"], "Senior Engineer", placed["bullets"])
+    assert entry["item_id"] != placed["item_id"]
+    assert error(client.post(url, json=values)) == (422, "VALIDATION_FAILED", None)
+    # The kind must match what's placed in that row.
+    assert error(client.post(url, json={**values, "kind": "project", "project_title": "X"}))[
+        :2] == (404, "NOT_FOUND")
+
+    school = work["entries"][1]
+    url = f"/api/resumes/{doc.resume_id}/items/{school['row_id']}/version"
+    saved = client.post(url, json={"kind": "education", "degree": "B.A. in English",
+                                   "institution": "State University", "details": None,
+                                   "graduation": "May 2015"})
+    assert saved.json()["sections"][2]["entries"][1]["values"]["details"] is None
+
+    chosen = tree(client, doc.resume_id)[1]["entries"][0]
+    url = f"/api/resumes/{doc.resume_id}/items/{chosen['row_id']}/version"
+    assert error(client.post(url, json={"kind": "category", "category_name": "other"}))[:2] == (
+        409, "DUPLICATE")
+    saved = client.post(url, json={"kind": "category", "category_name": "Web"}).json()
+    entry = saved["sections"][1]["entries"][0]
+    assert (entry["values"]["category_name"], entry["skills"]) == ("Web", chosen["skills"])
+
+
+def test_a_new_version_of_a_skill_takes_its_place(client: TestClient, db: Session,
+                                                  account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    chosen = tree(client, doc.resume_id)[1]["entries"][0]
+    react = chosen["skills"][0]
+    url = f"/api/resumes/{doc.resume_id}/skills/category/{react['row_id']}/version"
+    saved = client.post(url, json={"skill_name": "React 19"})
+    assert saved.status_code == 201
+    skills = saved.json()["sections"][1]["entries"][0]["skills"]
+    assert [(skill["row_id"], skill["text"]) for skill in skills][0] == (
+        react["row_id"], "React 19")
+    # Listed right after the original under its category.
+    listed = list(db.scalars(select(SkillCategorySkill.skill_id)
+                             .where(SkillCategorySkill.category_id == chosen["item_id"])
+                             .order_by(SkillCategorySkill.position)))
+    assert listed[listed.index(react["item_id"]) + 1] == skills[0]["item_id"]
+    assert error(client.post(url, json={"skill_name": "React 19"})) == (
+        422, "VALIDATION_FAILED", "skill_name")
+    assert error(client.post(url, json={"skill_name": "css"}))[:2] == (409, "DUPLICATE")
+    # A project's skill, by its row under the project.
+    shown = tree(client, doc.resume_id)[3]["entries"][0]["skills"][0]
+    url = f"/api/resumes/{doc.resume_id}/skills/project/{shown['row_id']}/version"
+    skills = client.post(url, json={"skill_name": "Preact"}).json()[
+        "sections"][3]["entries"][0]["skills"]
+    assert [skill["text"] for skill in skills] == ["Preact"]
+    url = f"/api/resumes/{doc.resume_id}/skills/project/999999/version"
+    assert error(client.post(url, json={"skill_name": "Vue"}))[:2] == (404, "NOT_FOUND")

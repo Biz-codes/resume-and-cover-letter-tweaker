@@ -342,6 +342,43 @@ def latest_header_id(db: Session, account_id: int) -> int | None:
     return header_id
 
 
+def posting_for_version(db: Session, account_id: int, job_posting_id: int) -> JobPosting:
+    """The posting a new resume or cover letter is started for: the account's own (NOT_FOUND),
+    and not applied to yet (VERSION_LOCKED), since its versions are then a record of what was
+    sent (docs/FRONTEND_CHECKS.md, "Starting a version for a posting")."""
+    posting = db.get(JobPosting, job_posting_id)
+    if posting is None or posting.account_id != account_id:
+        raise AppError(ErrorCode.NOT_FOUND, field="job_posting_id")
+    if posting.applied_on is not None:
+        raise AppError(ErrorCode.VERSION_LOCKED,
+                       "You applied to this posting, so its resumes and cover letters are a "
+                       "record of what you sent. Start a base version instead.",
+                       field="job_posting_id")
+    return posting
+
+
+POSTING_HEADER = "A posting's resumes and cover letters use its header. Change it on the posting."
+
+
+def posting_header_id(posting: JobPosting, header_id: int | None = None) -> int:
+    """A version for a posting uses the posting's header (docs/FRONTEND_CHECKS.md, "Headers"). A
+    posting with no header yet has one picked first, and no other header can be picked
+    (VALIDATION_FAILED)."""
+    if posting.header_id is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Choose the posting's header first, so its resumes and cover letters "
+                       "start with it.", field="header_id")
+    if header_id is not None and header_id != posting.header_id:
+        raise AppError(ErrorCode.VALIDATION_FAILED, POSTING_HEADER, field="header_id")
+    return posting.header_id
+
+
+def refuse_header_change(doc: Any, header_id: int | None) -> None:
+    """A version for a posting changes its header only through the posting (VALIDATION_FAILED)."""
+    if doc.job_posting_id is not None and header_id != doc.header_id:
+        raise AppError(ErrorCode.VALIDATION_FAILED, POSTING_HEADER, field="header_id")
+
+
 def refuse_locked_change(doc: Any, info: DocInfo, changes: dict[str, Any]) -> None:
     """A sent version can only be renamed (docs/FRONTEND_CHECKS.md, "Sent versions are
     locked"): VERSION_LOCKED if any other field would change."""

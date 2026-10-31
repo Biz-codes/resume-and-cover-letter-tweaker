@@ -61,21 +61,49 @@ Goal: the full resume and cover letter tree works without AI.
 Build it in steps, each with its API endpoints, pages, and tests together:
 1. [x] **Resumes and cover letters:** list them (base versions, then ones for postings), show each as plain text with copy buttons, create base versions with the default header (and a letter's greeting and sign-off), edit their details, copy one to a new base version (the whole tree), and delete, with sent versions locked except for their name.
 2. [x] **Building the tree:** add, remove, and reorder sections, the items in each section (mixed kinds, one order), a category's and project's skills, and a role's or project's bullets, with the warning before editing a base version. Write new bullets and narrative content in place.
-3. [ ] **Job postings by hand:** create and edit a posting from a pasted description, pick its header, and start its resumes and cover letters from a copy or fresh, each with the posting's header (use, edit, or pick another).
+3. [x] **Job postings by hand:** create and edit a posting from a pasted description, pick its header, and start its resumes and cover letters from a copy or fresh, each using the posting's header, which is changed only on the posting and reaches all of them.
 4. [ ] **Tracking and locking:** applied, rejection, and hire dates, contacts, and interviews shared across postings. Recording the applied date locks the posting's versions; clearing it warns first.
 
 What the steps cover:
 - Create base resumes and cover letters, add sections, and add any library items in any order, including mixed sections and the nested skills and bullets.
-- Create a job posting by hand (pasted description) and pick its header. Create resumes and cover letters under it, each starting from the posting's header with the use / edit / pick another choice. Resumes and cover letters aren't linked to each other directly.
+- Create a job posting by hand (pasted description) and pick its header. Create resumes and cover letters under it, each using the posting's header. Resumes and cover letters aren't linked to each other directly.
 - Copy a version and warn before editing a base version.
 - Record the applied date on a posting (plus rejection and hire dates, contacts, and interviews, which can be shared across postings), which locks its resumes and cover letters; editing a library item a locked version uses saves a new row, per "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - Plain-text output with copy buttons, using the layout in [APP_FLOW.md](APP_FLOW.md).
+
+## Between phases 4 and 5: reorganize the front end
+Goal: the front end is grouped by feature, with each component's styles beside it, before phase 5 adds the AI pieces. Nothing a user sees or does changes.
+
+- [ ] **Start only after the user has approved all of phase 4** (every step above checked off, and the user saying so). Ask before starting, and present the planned file moves for approval first.
+
+What to do:
+1. **Feature folders** in `frontend/src/` instead of `components/` and `pages/` (the layout Bulletproof React recommends for apps this size):
+   - `shared/`: components and hooks more than one feature uses (`OrderedList`, `MoreOptions`, `Disclosure`, `Collapsible`, `FieldsForm`, `NameForm`, `NameList`, `BulletList`, `Checklist`, `ConfirmDelete`, `UsedBy`, `ApplyChoice`, `HeaderFields`, `useFocusLater`, `usePageTitle`) and the API client (`client.ts`, `usage.ts`).
+   - `library/`: the library pages (`LibraryPage` and one per table) and their API modules.
+   - `postings/`: `PostingsPage`, `PostingPage`, and `postings.ts`.
+   - `documents/`: `DocumentsPage`, `DocumentPage`, `DocumentTree`, `AddContent`, `LetterParts`, `StartVersion`, `treeItems.ts`, and `documents.ts`.
+   - `App.tsx`, `main.tsx`, `modes.ts`, `index.css`, and `test/` stay at the top. Where a component ends up used by only one feature, it goes in that feature; where a feature's component is used by another, it goes in `shared/`.
+   - Move `LIBRARY_PAGES` out of `LibraryPage.tsx` into its own file in `library/` while there (question 14 in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md); mark it decided).
+   - A component gets its own subfolder only if it has three or more files (e.g. once it has a `.module.css`); otherwise its `.tsx` and `.test.tsx` sit side by side in the feature folder.
+2. **CSS Modules:** move styles used by one component from `index.css` into a `Name.module.css` beside it. `index.css` keeps what's site-wide: the colors, base element styles, layout and breakpoints, and shared classes (`muted`, `tag`, `actions`, `card`, `visually-hidden`, and the like).
+   - Keep every color in `index.css`, as CSS custom properties that modules use, so the contrast check in `frontend/a11yChecks.ts` (which reads only `index.css`) still covers every color. Or extend the check to read the module files too.
+3. **Move with `git mv`**, so each file keeps its history, and update every import. Tests change only in their import paths.
+4. **Update every reference to the old paths:** "Project layout" and "API conventions" in [TECH_STACK.md](TECH_STACK.md), [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md), CLAUDE.md, the skills in `.claude/skills/`, and code comments (search for `components/`, `pages/`, and `api/`). The `a11y_review.py` hook and the sibling-test rule in `a11yChecks.ts` work with any folder layout.
+5. **Check:** `scripts/check.sh`, then `/a11y` over the whole front end, then try every page in the browser to confirm nothing looks or behaves differently.
+
+## After the reorganize: status notices as alert dialogs
+Goal: the success notices that now show as text on the page (the `role="status"` line under each page's heading, such as "Saved the posting." or "Header saved.") show as alert dialogs instead, so they don't stay on the page.
+
+- [ ] **Start after the front end reorganize above is done.** Design the details with the user first: which notices become dialogs (every one, or only some), whether they close on their own or with an OK button, and whether errors change too.
+
+Accessibility to keep in mind (WCAG 2.2 AA): a modal `<dialog>` (or `role="alertdialog"`) with a name, focus moved into it when it opens and back to where it was (or to the next step, as the notices do now) when it closes, Escape to close, and nothing announced twice. Update "Messages" under "Accessibility" in [TECH_STACK.md](TECH_STACK.md), and the tests that check the status text.
 
 ## Phase 5: Job postings and AI
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
 1. **Job posting:** fetch and extract a posting from a url, with the paste-in fallback, and let the user correct the result.
 2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the role title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting. They replace the "last used" defaults in `backend/app/defaults.py`, filling the same lists, with the rest under "More options". Add a "Build from scratch" choice that starts a document with no defaults (empty lists sent explicitly).
+   - **Workshopping with Claude at every level:** a chat beside each New version form (and the add forms) to work on that piece with Claude, and at the top a review of the whole document; see "Working with Claude at every level" in [APP_FLOW.md](APP_FLOW.md). Suggestions may be new text never used before, saved as new rows only when accepted. Design the details when this step starts.
 3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone.
 4. **Final review** of the resume and cover letter together.
 5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.

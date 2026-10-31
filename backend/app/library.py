@@ -112,11 +112,18 @@ def list_beside(db: Session, link, parent_col: str, child_col: str, old_id: int,
                                          "position": position + 1}))
 
 
-def copy_children(db: Session, link, parent_col: str, old_id: int, new_id: int) -> None:
-    """Give a new version of a parent the same list as the original, in the same order."""
+def copy_children(db: Session, link, parent_col: str, old_id: int, new_id: int,
+                  own: tuple[Any, str, int] | None = None) -> None:
+    """Give a new version of a parent the same list as the original, in the same order. With
+    `own` (the child's library model, its id column, and an account), only that account's
+    children are copied, for a built-in parent whose list every account shares."""
     table = link.__table__
     columns = [column for column in table.c if column.name != parent_col]
-    db.execute(insert(table).from_select(
-        [parent_col, *(column.name for column in columns)],
-        select(func.cast(new_id, table.c[parent_col].type), *columns)
-        .where(table.c[parent_col] == old_id)))
+    query = (select(func.cast(new_id, table.c[parent_col].type), *columns)
+             .where(table.c[parent_col] == old_id))
+    if own is not None:
+        library, child_col, account_id = own
+        query = query.join(library, getattr(library, child_col) == table.c[child_col]).where(
+            library.account_id == account_id)
+    db.execute(insert(table).from_select([parent_col, *(column.name for column in columns)],
+                                         query))

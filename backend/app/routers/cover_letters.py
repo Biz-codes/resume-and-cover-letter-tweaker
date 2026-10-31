@@ -1,8 +1,10 @@
-"""Cover letters: list, read as plain text, create base letters, edit, copy, and delete.
+"""Cover letters: list, read as plain text, create them (base, or for a job posting), edit,
+copy, and delete.
 
 They work like resumes (app/routers/resumes.py), plus a greeting (addressee), a sign-off, and
-the name under it. A new base letter greets "Hiring Team" and signs off with the account's
-"Sincerely" (docs/FRONTEND_CHECKS.md, "Default greeting" and "Default sign-off").
+the name under it. A new letter greets "[organization] Hiring Team" (just "Hiring Team" for a
+base letter) and signs off with the account's "Sincerely" (docs/FRONTEND_CHECKS.md, "Default
+greeting" and "Default sign-off").
 """
 
 from fastapi import APIRouter, status
@@ -22,9 +24,12 @@ from app.documents import (
     latest_header_id,
     list_docs,
     load_tree,
+    posting_for_version,
+    posting_header_id,
+    refuse_header_change,
     refuse_locked_change,
 )
-from app.models import CoverLetter, Header, SignOff, ToneSet
+from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
 from app.plain_text import Output, letter_output
 from app.routers.document_tree import add_tree_routes, fill_document
 from app.routers.resumes import CopyIn
@@ -46,8 +51,12 @@ class LetterIn(BaseModel):
 
 
 class NewLetter(LetterIn):
-    """A new base cover letter. Leaving out header_id, addressee, or sign_off_id starts with
-    the most recently used header, "Hiring Team", and the account's "Sincerely"."""
+    """A new cover letter: a base one, or with job_posting_id, one for that posting. Leaving out
+    header_id, addressee, or sign_off_id starts with the most recently used header (a letter
+    for a posting uses the posting's), "[organization] Hiring Team" (or "Hiring Team"), and the
+    account's "Sincerely"."""
+
+    job_posting_id: int | None = None
 
 
 class LetterOut(LetterIn, DocInfo):
@@ -86,6 +95,10 @@ def check_links(db: Session, body: LetterIn, account_id: int) -> None:
     check_link(db, SignOff, SignOff.sign_off_id, body.sign_off_id, account_id, "sign_off_id")
 
 
+def default_addressee(posting: JobPosting | None) -> str:
+    return f"{posting.organization} {DEFAULT_ADDRESSEE}" if posting else DEFAULT_ADDRESSEE
+
+
 def default_sign_off_id(db: Session, account_id: int) -> int | None:
     return db.scalar(select(SignOff.sign_off_id)
                      .where(SignOff.account_id == account_id,
@@ -106,13 +119,18 @@ def get_letter(letter_id: int, db: DbSession, account_id: AccountId) -> LetterDe
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> LetterDetail:
-    """A new base cover letter, starting with the default sections and their defaults: what the
-    latest cover letter used (app/defaults.py)."""
+    """A new cover letter, starting with the default sections and their defaults: what the
+    latest cover letter used (app/defaults.py). One for a posting uses the posting's header, so
+    the posting needs one."""
     given = body.model_fields_set
-    if "header_id" not in given:
+    posting = None
+    if body.job_posting_id is not None:
+        posting = posting_for_version(db, account_id, body.job_posting_id)
+        body.header_id = posting_header_id(posting, body.header_id)
+    elif "header_id" not in given:
         body.header_id = latest_header_id(db, account_id)
     if "addressee" not in given:
-        body.addressee = DEFAULT_ADDRESSEE
+        body.addressee = default_addressee(posting)
     if "sign_off_id" not in given:
         body.sign_off_id = default_sign_off_id(db, account_id)
     check_links(db, body, account_id)
@@ -127,10 +145,12 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
 @router.put("/{letter_id}")
 def update_letter(letter_id: int, body: LetterIn, db: DbSession,
                   account_id: AccountId) -> LetterDetail:
-    """Replaces the letter's fields. A sent letter can only be renamed."""
+    """Replaces the letter's fields. A sent letter can only be renamed, and one for a posting
+    keeps the posting's header."""
     letter = get_owned(db, CoverLetter, letter_id, account_id)
     refuse_locked_change(letter, doc_info(db, COVER_LETTER, [letter])[letter_id],
                          body.model_dump())
+    refuse_header_change(letter, body.header_id)
     check_links(db, body, account_id)
     for name, value in body.model_dump().items():
         setattr(letter, name, value)
@@ -142,12 +162,17 @@ def update_letter(letter_id: int, body: LetterIn, db: DbSession,
 @router.post("/{letter_id}/copies", status_code=status.HTTP_201_CREATED)
 def copy_letter(letter_id: int, body: CopyIn, db: DbSession,
                 account_id: AccountId) -> LetterDetail:
-    """A new base cover letter with the original's fields, sections, and selections. The
-    original isn't changed, even when it's sent."""
+    """A new cover letter with the original's fields, sections, and selections. A copy for a
+    posting uses the posting's header and greets its organization's
+    hiring team. The original isn't changed, even when it's sent."""
     original = get_owned(db, CoverLetter, letter_id, account_id)
+    fields = {name: getattr(original, name) for name in FIELDS if name != "name"}
+    if body.job_posting_id is not None:
+        posting = posting_for_version(db, account_id, body.job_posting_id)
+        fields["header_id"] = posting_header_id(posting)
+        fields["addressee"] = default_addressee(posting)
     copy = CoverLetter(account_id=account_id, based_on_letter_id=letter_id,
-                       **{name: getattr(original, name) for name in FIELDS if name != "name"},
-                       name=body.name)
+                       job_posting_id=body.job_posting_id, **fields, name=body.name)
     db.add(copy)
     db.flush()
     copy_tree(db, COVER_LETTER, letter_id, copy.letter_id)

@@ -32,18 +32,29 @@ from app.defaults import (
     default_sections,
     default_skills,
 )
-from app.documents import LIBRARY, EntryKind, Kind, doc_info, in_section, standalone_bullets
+from app.documents import (
+    LIBRARY,
+    POSTING_HEADER,
+    EntryKind,
+    Kind,
+    doc_info,
+    in_section,
+    standalone_bullets,
+)
 from app.errors import AppError, ErrorCode
-from app.library import append, check_ids, check_unique_name, list_beside
+from app.library import append, check_ids, check_unique_name, copy_children, list_beside
 from app.models import (
     OTHER_CATEGORY_ID,
     BulletPoint,
+    Education,
     ExperienceBulletPoint,
     Header,
     ProjectBulletPoint,
     ProjectSkill,
     Section,
+    SectionEducation,
     SectionNarrativeContent,
+    SectionSkillCategory,
     Skill,
     SkillCategory,
     SkillCategorySkill,
@@ -51,8 +62,10 @@ from app.models import (
 from app.routers.bullet_points import BULLET_LISTS
 from app.routers.education import EducationIn
 from app.routers.experience import ExperienceIn
+from app.routers.experience import new_version as role_version
 from app.routers.headers import HeaderIn, find_identical
 from app.routers.projects import ProjectIn
+from app.routers.projects import new_version as project_version
 from app.routers.skill_categories import CategoryIn
 from app.schemas import RequiredText
 from app.usage import touch
@@ -115,6 +128,16 @@ class WrittenEducation(EducationIn):
 
 class WrittenCategory(CategoryIn):
     kind: Literal["category"]
+
+
+# A new version of a role, project, education entry, or skill category placed in a section, with
+# its kind's own fields.
+Versioned = Annotated[WrittenRole | WrittenProject | WrittenEducation | WrittenCategory,
+                      Field(discriminator="kind")]
+
+
+class VersionedTitle(BaseModel):
+    title: RequiredText(100)
 
 
 # A new library item of any kind, written in a section, with that kind's own fields.
@@ -222,14 +245,18 @@ def _check_bullets_once(db: Session, kind: Kind, section_row: int, bullet_ids: l
                        field=field)
 
 
-def _check_changed(db: Session, library, item_column: str, item_id: int, content: str) -> None:
+def _unchanged(field: str | None) -> AppError:
     """A new version must differ from the item it's a version of (VALIDATION_FAILED), so saving
     an unchanged copy never adds a duplicate to the library."""
+    return AppError(ErrorCode.VALIDATION_FAILED,
+                    "That's the same as the original. Change something to save a new version.",
+                    field=field)
+
+
+def _check_changed(db: Session, library, item_column: str, item_id: int, content: str) -> None:
     original = db.scalar(select(library.content).where(getattr(library, item_column) == item_id))
     if original is not None and original.strip() == content:
-        raise AppError(ErrorCode.VALIDATION_FAILED,
-                       "That's the same as the original. Change the text to save a new version.",
-                       field="content")
+        raise _unchanged("content")
 
 
 def apply_skills(db: Session, kind: Kind, entry_kind: str, row_id: int, item_id: int,
@@ -352,8 +379,11 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
     def set_header(doc_id: int, body: HeaderIn, db: DbSession, account_id: AccountId):
         """The header's values, each picked or typed on its own. The document points at the
         saved header with exactly these values, or a new one; no header is changed, so other
-        versions keep theirs (docs/FRONTEND_CHECKS.md, "Headers")."""
+        versions keep theirs. A version for a posting uses the posting's header, so it's
+        changed on the posting instead (docs/FRONTEND_CHECKS.md, "Headers")."""
         doc = editable(db, doc_id, account_id)
+        if doc.job_posting_id is not None:
+            raise AppError(ErrorCode.VALIDATION_FAILED, POSTING_HEADER, field="header_id")
         header = find_identical(db, account_id, body)
         if header is None:
             header = Header(account_id=account_id, **body.model_dump())
@@ -512,6 +542,105 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         else:
             db.execute(update(table).where(_pk(kind.bullet) == replaced_row)
                        .values(bullet_id=bullet.bullet_id))
+        return changed(db, doc)
+
+    # New versions at every level (docs/FRONTEND_CHECKS.md, "New versions in a resume or cover
+    # letter"): each must differ from the original, is saved next to it wherever it's listed,
+    # and takes its place in this document only, keeping what's under it here. Narrative content
+    # and bullets go through the written endpoints, with `replaces`.
+
+    @router.post("/{doc_id}/sections/{row_id}/version", status_code=status.HTTP_201_CREATED)
+    def version_section(doc_id: int, row_id: int, body: VersionedTitle, db: DbSession,
+                        account_id: AccountId):
+        """A new version of one of the document's sections: a new section with this title
+        (which must be new, DUPLICATE) and the same lists (only the account's items, for a
+        built-in section)."""
+        doc = editable(db, doc_id, account_id)
+        section_id = _section_row(db, kind, doc_id, row_id)
+        if db.get(Section, section_id).title == body.title:
+            raise _unchanged("title")
+        check_unique_name(db, Section.title, account_id, body.title, "section")
+        version = Section(account_id=account_id, title=body.title)
+        db.add(version)
+        db.flush()
+        for entry_kind, link in SECTION_LISTS.items():
+            library, item_column, _ = LIBRARY[entry_kind]
+            copy_children(db, link, "section_id", section_id, version.id,
+                          own=(library, item_column, account_id))
+        db.execute(update(kind.section.__table__).where(_pk(kind.section) == row_id)
+                   .values(section_id=version.id))
+        return changed(db, doc)
+
+    @router.post("/{doc_id}/items/{row_id}/version", status_code=status.HTTP_201_CREATED)
+    def version_item(doc_id: int, row_id: int, body: Versioned, db: DbSession,
+                     account_id: AccountId):
+        """A new version of a role, project, education entry, or skill category placed in one
+        of the document's sections, with these values. A role or project lists the same bullets
+        (and a project the same skills), and a category the same skills (only the account's,
+        for "Other"); a category's name must be new (DUPLICATE)."""
+        doc = editable(db, doc_id, account_id)
+        _, item_id = _entry_row(db, kind, doc_id, body.kind, row_id)
+        library, item_column, _ = LIBRARY[body.kind]
+        original = db.get(library, item_id)
+        values = body.model_dump(exclude={"kind"})
+        if all(getattr(original, name) == value for name, value in values.items()):
+            raise _unchanged(None)
+        if body.kind == "experience":
+            version_id = role_version(db, original, ExperienceIn(**values),
+                                      account_id).experience_id
+        elif body.kind == "project":
+            version_id = project_version(db, original, ProjectIn(**values), account_id).project_id
+        elif body.kind == "education":
+            entry = Education(account_id=account_id, **values)
+            db.add(entry)
+            db.flush()
+            version_id = entry.education_id
+            list_beside(db, SectionEducation, "section_id", "education_id", item_id, version_id)
+        else:
+            check_unique_name(db, SkillCategory.category_name, account_id,
+                              body.category_name, "skill category")
+            category = SkillCategory(account_id=account_id, category_name=body.category_name)
+            db.add(category)
+            db.flush()
+            version_id = category.category_id
+            list_beside(db, SectionSkillCategory, "section_id", "category_id", item_id,
+                        version_id)
+            copy_children(db, SkillCategorySkill, "category_id", item_id, version_id,
+                          own=(Skill, "skill_id", account_id))
+        model = entry_kinds[body.kind]
+        db.execute(update(model.__table__).where(_pk(model) == row_id)
+                   .values({item_column: version_id}))
+        return changed(db, doc)
+
+    @router.post("/{doc_id}/skills/{parent}/{row_id}/version",
+                 status_code=status.HTTP_201_CREATED)
+    def version_skill(doc_id: int, parent: Literal["category", "project"], row_id: int,
+                      body: WrittenSkill, db: DbSession, account_id: AccountId):
+        """A new version of a skill shown under a placed category or project: a new skill with
+        this name (which must be new, DUPLICATE), listed right after the original in every
+        category and project that lists it."""
+        doc = editable(db, doc_id, account_id)
+        model = kind.skill if parent == "category" else kind.project_skill
+        table = model.__table__
+        entry_model = entry_kinds[parent]
+        entries, sections = entry_model.__table__, kind.section.__table__
+        parent_col = kind.column("skill_category" if parent == "category" else "project")
+        skill_id = db.scalar(
+            select(table.c.skill_id)
+            .join(entries, _pk(entry_model) == table.c[parent_col])
+            .join(sections, _pk(kind.section) == entries.c[kind.column("section")])
+            .where(_pk(model) == row_id, sections.c[kind.doc_id] == doc_id))
+        if skill_id is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        if db.get(Skill, skill_id).skill_name == body.skill_name:
+            raise _unchanged("skill_name")
+        check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill")
+        skill = Skill(account_id=account_id, skill_name=body.skill_name)
+        db.add(skill)
+        db.flush()
+        list_beside(db, SkillCategorySkill, "category_id", "skill_id", skill_id, skill.skill_id)
+        list_beside(db, ProjectSkill, "project_id", "skill_id", skill_id, skill.skill_id)
+        db.execute(update(table).where(_pk(model) == row_id).values(skill_id=skill.skill_id))
         return changed(db, doc)
 
     @router.post("/{doc_id}/items/{entry_kind}/{row_id}/skills/written",

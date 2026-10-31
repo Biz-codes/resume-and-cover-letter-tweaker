@@ -11,6 +11,7 @@ from app.routers import (
     education,
     experience,
     headers,
+    job_postings,
     narrative_content,
     projects,
     resumes,
@@ -26,7 +27,7 @@ app = FastAPI(title="Resume and Cover Letter Tweaker")
 register_error_handlers(app)
 for module in (headers, sections, skill_categories, skills, experience, projects,
                bullet_points, education, narrative_content, writing_rules, tone_sets, sign_offs,
-               resumes, cover_letters):
+               resumes, cover_letters, job_postings):
     app.include_router(module.router)
 
 
