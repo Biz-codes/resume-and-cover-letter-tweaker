@@ -1,11 +1,15 @@
 // A cover letter's greeting and sign-off, each a level of the letter's tree. Each change saves right
-// away: a choice when it's made, typed text when the user leaves the field or presses Enter.
+// away: a choice when it's made, typed text when the user leaves the field or presses Enter. A new
+// sign-off is written in its own form, opened from "New sign-off". The name under the sign-off
+// starts as the header's name, and is saved only when it differs (empty means the header's).
 // Read-only, they show what the letter prints. See "Default greeting" and "Default sign-off" in
 // docs/FRONTEND_CHECKS.md.
 import { useId, useState, type KeyboardEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import type { DocDetail, DocFields } from '../api/documents'
 import type { SignOff } from '../api/signOffs'
+import { useFocusLater } from '../hooks/useFocusLater'
+import NameForm from './NameForm'
 
 type LetterFields = Partial<Pick<DocFields, 'addressee' | 'sign_off_id' | 'signature_name'>>
 
@@ -76,30 +80,50 @@ export function Greeting({
   )
 }
 
+const NEW_SIGN_OFF_ID = 'new-sign-off'
+
 export function SignOffPart({
   doc,
   signOffs,
+  headerName,
   readOnly,
   onSave,
+  onWrite,
 }: {
   doc: DocDetail
   signOffs: SignOff[]
+  // The header's full_name, printed under the sign-off unless the letter gives another.
+  headerName: string | null
   readOnly: boolean
   onSave: (fields: LetterFields) => Promise<void>
+  // A new sign-off, saved to the library and used here; resolves to the letter's sign-off then.
+  onWrite: (text: string) => Promise<number | null>
 }) {
   const [signOffId, setSignOffId] = useState(doc.sign_off_id ?? null)
-  const [name, setName] = useState(doc.signature_name ?? '')
+  const shownName = doc.signature_name ?? headerName ?? ''
+  const [name, setName] = useState(shownName)
+  const [writing, setWriting] = useState(false)
+  const focusLater = useFocusLater()
   const { save, control, alert } = useSave(onSave)
   if (readOnly) {
     const text = signOffs.find((item) => item.sign_off_id === doc.sign_off_id)?.text
     return (
       <p>
-        {text ? `${text},` : 'No sign-off.'} {doc.signature_name ?? "The header's name"}
+        {text ? `${text},` : 'No sign-off.'} {shownName || "The header's name"}
       </p>
     )
   }
   const commitName = () => {
-    if (name !== (doc.signature_name ?? '')) void save({ signature_name: name || null })
+    const typed = name.trim()
+    if (typed === shownName) return
+    // The header's name (or nothing) is stored as empty, so it follows the header.
+    const value = typed === '' || typed === headerName ? null : typed
+    if (value !== doc.signature_name) void save({ signature_name: value })
+    if (typed === '') setName(headerName ?? '')
+  }
+  function closeWriting() {
+    setWriting(false)
+    focusLater(NEW_SIGN_OFF_ID)
   }
   return (
     <div className="stacked-form">
@@ -122,6 +146,24 @@ export function SignOffPart({
           ))}
         </select>
       </label>
+      {writing ? (
+        <NameForm
+          label="New sign-off"
+          field="text"
+          submitLabel="Add sign-off"
+          onSave={async (text) => {
+            setSignOffId(await onWrite(text))
+            closeWriting()
+          }}
+          onCancel={closeWriting}
+        />
+      ) : (
+        <div className="actions">
+          <button type="button" id={NEW_SIGN_OFF_ID} onClick={() => setWriting(true)}>
+            New sign-off
+          </button>
+        </div>
+      )}
       <label>
         Name under the sign-off
         <input

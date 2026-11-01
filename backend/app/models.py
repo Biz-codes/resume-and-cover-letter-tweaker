@@ -133,6 +133,7 @@ class JobPostingInterview(Base):
 
 class Resume(Base):
     __tablename__ = "resume"
+    __table_args__ = (UniqueConstraint("job_posting_id"),)
 
     resume_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
@@ -147,6 +148,7 @@ class Resume(Base):
 
 class CoverLetter(Base):
     __tablename__ = "cover_letter"
+    __table_args__ = (UniqueConstraint("job_posting_id"),)
 
     letter_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))

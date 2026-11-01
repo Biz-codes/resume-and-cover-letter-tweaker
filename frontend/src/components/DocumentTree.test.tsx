@@ -197,9 +197,40 @@ describe('DocumentTree', () => {
     await openExperience()
     const fields = screen.getAllByRole('definition').map((field) => field.textContent)
     expect(fields).toEqual(['Engineer', 'Acme', 'None', 'None'])
+    // Add content is inside the section's More options.
+    expect(screen.queryByRole('button', { name: 'Add content to Experience' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^More options for Items in Experience/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Add content to Experience' }))
     expect(screen.getByLabelText('Type of content')).toHaveValue('experience')
     await expectNoA11yViolations()
+  })
+
+  it('opens an empty section to its Add content form, even with no more options', async () => {
+    stub()
+    renderTree({ ...DOC, sections: [{ row_id: 102, section_id: 12, title: 'Talks', entries: [] }] })
+    await expand('Talks')
+    // Talks lists nothing, so there's no count, but Add content is still inside, open.
+    const more = screen.getByRole('button', { name: 'More options for Items in Talks' })
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByLabelText('Type of content')).toBeInTheDocument()
+    expect(screen.queryByText(/No more options/)).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('writes a new section from its title, inside More options for Sections', async () => {
+    const fetchMock = stub({ 'POST /api/resumes/1/sections/written': [{ status: 201, body: saved }] }, 2)
+    const { onChange, onNotice } = renderTree()
+    fireEvent.click(await screen.findByRole('button', { name: /^More options for Sections/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'New section title' }))
+    const field = screen.getByLabelText('New section title')
+    await vi.waitFor(() => expect(field).toHaveFocus())
+    await expectNoA11yViolations()
+    fireEvent.change(field, { target: { value: 'Volunteering' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add section' }))
+    await vi.waitFor(() => expect(onNotice).toHaveBeenCalledWith('Added the new section "Volunteering".'))
+    expect(onChange).toHaveBeenCalled()
+    expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/written')).toEqual({ title: 'Volunteering' })
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'New section title' })).toHaveFocus())
   })
 
   it('adds a section and sends the whole list', async () => {
@@ -215,6 +246,7 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/sections/100/items': [{ status: 201, body: saved }] })
     const { onChange } = renderTree()
     await expand('Summary')
+    fireEvent.click(screen.getByRole('button', { name: 'More options for Items in Summary (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add content to Summary' }))
     fireEvent.change(screen.getByLabelText('Type of content'), { target: { value: 'bullet' } })
     fireEvent.change(screen.getByLabelText('Bullet'), { target: { value: '9' } })
@@ -434,6 +466,7 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/sections/100/written': [{ status: 201, body: saved }] }, 2)
     const { onNotice } = renderTree()
     await expand('Summary')
+    fireEvent.click(screen.getByRole('button', { name: 'More options for Items in Summary (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add content to Summary' }))
     await vi.waitFor(() => expect(screen.getByLabelText('Type of content')).toHaveFocus())
     // Summary lists narrative content, so that's the type it starts with.

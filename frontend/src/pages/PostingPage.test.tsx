@@ -25,6 +25,8 @@ const POSTING = {
   suggested_header: null,
   lone_interviews: 0,
 }
+// Nothing started for it yet.
+const EMPTY = { ...POSTING, versions: [] }
 const NEW = {
   ...POSTING,
   header_id: null,
@@ -74,10 +76,10 @@ function renderPage(state?: unknown) {
 
 describe('PostingPage', () => {
   it('starts a new posting by picking its header from the suggestion', async () => {
-    const fetchMock = stub(NEW, { 'PUT /api/job-postings/9/header': [{ status: 200, body: POSTING }] }, [SAM])
+    const fetchMock = stub(NEW, { 'PUT /api/job-postings/9/header': [{ status: 200, body: EMPTY }] }, [SAM])
     renderPage({ notice: 'Saved the posting. Next, create an application header.' })
-    expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High' })).toBeInTheDocument()
-    expect(document.title).toBe('English Teacher at Lincoln High – Resume Tweaker')
+    expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High Application' })).toBeInTheDocument()
+    expect(document.title).toBe('English Teacher at Lincoln High Application – Resume Tweaker')
     await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Next, create an application header.'))
     // The suggestion: the latest header, with the role title typed in as a new headline.
     expect(screen.getByLabelText('Name (required)')).toHaveValue('Sam Rivera')
@@ -112,15 +114,24 @@ describe('PostingPage', () => {
     expect(screen.getByLabelText('Email')).toHaveValue('sam@example.com')
   })
 
-  it('lists its versions and starts a fresh resume for it', async () => {
-    const created = { ...doc(20, 'English Teacher (Lincoln High)'), sections: [], output: { parts: [], text: '' } }
-    const fetchMock = stub(POSTING, { 'POST /api/resumes': [{ status: 201, body: created }] })
+  it('links to its resume and cover letter, with nothing more to start', async () => {
+    stub()
     renderPage()
     expect(await screen.findByRole('link', { name: 'English Teacher (Lincoln High)' })).toHaveAttribute(
       'href',
       '/resumes/11',
     )
     expect(screen.getByRole('link', { name: 'Lincoln letter' })).toHaveAttribute('href', '/cover-letters/12')
+    // One of each per posting, worked on in place.
+    expect(screen.queryByRole('button', { name: /^Start a/ })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('starts a fresh resume for it', async () => {
+    const created = { ...doc(20, 'English Teacher (Lincoln High)'), sections: [], output: { parts: [], text: '' } }
+    const fetchMock = stub(EMPTY, { 'POST /api/resumes': [{ status: 201, body: created }] })
+    renderPage()
+    expect(await screen.findByText('No resume for this posting yet.')).toBeInTheDocument()
     const link = screen.getByRole('link', { name: 'The posting (opens in a new tab)' })
     expect(link).toHaveAttribute('href', 'https://example.com/jobs/9')
     expect(link).toHaveAttribute('target', '_blank')
@@ -137,7 +148,7 @@ describe('PostingPage', () => {
 
   it('starts a cover letter from a copy', async () => {
     const copied = { ...doc(21, 'Lincoln letter 2'), sections: [], output: { parts: [], text: '' } }
-    const fetchMock = stub(POSTING, { 'POST /api/cover-letters/3/copies': [{ status: 201, body: copied }] })
+    const fetchMock = stub(EMPTY, { 'POST /api/cover-letters/3/copies': [{ status: 201, body: copied }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Start a cover letter' }))
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '3' } })
@@ -161,7 +172,7 @@ describe('PostingPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(role, { target: { value: 'Lead English Teacher' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Lead English Teacher at Lincoln High' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Lead English Teacher at Lincoln High Application' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/job-postings/9')).toMatchObject({ role_title: 'Lead English Teacher' })
     expect(screen.getByRole('status')).toHaveTextContent('Saved the posting.')
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit details' })).toHaveFocus())
@@ -170,7 +181,11 @@ describe('PostingPage', () => {
   it('deletes it after listing what goes with it', async () => {
     stub({ ...POSTING, lone_interviews: 2 }, { 'DELETE /api/job-postings/9': [{ status: 204, body: null }] })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    // Edit details and Delete are inside the job description.
+    const description = await screen.findByRole('button', { name: 'Job description' })
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    fireEvent.click(description)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "English Teacher at Lincoln High"?' })
     expect(confirm).toHaveTextContent(
       'Its resumes and cover letters: English Teacher (Lincoln High); Lincoln letter. They\'re deleted too.',

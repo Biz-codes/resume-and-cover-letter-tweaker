@@ -1,9 +1,10 @@
 // "More options" under a list in a resume's or cover letter's tree: the items that could go in
 // it besides the ones it shows (its defaults), behind a level that opens and closes. The user
 // checks any number and adds them together; they go last, in the order offered. Choices with a
-// `group` are shown under that heading, in the order each group first appears. With nothing more
-// to offer, it says so.
-import { Fragment, useState } from 'react'
+// `group` are shown under that heading, in the order each group first appears. Other ways to add
+// (`children`, such as a section's Add content) go inside it too, after the checkboxes. With
+// nothing more to offer, and nothing else inside, it says so.
+import { Fragment, useState, type ReactNode } from 'react'
 import Disclosure from './Disclosure'
 import type { ListItem, ListKey } from './OrderedList'
 
@@ -11,17 +12,22 @@ export default function MoreOptions<K extends ListKey>({
   label,
   choices,
   onAdd,
+  initiallyOpen = false,
+  children,
 }: {
   // The list's name, so each level and button says which list it adds to.
   label: string
   choices: ListItem<K>[]
   // Resolves true once added, false when it was refused (the list shows why).
   onAdd: (ids: K[]) => Promise<boolean>
+  // Open from the start (an empty section, so its Add content form shows).
+  initiallyOpen?: boolean
+  children?: ReactNode
 }) {
   const [checked, setChecked] = useState<K[]>([])
   const [saving, setSaving] = useState(false)
   // Kept in its place, so the user knows there's nothing else rather than wondering where it went.
-  if (choices.length === 0) {
+  if (choices.length === 0 && !children) {
     return (
       <p className="muted">
         No more options<span className="visually-hidden"> for {label}</span>.
@@ -57,29 +63,36 @@ export default function MoreOptions<K extends ListKey>({
     <Disclosure
       title={
         <>
-          More options <span className="visually-hidden">for {label}</span> ({choices.length})
+          More options <span className="visually-hidden">for {label}</span>
+          {choices.length > 0 && ` (${choices.length})`}
         </>
       }
+      initiallyOpen={initiallyOpen}
     >
-      <fieldset className="choice more-options">
-        <legend>Choose any to add to {label}</legend>
-        {[...groups].map(([group, options]) =>
-          group ? (
-            <fieldset key={group} className="choice">
-              <legend>{group}</legend>
-              {boxes(options)}
-            </fieldset>
-          ) : (
-            <Fragment key="">{boxes(options)}</Fragment>
-          ),
-        )}
-      </fieldset>
-      <div className="actions">
-        {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
-        <button type="button" aria-label={saving ? `Adding checked to ${label}` : `Add checked to ${label}`} aria-disabled={saving || chosen.length === 0} onClick={() => void add()}>
-          {saving ? 'Adding…' : 'Add'}
-        </button>
-      </div>
+      {choices.length > 0 && (
+        <>
+          <fieldset className="choice more-options">
+            <legend>Choose any to add to {label}</legend>
+            {[...groups].map(([group, options]) =>
+              group ? (
+                <fieldset key={group} className="choice">
+                  <legend>{group}</legend>
+                  {boxes(options)}
+                </fieldset>
+              ) : (
+                <Fragment key="">{boxes(options)}</Fragment>
+              ),
+            )}
+          </fieldset>
+          <div className="actions">
+            {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
+            <button type="button" aria-label={saving ? `Adding checked to ${label}` : `Add checked to ${label}`} aria-disabled={saving || chosen.length === 0} onClick={() => void add()}>
+              {saving ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+        </>
+      )}
+      {children}
     </Disclosure>
   )
 }

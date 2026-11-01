@@ -131,7 +131,9 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume added to db                 |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume last updated                |
 
-Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. organization and role title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
+Unique: (job_posting_id)
+
+Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. organization and role title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
 
 Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting uses the posting's header, which is changed only on the posting. A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
@@ -157,13 +159,15 @@ Note: base resumes can be edited directly at any time, but the database keeps no
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter added to db              |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter last updated             |
 
-Note: works the same way as `resume`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
+Unique: (job_posting_id)
+
+Note: works the same way as `resume`, including at most one cover letter per posting. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
 
 Note: there's no direct link between a resume and a cover letter. Both are created under a job posting (`job_posting_id`) and use the posting's header, so they match; deleting one leaves the other in place.
 
 Note: `sign_off_id` picks the closing (e.g. "Sincerely," then the name). New cover letters default to the account's "Sincerely". It uses `ON DELETE SET NULL`, so deleting a sign-off never deletes a cover letter.
 
-Note: `signature_name` is the name printed under the sign-off. Empty means the header's `full_name`, so new letters leave it empty unless the user wants a different form of their name (e.g. without a nickname). A copied letter keeps it.
+Note: `signature_name` is the name printed under the sign-off. Empty means the header's `full_name`, so new letters leave it empty unless the user wants a different form of their name (e.g. without a nickname). The app shows the header's name in the field, and stores the header's name, typed back, as empty. A copied letter keeps it.
 
 Note: `addressee` is everything after "Dear" in the greeting. It defaults to "[organization] Hiring Team", using the job posting's `organization` (or just "Hiring Team" when there's no posting). The user can replace it with anything, such as a hiring manager's name ("Ms. Rivera"). The app fills in the default, since a database default can't look up the organization.
 

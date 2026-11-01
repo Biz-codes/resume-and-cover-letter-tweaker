@@ -98,6 +98,9 @@ export const KINDS: Record<DocKind, KindInfo> = {
   cover_letter: { path: '/cover-letters', singular: 'cover letter', plural: 'Cover letters', idKey: 'letter_id' },
 }
 
+// "resume" → "Resume", for a heading.
+export const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
+
 // The fields a details form edits: every field the kind has.
 export function fieldsOf(kind: DocKind, doc: Doc): DocFields {
   const fields: DocFields = { name: doc.name, header_id: doc.header_id, tone_set_id: doc.tone_set_id }
@@ -141,6 +144,10 @@ export function docsApi(kind: DocKind) {
     // The header's values, each picked or typed on its own: the document points at the saved header
     // with exactly these values, or a new one. No saved header changes.
     setHeader: (id: number, fields: HeaderFields) => one(api.put<Raw>(`${path}/${id}/header`, fields)),
+    // A new section: saved to the library and shown last, empty. Its title must be new (DUPLICATE).
+    writeSection: (id: number, title: string) => one(api.post<Raw>(`${path}/${id}/sections/written`, { title })),
+    // A letter's new sign-off: saved to the library (or the one with the same text) and used here.
+    writeSignOff: (id: number, text: string) => one(api.post<Raw>(`${path}/${id}/sign-off/written`, { text })),
     // A section added starts with its default items, each with its defaults.
     setSections: (id: number, sectionIds: number[]) =>
       one(api.put<Raw>(`${path}/${id}/sections`, { section_ids: sectionIds })),

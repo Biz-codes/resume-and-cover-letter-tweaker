@@ -26,6 +26,7 @@ from app.models import (
     SectionBulletPoint,
     SectionExperience,
     SectionNarrativeContent,
+    SignOff,
     Skill,
     SkillCategorySkill,
 )
@@ -298,8 +299,9 @@ def test_a_sent_version_tree_cant_change(client: TestClient, db: Session, accoun
         client.post(f"{base}/sections/{sections[0]['row_id']}/written",
                     json={"kind": "narrative", "content": "New."}),
         client.post(f"{base}/items/experience/{role_row}/written", json={"content": "New."}),
+        client.post(f"{base}/sections/written", json={"title": "Talks"}),
     ]
-    assert [error(response)[:2] for response in requests] == [(409, "VERSION_LOCKED")] * 6
+    assert [error(response)[:2] for response in requests] == [(409, "VERSION_LOCKED")] * 7
     assert tree(client, doc.resume_id) == sections
 
 
@@ -319,6 +321,35 @@ def test_cover_letters_build_the_same_way(client: TestClient, db: Session, accou
         "I build things.", "I'd like to build yours."]
     assert client.put(f"{base}/sections", json={"section_ids": [SKILLS_SECTION_ID]}).json()[
         "output"]["text"] == ""
+
+
+def test_write_a_new_section_last(client: TestClient, db: Session, account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    url = f"/api/resumes/{doc.resume_id}/sections/written"
+    saved = client.post(url, json={"title": " Talks "})
+    assert saved.status_code == 201
+    last = saved.json()["sections"][-1]
+    assert (last["title"], last["entries"]) == ("Talks", [])
+    assert db.scalar(select(Section.account_id).where(Section.id == last["section_id"])) == (
+        account_id)
+    # Titles are unique, ignoring capitals, counting the built-in sections.
+    assert error(client.post(url, json={"title": "experience"})) == (409, "DUPLICATE", "title")
+
+
+def test_write_a_new_sign_off_for_a_letter(client: TestClient, db: Session, account_id: int):
+    letter = add(db, CoverLetter(account_id=account_id, name="General"))
+    url = f"/api/cover-letters/{letter.letter_id}/sign-off/written"
+    saved = client.post(url, json={"text": "Warm regards"})
+    assert saved.status_code == 201
+    new_id = saved.json()["sign_off_id"]
+    assert db.scalar(select(SignOff.text).where(SignOff.sign_off_id == new_id)) == "Warm regards"
+    # The same text again uses that one.
+    assert client.post(url, json={"text": "warm regards"}).json()["sign_off_id"] == new_id
+    sent = add(db, CoverLetter(account_id=account_id, name="Acme",
+                               job_posting_id=posting(db, account_id, sent=True).job_posting_id))
+    assert error(client.post(f"/api/cover-letters/{sent.letter_id}/sign-off/written",
+                             json={"text": "Best"}))[:2] == (409, "VERSION_LOCKED")
 
 
 # The header, one value at a time

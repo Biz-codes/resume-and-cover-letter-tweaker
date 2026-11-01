@@ -29,6 +29,7 @@ from app.documents import (
     refuse_header_change,
     refuse_locked_change,
 )
+from app.errors import AppError, ErrorCode
 from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
 from app.plain_text import Output, letter_output
 from app.routers.document_tree import add_tree_routes, fill_document
@@ -125,7 +126,7 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
     given = body.model_fields_set
     posting = None
     if body.job_posting_id is not None:
-        posting = posting_for_version(db, account_id, body.job_posting_id)
+        posting = posting_for_version(db, account_id, body.job_posting_id, COVER_LETTER)
         body.header_id = posting_header_id(posting, body.header_id)
     elif "header_id" not in given:
         body.header_id = latest_header_id(db, account_id)
@@ -168,7 +169,7 @@ def copy_letter(letter_id: int, body: CopyIn, db: DbSession,
     original = get_owned(db, CoverLetter, letter_id, account_id)
     fields = {name: getattr(original, name) for name in FIELDS if name != "name"}
     if body.job_posting_id is not None:
-        posting = posting_for_version(db, account_id, body.job_posting_id)
+        posting = posting_for_version(db, account_id, body.job_posting_id, COVER_LETTER)
         fields["header_id"] = posting_header_id(posting)
         fields["addressee"] = default_addressee(posting)
     copy = CoverLetter(account_id=account_id, based_on_letter_id=letter_id,
@@ -178,6 +179,31 @@ def copy_letter(letter_id: int, body: CopyIn, db: DbSession,
     copy_tree(db, COVER_LETTER, letter_id, copy.letter_id)
     db.refresh(copy)
     return detail(db, copy)
+
+
+class WrittenSignOff(BaseModel):
+    text: RequiredText(100)
+
+
+@router.post("/{letter_id}/sign-off/written", status_code=status.HTTP_201_CREATED)
+def write_sign_off(letter_id: int, body: WrittenSignOff, db: DbSession,
+                   account_id: AccountId) -> LetterDetail:
+    """A new sign-off, saved to the library and used by this letter. One with the same text
+    (ignoring capitals) is reused instead. A sent letter can't change (VERSION_LOCKED)."""
+    letter = get_owned(db, CoverLetter, letter_id, account_id)
+    if doc_info(db, COVER_LETTER, [letter])[letter_id].locked:
+        raise AppError(ErrorCode.VERSION_LOCKED)
+    sign_off = db.scalar(select(SignOff).where(SignOff.account_id == account_id,
+                                                func.lower(SignOff.text) == body.text.lower())
+                         .order_by(SignOff.sign_off_id).limit(1))
+    if sign_off is None:
+        sign_off = SignOff(account_id=account_id, text=body.text)
+        db.add(sign_off)
+        db.flush()
+    letter.sign_off_id = sign_off.sign_off_id
+    db.flush()
+    db.refresh(letter)
+    return detail(db, letter)
 
 
 @router.delete("/{letter_id}", status_code=status.HTTP_204_NO_CONTENT)

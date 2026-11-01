@@ -18,7 +18,8 @@
 // `readOnly`, only the names (and what opens under them) are shown.
 //
 // Adding is from a picker, or with `moreOptions`, from checkboxes behind a "More options" level
-// (MoreOptions), for the lists in a resume's or cover letter's tree, which start with defaults.
+// (MoreOptions), for the lists in a resume's or cover letter's tree, which start with defaults;
+// `moreChildren` adds other ways to add inside that level.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import MoreOptions from './MoreOptions'
@@ -64,6 +65,8 @@ export default function OrderedList<K extends ListKey = number>({
   under,
   readOnly = false,
   moreOptions = false,
+  moreChildren,
+  moreOpen = false,
   onAdd,
   onChange,
 }: {
@@ -85,6 +88,9 @@ export default function OrderedList<K extends ListKey = number>({
   readOnly?: boolean
   // Add any number of the choices at once, from checkboxes, instead of one from a picker.
   moreOptions?: boolean
+  // With `moreOptions`: more inside the "More options" level, and whether it starts open.
+  moreChildren?: ReactNode
+  moreOpen?: boolean
   // Saves added items, when adding isn't saving the whole list (placing items with defaults).
   onAdd?: (ids: K[]) => Promise<void>
   onChange: (ids: K[]) => Promise<void>
@@ -408,7 +414,11 @@ export default function OrderedList<K extends ListKey = number>({
           })}
         </ol>
       )}
-      {!readOnly && moreOptions && !moving && <MoreOptions label={label} choices={available} onAdd={addChecked} />}
+      {!readOnly && moreOptions && !moving && (
+        <MoreOptions label={label} choices={available} onAdd={addChecked} initiallyOpen={moreOpen}>
+          {moreChildren}
+        </MoreOptions>
+      )}
       {!readOnly && !moreOptions && available.length > 0 && !moving && (
         <div className="actions">
           <select

@@ -27,6 +27,32 @@ describe('MoreOptions', () => {
     await expectNoA11yViolations()
   })
 
+  it('holds other ways to add, after its checkboxes, and can start open', async () => {
+    render(
+      <MoreOptions label="Items in Experience" choices={CHOICES} onAdd={vi.fn()} initiallyOpen>
+        <button type="button">Add content</button>
+      </MoreOptions>,
+    )
+    const toggle = screen.getByRole('button', { name: 'More options for Items in Experience (3)' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const buttons = screen.getAllByRole('button').map((button) => button.textContent)
+    expect(buttons.slice(-2)).toEqual(['Add', 'Add content'])
+    await expectNoA11yViolations()
+  })
+
+  it('with nothing more to check, still opens to what else is inside', async () => {
+    render(
+      <MoreOptions label="Items in Experience" choices={[]} onAdd={vi.fn()}>
+        <button type="button">Add content</button>
+      </MoreOptions>,
+    )
+    // No count, and no checkboxes once open.
+    fireEvent.click(screen.getByRole('button', { name: 'More options for Items in Experience' }))
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add content' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
   it('adds the checked ones together, in the order offered, under their headings', async () => {
     const onAdd = renderOptions()
     open()

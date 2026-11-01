@@ -65,22 +65,57 @@ describe('Greeting', () => {
   })
 })
 
+// The props every SignOffPart test shares.
+const PART = { signOffs: SIGN_OFFS, headerName: 'Sam Rivera', onWrite: vi.fn(() => Promise.resolve(null)) }
+
 describe('SignOffPart', () => {
   it('saves the sign-off when chosen, and the name under it when the field is left', async () => {
     const onSave = vi.fn(() => Promise.resolve())
-    render(<SignOffPart doc={LETTER} signOffs={SIGN_OFFS} readOnly={false} onSave={onSave} />)
+    render(<SignOffPart {...PART} doc={LETTER} readOnly={false} onSave={onSave} />)
     await expectNoA11yViolations()
     fireEvent.change(screen.getByRole('combobox', { name: 'Sign-off' }), { target: { value: '4' } })
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith({ sign_off_id: 4 }))
     const name = screen.getByLabelText('Name under the sign-off')
+    // It starts as the header's name.
+    expect(name).toHaveValue('Sam Rivera')
     fireEvent.change(name, { target: { value: 'Sam' } })
     fireEvent.blur(name)
     await vi.waitFor(() => expect(onSave).toHaveBeenLastCalledWith({ signature_name: 'Sam' }))
   })
 
+  it("stores the header's name, or nothing, as empty, so it follows the header", async () => {
+    const onSave = vi.fn(() => Promise.resolve())
+    render(<SignOffPart {...PART} doc={{ ...LETTER, signature_name: 'Sam' }} readOnly={false} onSave={onSave} />)
+    const name = screen.getByLabelText('Name under the sign-off')
+    expect(name).toHaveValue('Sam')
+    fireEvent.change(name, { target: { value: 'Sam Rivera' } })
+    fireEvent.blur(name)
+    await vi.waitFor(() => expect(onSave).toHaveBeenLastCalledWith({ signature_name: null }))
+  })
+
+  it("saves nothing when the header's name is left as it is", () => {
+    const onSave = vi.fn(() => Promise.resolve())
+    render(<SignOffPart {...PART} doc={LETTER} readOnly={false} onSave={onSave} />)
+    fireEvent.blur(screen.getByLabelText('Name under the sign-off'))
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('writes a new sign-off and picks it, with focus going in and back', async () => {
+    const onWrite = vi.fn(() => Promise.resolve(9))
+    render(<SignOffPart {...PART} doc={LETTER} readOnly={false} onSave={vi.fn()} onWrite={onWrite} />)
+    fireEvent.click(screen.getByRole('button', { name: 'New sign-off' }))
+    const field = screen.getByLabelText('New sign-off')
+    await vi.waitFor(() => expect(field).toHaveFocus())
+    await expectNoA11yViolations()
+    fireEvent.change(field, { target: { value: 'Warm regards' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add sign-off' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'New sign-off' })).toHaveFocus())
+    expect(onWrite).toHaveBeenCalledWith('Warm regards')
+  })
+
   it("shows a refusal on the sign-off's field", async () => {
     const onSave = vi.fn(() => Promise.reject(new ApiError('NOT_FOUND', 'That sign-off is gone.', 'sign_off_id', 404)))
-    render(<SignOffPart doc={LETTER} signOffs={SIGN_OFFS} readOnly={false} onSave={onSave} />)
+    render(<SignOffPart {...PART} doc={LETTER} readOnly={false} onSave={onSave} />)
     const select = screen.getByRole('combobox', { name: 'Sign-off' })
     fireEvent.change(select, { target: { value: '4' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('That sign-off is gone.')
@@ -88,13 +123,13 @@ describe('SignOffPart', () => {
     await expectNoA11yViolations()
   })
 
-  it('shows the sign-off when read-only, or that there is none', () => {
-    render(<SignOffPart doc={LETTER} signOffs={SIGN_OFFS} readOnly onSave={vi.fn()} />)
-    expect(screen.getByText("Sincerely, The header's name")).toBeInTheDocument()
+  it("shows the sign-off when read-only, with the header's name", () => {
+    render(<SignOffPart {...PART} doc={LETTER} readOnly onSave={vi.fn()} />)
+    expect(screen.getByText('Sincerely, Sam Rivera')).toBeInTheDocument()
   })
 
   it('says when there is no sign-off', () => {
-    render(<SignOffPart doc={{ ...LETTER, sign_off_id: null }} signOffs={SIGN_OFFS} readOnly onSave={vi.fn()} />)
+    render(<SignOffPart {...PART} doc={{ ...LETTER, sign_off_id: null }} readOnly onSave={vi.fn()} />)
     expect(screen.getByText(/No sign-off\./)).toBeInTheDocument()
   })
 })

@@ -1,14 +1,15 @@
-// One job posting: its link and job description, its details (edit and delete under its name),
-// its application header (the header for the user's application, used by all its versions), and
-// the resumes and cover letters made for it, each started fresh or from a copy (StartVersion). A
-// new posting picks its header first, from the suggestion, with that section open, since all its
-// versions use it; once picked, the section starts closed. Once the posting is applied to, its versions are a record of what was sent, so
-// no new ones start here. See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version
-// for a posting" in docs/FRONTEND_CHECKS.md.
+// One job posting, headed as the user's application to it: its link and job description (with
+// Edit details and Delete inside it), its application header (the header for the user's
+// application, used by all its versions), and its resume and cover letter, each started fresh or
+// from a copy (StartVersion). A new posting picks its header first, from the suggestion, with
+// that section open, since its versions use it; once picked, the section starts closed. Once the
+// posting is applied to, its versions are a record of what was sent, so no new ones start here.
+// See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
+// docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../api/client'
-import { docsApi, KINDS, type Doc, type DocKind } from '../api/documents'
+import { capitalize, docsApi, KINDS, type Doc, type DocKind } from '../api/documents'
 import { headersApi, type Header, type HeaderFields as Fields } from '../api/headers'
 import {
   isWebAddress,
@@ -50,7 +51,8 @@ export function PostingPage({ id }: { id: number }) {
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
-  usePageTitle(posting ? postingName(posting) : 'Job posting')
+  const title = posting ? `${postingName(posting)} Application` : 'Job posting'
+  usePageTitle(title)
 
   const load = useCallback(
     () =>
@@ -135,7 +137,7 @@ export function PostingPage({ id }: { id: number }) {
         <Link to="/postings">All job postings</Link>
       </p>
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
-        {posting ? postingName(posting) : 'Job posting'}
+        {title}
       </h2>
       <p role="status">{notice}</p>
       {loadError && (
@@ -165,51 +167,50 @@ export function PostingPage({ id }: { id: number }) {
           </p>
           <Disclosure title="Job description">
             <p className="description">{posting.description}</p>
+            {mode === 'edit' && (
+              <FieldsForm
+                label={`Edit "${postingName(posting)}"`}
+                fields={POSTING_FIELDS}
+                initial={fieldsOf(posting)}
+                onSave={save}
+                onCancel={() => close('edit')}
+              />
+            )}
+            {mode === 'delete' && (
+              <ConfirmDelete
+                what={`"${postingName(posting)}"`}
+                uses={posting.versions}
+                usesLabel="Its resumes and cover letters"
+                effect="They're deleted too."
+                locked={posting.locked}
+                lockedNote="You applied to this posting, so deleting it removes the record of what you sent."
+                error={deleteError}
+                onConfirm={() => void confirmDelete(posting)}
+                onCancel={() => close('delete')}
+              >
+                {interviews > 0 && (
+                  <p>
+                    {interviews === 1 ? 'Its interview' : `Its ${interviews} interviews`} with no other posting will
+                    be deleted too.
+                  </p>
+                )}
+              </ConfirmDelete>
+            )}
+            {mode === null && (
+              <div className="actions">
+                <button type="button" id={BUTTON_IDS.edit} onClick={() => open('edit')}>
+                  Edit details
+                </button>
+                <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
+                  Delete
+                </button>
+              </div>
+            )}
           </Disclosure>
           {posting.locked && (
             <p className="note">
               You applied to this posting, so its resumes and cover letters are a record of what you sent.
             </p>
-          )}
-
-          {mode === 'edit' && (
-            <FieldsForm
-              label={`Edit "${postingName(posting)}"`}
-              fields={POSTING_FIELDS}
-              initial={fieldsOf(posting)}
-              onSave={save}
-              onCancel={() => close('edit')}
-            />
-          )}
-          {mode === 'delete' && (
-            <ConfirmDelete
-              what={`"${postingName(posting)}"`}
-              uses={posting.versions}
-              usesLabel="Its resumes and cover letters"
-              effect="They're deleted too."
-              locked={posting.locked}
-              lockedNote="You applied to this posting, so deleting it removes the record of what you sent."
-              error={deleteError}
-              onConfirm={() => void confirmDelete(posting)}
-              onCancel={() => close('delete')}
-            >
-              {interviews > 0 && (
-                <p>
-                  {interviews === 1 ? 'Its interview' : `Its ${interviews} interviews`} with no other posting will
-                  be deleted too.
-                </p>
-              )}
-            </ConfirmDelete>
-          )}
-          {mode === null && (
-            <div className="actions">
-              <button type="button" id={BUTTON_IDS.edit} onClick={() => open('edit')}>
-                Edit details
-              </button>
-              <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
-                Delete
-              </button>
-            </div>
           )}
 
           <Disclosure
@@ -234,24 +235,21 @@ export function PostingPage({ id }: { id: number }) {
           )}
 
           {(['resume', 'cover_letter'] as const).map((kind) => {
-            const versions = posting.versions.filter((use) => use.kind === kind)
-            const { path, plural } = KINDS[kind]
+            // A posting has one of each, edited in place until it's applied to.
+            const version = posting.versions.find((use) => use.kind === kind)
+            const { path, singular } = KINDS[kind]
             return (
               <div key={kind}>
-                <h3>{plural}</h3>
-                {versions.length === 0 ? (
-                  <p>No {plural.toLowerCase()} for this posting yet.</p>
+                <h3>{capitalize(singular)}</h3>
+                {version ? (
+                  <p>
+                    <Link to={`${path}/${version.id}`}>{version.name}</Link>
+                    {version.locked && <span className="tag">sent</span>}
+                  </p>
                 ) : (
-                  <ul className="doc-list">
-                    {versions.map((use) => (
-                      <li key={use.id}>
-                        <Link to={`${path}/${use.id}`}>{use.name}</Link>
-                        {use.locked && <span className="tag">sent</span>}
-                      </li>
-                    ))}
-                  </ul>
+                  <p>No {singular} for this posting yet.</p>
                 )}
-                {!posting.locked && posting.header_id && (
+                {!version && !posting.locked && posting.header_id && (
                   <StartVersion
                     kind={kind}
                     posting={posting}

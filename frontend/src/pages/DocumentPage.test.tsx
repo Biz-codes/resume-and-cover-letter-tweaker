@@ -388,6 +388,41 @@ describe('DocumentPage', () => {
     })
   })
 
+  it("writes a new sign-off, picks it, and starts the name as the header's", async () => {
+    const letter = {
+      ...resume(0),
+      resume_id: undefined,
+      letter_id: 14,
+      name: 'General letter',
+      job_posting: { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' },
+      addressee: 'Hiring Team',
+      sign_off_id: 3,
+      signature_name: null,
+    }
+    const sincerely = { sign_off_id: 3, text: 'Sincerely', used_by: [] }
+    const warm = { sign_off_id: 9, text: 'Warm regards', used_by: [] }
+    const fetchMock = stubApi({
+      'GET /api/cover-letters/14': [{ status: 200, body: letter }],
+      'GET /api/headers': [{ status: 200, body: [SAM] }],
+      'GET /api/tone-sets': [{ status: 200, body: [] }],
+      'GET /api/sign-offs': [
+        { status: 200, body: [sincerely] },
+        { status: 200, body: [warm, sincerely] },
+      ],
+      'POST /api/cover-letters/14/sign-off/written': [{ status: 201, body: { ...letter, sign_off_id: 9 } }],
+    })
+    renderAt('/cover-letters/14')
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign-off' }))
+    expect(screen.getByLabelText('Name under the sign-off')).toHaveValue('Sam Rivera')
+    fireEvent.click(screen.getByRole('button', { name: 'New sign-off' }))
+    fireEvent.change(screen.getByLabelText('New sign-off'), { target: { value: 'Warm regards' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add sign-off' }))
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added the new sign-off.'))
+    expect(sentBody(fetchMock, 'POST /api/cover-letters/14/sign-off/written')).toEqual({ text: 'Warm regards' })
+    await vi.waitFor(() => expect(screen.getByRole('combobox', { name: 'Sign-off' })).toHaveValue('9'))
+    await expectNoA11yViolations()
+  })
+
   it('says when there is nothing in it yet', async () => {
     stub(14, resume(14, { output: { parts: [], text: '' } }))
     renderAt('/resumes/14')

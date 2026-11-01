@@ -342,10 +342,12 @@ def latest_header_id(db: Session, account_id: int) -> int | None:
     return header_id
 
 
-def posting_for_version(db: Session, account_id: int, job_posting_id: int) -> JobPosting:
+def posting_for_version(db: Session, account_id: int, job_posting_id: int,
+                        kind: Kind) -> JobPosting:
     """The posting a new resume or cover letter is started for: the account's own (NOT_FOUND),
-    and not applied to yet (VERSION_LOCKED), since its versions are then a record of what was
-    sent (docs/FRONTEND_CHECKS.md, "Starting a version for a posting")."""
+    not applied to yet (VERSION_LOCKED), since its versions are then a record of what was sent,
+    and with none of this kind yet (DUPLICATE), since a posting has one of each, edited in
+    place (docs/FRONTEND_CHECKS.md, "Starting a version for a posting")."""
     posting = db.get(JobPosting, job_posting_id)
     if posting is None or posting.account_id != account_id:
         raise AppError(ErrorCode.NOT_FOUND, field="job_posting_id")
@@ -354,6 +356,12 @@ def posting_for_version(db: Session, account_id: int, job_posting_id: int) -> Jo
                        "You applied to this posting, so its resumes and cover letters are a "
                        "record of what you sent. Start a base version instead.",
                        field="job_posting_id")
+    existing = db.scalar(select(kind.doc.name).where(kind.doc.job_posting_id == job_posting_id))
+    if existing is not None:
+        what = "resume" if kind is RESUME else "cover letter"
+        raise AppError(ErrorCode.DUPLICATE,
+                       f'This posting already has a {what}, "{existing}". Open it to keep '
+                       "working on it.", field="job_posting_id")
     return posting
 
 

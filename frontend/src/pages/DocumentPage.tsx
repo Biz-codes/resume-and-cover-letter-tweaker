@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../api/client'
-import { docsApi, fieldsOf, KINDS, type DocDetail, type DocFields, type DocKind } from '../api/documents'
+import { capitalize, docsApi, fieldsOf, KINDS, type DocDetail, type DocFields, type DocKind } from '../api/documents'
 import { headersApi, type Header } from '../api/headers'
 import { signOffsApi, type SignOff } from '../api/signOffs'
 import { toneSetsApi, type ToneSet } from '../api/toneSets'
@@ -35,8 +35,6 @@ const TONE_ID = 'doc-tone'
 const EDIT_ID = 'doc-edit'
 
 type Mode = 'rename' | 'copy' | 'delete'
-
-const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
 
 // Shown on a base version until the user chooses: edits can't be undone.
 function BaseWarning({ singular, onEdit, onCopy }: { singular: string; onEdit: () => void; onCopy: () => void }) {
@@ -142,6 +140,13 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     latest.current = doc
   }, [doc])
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  // A new sign-off is saved to the library too, so the list is read again.
+  async function writeSignOff(text: string) {
+    await inTurn(() => docsApi(kind).writeSignOff(id, text), 'Added the new sign-off.')
+    setSignOffs(await signOffsApi.list())
+    return latest.current?.sign_off_id ?? null
+  }
+
   function inTurn(save: (current: DocDetail) => Promise<DocDetail>, saved: string) {
     const run = queue.current
       .catch(() => undefined)
@@ -370,8 +375,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                     <SignOffPart
                       doc={doc}
                       signOffs={signOffs}
+                      headerName={header?.full_name ?? null}
                       readOnly={readOnly}
                       onSave={(fields) => update(fields, 'Sign-off saved.')}
+                      onWrite={writeSignOff}
                     />
                   </Disclosure>
                 </li>

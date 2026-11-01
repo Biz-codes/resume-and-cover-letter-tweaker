@@ -84,6 +84,11 @@ def test_start_a_resume_and_letter_for_a_posting(client: TestClient, db: Session
     chosen = header(db, account_id, headline="English Teacher")
     client.put(f"/api/job-postings/{posting_id}/header",
                json={**SAM, "headline": "English Teacher"})
+    # No other header can be picked, there or later on the version itself.
+    other = header(db, account_id, headline="Tutor")
+    assert error(client.post("/api/resumes", json={
+        "name": "Tutor", "job_posting_id": posting_id, "header_id": other.header_id})) == (
+        422, "VALIDATION_FAILED", "header_id")
     resume = client.post("/api/resumes", json={"name": "Teacher (Lincoln High)",
                                                "job_posting_id": posting_id})
     assert resume.status_code == 201
@@ -93,11 +98,6 @@ def test_start_a_resume_and_letter_for_a_posting(client: TestClient, db: Session
                                                      "job_posting_id": posting_id}).json()
     assert (letter["header_id"], letter["addressee"]) == (chosen.header_id,
                                                           "Lincoln High Hiring Team")
-    # No other header can be picked, there or on the version itself.
-    other = header(db, account_id, headline="Tutor")
-    assert error(client.post("/api/resumes", json={
-        "name": "Tutor", "job_posting_id": posting_id, "header_id": other.header_id})) == (
-        422, "VALIDATION_FAILED", "header_id")
     resume_id = resume.json()["resume_id"]
     assert error(client.put(f"/api/resumes/{resume_id}/header", json=SAM)) == (
         422, "VALIDATION_FAILED", "header_id")
@@ -106,11 +106,17 @@ def test_start_a_resume_and_letter_for_a_posting(client: TestClient, db: Session
         422, "VALIDATION_FAILED", "header_id")
     assert client.put(f"/api/resumes/{resume_id}", json={
         "name": "Teacher (Lincoln High)", "header_id": chosen.header_id}).status_code == 200
-    client.post("/api/resumes", json={"name": "Tutor", "job_posting_id": posting_id})
+    # One of each per posting: a second one, fresh or a copy, is refused and names the first.
+    second = client.post("/api/resumes", json={"name": "Tutor", "job_posting_id": posting_id})
+    assert error(second) == (409, "DUPLICATE", "job_posting_id")
+    assert '"Teacher (Lincoln High)"' in second.json()["error"]["message"]
+    assert error(client.post(f"/api/resumes/{resume_id}/copies", json={
+        "name": "Tutor", "job_posting_id": posting_id}))[:2] == (409, "DUPLICATE")
+    assert error(client.post("/api/cover-letters", json={
+        "name": "Again", "job_posting_id": posting_id}))[:2] == (409, "DUPLICATE")
     versions = client.get(f"/api/job-postings/{posting_id}").json()["versions"]
     assert [(use["kind"], use["name"]) for use in versions] == [
-        ("resume", "Teacher (Lincoln High)"), ("resume", "Tutor"),
-        ("cover_letter", "Teacher (Lincoln High)")]
+        ("resume", "Teacher (Lincoln High)"), ("cover_letter", "Teacher (Lincoln High)")]
 
 
 def test_changing_the_posting_header_changes_its_versions(client: TestClient, db: Session,

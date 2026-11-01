@@ -104,7 +104,7 @@ def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> Resu
     resume used (app/defaults.py). One for a posting uses the posting's header, so the posting
     needs one."""
     if body.job_posting_id is not None:
-        posting = posting_for_version(db, account_id, body.job_posting_id)
+        posting = posting_for_version(db, account_id, body.job_posting_id, RESUME)
         body.header_id = posting_header_id(posting, body.header_id)
     elif "header_id" not in body.model_fields_set:
         body.header_id = latest_header_id(db, account_id)
@@ -141,7 +141,7 @@ def copy_resume(resume_id: int, body: CopyIn, db: DbSession,
     original = get_owned(db, Resume, resume_id, account_id)
     header_id = original.header_id
     if body.job_posting_id is not None:
-        posting = posting_for_version(db, account_id, body.job_posting_id)
+        posting = posting_for_version(db, account_id, body.job_posting_id, RESUME)
         header_id = posting_header_id(posting)
     copy = Resume(account_id=account_id, name=body.name, header_id=header_id,
                   job_posting_id=body.job_posting_id, tone_set_id=original.tone_set_id,

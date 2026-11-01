@@ -121,7 +121,7 @@ describe('App', () => {
       vi.fn((url: string) => Promise.resolve(Response.json(url === '/api/job-postings/9' ? posting : []))),
     )
     renderAt('/postings/9')
-    expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High Application' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Job postings' })).toHaveAttribute('aria-current', 'true')
     await expectNoA11yViolations({ page: true })
   })

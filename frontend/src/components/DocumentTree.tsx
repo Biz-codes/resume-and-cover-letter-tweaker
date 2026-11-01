@@ -417,6 +417,23 @@ function SectionBody({
         emptyText="Nothing here yet."
         readOnly={readOnly}
         moreOptions
+        // An empty section opens it, to show the Add content form.
+        moreOpen={items.length === 0}
+        moreChildren={
+          library && (
+            <AddContent
+              section={section}
+              library={library}
+              onAdd={(addKind, itemId) => saved(api.placeItems(doc.id, section.row_id, [{ kind: addKind, item_id: itemId }]))}
+              onWrite={(item) =>
+                written(
+                  api.write(doc.id, section.row_id, item),
+                  `Added the new ${KIND_NAMES[item.kind].lower}. It's saved in your library too.`,
+                )
+              }
+            />
+          )
+        }
         // Each comes with its own defaults.
         onAdd={(keys) => saved(api.placeItems(doc.id, section.row_id, keys.map(fromKey)))}
         actions={versions.actions}
@@ -457,19 +474,6 @@ function SectionBody({
         }}
         onChange={(keys) => saved(api.setItems(doc.id, section.row_id, keys.map(fromKey)))}
       />
-      {library && (
-        <AddContent
-          section={section}
-          library={library}
-          onAdd={(addKind, itemId) => saved(api.placeItems(doc.id, section.row_id, [{ kind: addKind, item_id: itemId }]))}
-          onWrite={(item) =>
-            written(
-              api.write(doc.id, section.row_id, item),
-              `Added the new ${KIND_NAMES[item.kind].lower}. It's saved in your library too.`,
-            )
-          }
-        />
-      )}
     </>
   )
 }
@@ -562,6 +566,23 @@ export default function DocumentTree({
         emptyText={readOnly ? 'No sections.' : 'No sections yet. Add one to start.'}
         readOnly={readOnly}
         moreOptions
+        moreChildren={
+          <Writer
+            idBase="sections"
+            options={[
+              {
+                key: 'section',
+                button: 'New section title',
+                buttonLabel: 'New section title',
+                field: 'New section title',
+                name: 'title',
+                multiline: false,
+                submit: 'Add section',
+              },
+            ]}
+            onWrite={(_, title) => written(api.writeSection(doc.id, title), `Added the new section "${title.trim()}".`)}
+          />
+        }
         actions={sectionVersions.actions}
         under={sectionVersions.under}
         details={(item) => {

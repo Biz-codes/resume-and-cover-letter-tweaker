@@ -155,6 +155,10 @@ class WrittenSkill(BaseModel):
     skill_name: RequiredText(100)
 
 
+class WrittenSection(BaseModel):
+    title: RequiredText(100)
+
+
 class WrittenBullet(BaseModel):
     content: RequiredText()
     # A new version of a bullet shown under this role or project: the new one takes its place
@@ -409,6 +413,21 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                                           .where(under).order_by(table.c.position)).all():
             if section_id not in before:
                 fill_section(db, kind, doc_id, row, section_id, account_id)
+        return changed(db, doc)
+
+    @router.post("/{doc_id}/sections/written", status_code=status.HTTP_201_CREATED)
+    def write_section(doc_id: int, body: WrittenSection, db: DbSession, account_id: AccountId):
+        """A new section, saved to the library and shown last here. It lists nothing yet, so it
+        starts empty. Its title must be new (DUPLICATE)."""
+        doc = editable(db, doc_id, account_id)
+        check_unique_name(db, Section.title, account_id, body.title, "section")
+        section = Section(account_id=account_id, title=body.title)
+        db.add(section)
+        db.flush()
+        table = kind.section.__table__
+        last = db.scalar(select(func.max(table.c.position)).where(table.c[kind.doc_id] == doc_id))
+        db.execute(insert(table).values({kind.doc_id: doc_id, "section_id": section.id,
+                                         "position": (last or 0) + 1}))
         return changed(db, doc)
 
     @router.put("/{doc_id}/sections/{row_id}/items")
