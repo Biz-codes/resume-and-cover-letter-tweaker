@@ -106,7 +106,7 @@ Note: a new resume or cover letter for a posting needs the posting to have a hea
 | created_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time interview added to db     |
 | updated_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time interview last updated    |
 
-Note: one interview can cover several open positions at the same organization, so interviews link to job postings through `job_posting_interview` instead of storing a `job_posting_id`. A posting's interviews are shown in date order.
+Note: one interview can cover several open positions at the same organization, so interviews link to job postings through `job_posting_interview` instead of storing a `job_posting_id`. A posting's interviews are shown in date order. An interview is reached through a posting it's linked to and stays linked to that one, so it always has at least one posting (a posting it isn't linked to returns `NOT_FOUND`).
 
 ### job_posting_interview
 | Column         | Type    | Constraints                                                       | Description               |

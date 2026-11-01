@@ -24,6 +24,11 @@ const POSTING = {
   updated_at: null,
   suggested_header: null,
   lone_interviews: 0,
+  rejected_on: null,
+  hired_on: null,
+  contacts: null,
+  interviews: [],
+  same_organization: [],
 }
 // Nothing started for it yet.
 const EMPTY = { ...POSTING, versions: [] }
@@ -241,6 +246,28 @@ describe('PostingPage', () => {
     renderPage()
     expect(screen.getByText('Loading…')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Job posting' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('records the application, and an interview, from its tracking section', async () => {
+    const tracked = { ...POSTING, applied_on: '2026-10-01', locked: true }
+    const interviewed = { ...tracked, interviews: [{ interview_id: 1, interview_on: '2026-10-05', notes: null, also_for: [] }] }
+    stub(POSTING, {
+      'PUT /api/job-postings/9/tracking': [{ status: 200, body: tracked }],
+      'POST /api/job-postings/9/interviews': [{ status: 201, body: interviewed }],
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Application tracking' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit tracking' }))
+    fireEvent.change(screen.getByLabelText('Applied on'), { target: { value: '2026-10-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved the tracking details.'))
+    expect(await screen.findByText('You applied to this posting, so its resumes and cover letters are a record of what you sent.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add interview' }))
+    fireEvent.change(screen.getByLabelText('Date (required)'), { target: { value: '2026-10-05' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added the interview.'))
+    expect(screen.getByRole('button', { name: 'Edit interview on October 5, 2026' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 })

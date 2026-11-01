@@ -19,6 +19,11 @@ const POSTING: PostingDetail = {
   updated_at: null,
   suggested_header: null,
   lone_interviews: 0,
+  rejected_on: null,
+  hired_on: null,
+  contacts: null,
+  interviews: [],
+  same_organization: [],
 }
 const doc = (id: number, name: string, organization?: string): Doc => ({
   id,

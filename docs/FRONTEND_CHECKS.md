@@ -16,7 +16,7 @@ Cascades that remove more than the user might expect:
 - **Resume / cover letter**: removes only its own selections. Library items are kept. Versions copied from it stay; their `based_on_resume_id` / `based_on_letter_id` is set to empty.
 - **Header**: job postings, resumes, and cover letters that use it are kept; their `header_id` is set to empty, so they show no header until the user picks another. List them in the warning.
 - **Job posting**: deletes every resume and cover letter made for it, along with their selections. Its interviews that no other posting is linked to are deleted too (the app does this in the same transaction); interviews shared with another posting stay. List both in the warning.
-- **Interview**: removed from every posting it was linked to.
+- **Interview**: removed from every posting it was linked to. List the other postings in the warning.
 - **Sign-off**: cover letters that used it are kept; their `sign_off_id` is set to empty, so they have no closing until the user picks another.
 - **Tone** (`tone_set`): deletes its tone rules. Resumes and cover letters that used it are kept; their `tone_set_id` is set to empty.
 - **Account**: deletes everything the account owns.
@@ -49,7 +49,7 @@ Recording the date a posting was applied to (`job_posting.applied_on`) marks its
 - **No edits:** their fields, sections, and selections can't be changed. Show them read-only and offer "Make a copy" instead: a new base version, or a version for another posting. The backend returns `VERSION_LOCKED` if a change is sent anyway.
 - **Library edits don't reach them:** a resume or cover letter stores only which library items it picked (their ids, in its join tables), and prints each item's text and fields (a project's title, `done_for`, and dates, for example) from the library row. So editing a library item that a locked version uses (a section title, sentence, bullet, skill, skill category, role, project, education entry, sign-off, or header) saves the change as a new row instead of changing the original. The new row is listed under the same parents and lists the same children as the original. Resumes and cover letters that aren't locked switch to the new row; locked ones keep the original. Headers, roles, and projects are the exceptions: see "Headers" and "Changing a role or project" below.
 - **Deleting is still allowed**, after a warning: deleting a locked version, or a library item a locked version uses, changes the record of what was sent. Say so in the delete warning.
-- **Unlocking:** clearing `applied_on` unlocks the posting's versions. Warn the user first.
+- **Unlocking:** clearing `applied_on` unlocks the posting's versions. Warn the user first, in the tracking form, before anything saves. Changing the date to another date doesn't warn, since nothing unlocks.
 - **Renaming** a locked version (`name`) is allowed, since the name is only a label. Changing any of its other fields (header, tone, a letter's greeting, sign-off, or signature name) returns `VERSION_LOCKED`.
 
 ## Changing a role or project

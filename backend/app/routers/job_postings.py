@@ -1,11 +1,11 @@
 """Job postings, entered by hand from a pasted description: list, read, create, edit, pick the
-header, and delete.
+header, track the application, and delete.
 
 Everything for an application hangs off its posting (docs/APP_FLOW.md, "User flow"): its
 header, which all its resumes and cover letters use, and those versions themselves,
 which are started from app/routers/resumes.py and cover_letters.py with a job_posting_id.
-Fetching a posting from its url comes in phase 5; tracking the application (applied date,
-contacts, interviews) in the next step.
+Fetching a posting from its url comes in phase 5. Its interviews are added and changed in
+app/routers/interviews.py.
 """
 
 from datetime import date, datetime
@@ -17,12 +17,12 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
-from app.documents import latest_header_id
+from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.routers.headers import FIELDS as HEADER_FIELDS
 from app.routers.headers import HeaderIn, find_identical
-from app.schemas import RequiredText
+from app.schemas import OptionalText, RequiredText
 from app.usage import Use
 
 router = APIRouter(prefix="/api/job-postings", tags=["job postings"])
@@ -33,6 +33,21 @@ class PostingIn(BaseModel):
     organization: RequiredText(100)
     role_title: RequiredText(100)
     description: RequiredText()
+
+
+class TrackingIn(BaseModel):
+    applied_on: date | None = None
+    rejected_on: date | None = None
+    hired_on: date | None = None
+    contacts: OptionalText()
+
+
+class InterviewOut(BaseModel):
+    interview_id: int
+    interview_on: date
+    notes: str | None
+    # The other postings it covered.
+    also_for: list[PostingRef]
 
 
 class PostingOut(PostingIn):
@@ -47,6 +62,13 @@ class PostingOut(PostingIn):
 
 
 class PostingDetail(PostingOut):
+    rejected_on: date | None
+    hired_on: date | None
+    contacts: str | None
+    # In date order.
+    interviews: list[InterviewOut]
+    # The organization's other postings, which an interview can also cover.
+    same_organization: list[PostingRef]
     # Until the posting has a header: the values to suggest (docs/FRONTEND_CHECKS.md, "Headers").
     suggested_header: HeaderIn | None
     # Interviews no other posting is linked to, which deleting the posting deletes too.
@@ -78,6 +100,36 @@ def to_out(db: Session, postings: list[JobPosting]) -> list[PostingOut]:
             for posting in postings]
 
 
+def posting_ref(posting: JobPosting) -> PostingRef:
+    return PostingRef(job_posting_id=posting.job_posting_id, organization=posting.organization,
+                      role_title=posting.role_title)
+
+
+def interviews(db: Session, posting_id: int) -> list[InterviewOut]:
+    links = JobPostingInterview
+    rows = db.scalars(select(Interview).join(links, links.interview_id == Interview.interview_id)
+                      .where(links.job_posting_id == posting_id)
+                      .order_by(Interview.interview_on, Interview.interview_id)).all()
+    also: dict[int, list[PostingRef]] = {row.interview_id: [] for row in rows}
+    for interview_id, posting in db.execute(
+            select(links.interview_id, JobPosting)
+            .join(JobPosting, JobPosting.job_posting_id == links.job_posting_id)
+            .where(links.interview_id.in_(also), links.job_posting_id != posting_id)
+            .order_by(JobPosting.job_posting_id)):
+        also[interview_id].append(posting_ref(posting))
+    return [InterviewOut(interview_id=row.interview_id, interview_on=row.interview_on,
+                         notes=row.notes, also_for=also[row.interview_id]) for row in rows]
+
+
+def same_organization(db: Session, posting: JobPosting) -> list[PostingRef]:
+    return [posting_ref(other) for other in db.scalars(
+        select(JobPosting)
+        .where(JobPosting.account_id == posting.account_id,
+               func.lower(JobPosting.organization) == posting.organization.lower(),
+               JobPosting.job_posting_id != posting.job_posting_id)
+        .order_by(JobPosting.job_posting_id))]
+
+
 def lone_interviews(db: Session, posting_id: int) -> list[int]:
     """The interviews linked to this posting and no other."""
     links = JobPostingInterview
@@ -102,6 +154,9 @@ def suggested_header(db: Session, posting: JobPosting) -> HeaderIn | None:
 def detail(db: Session, posting: JobPosting) -> PostingDetail:
     return PostingDetail(
         **to_out(db, [posting])[0].model_dump(),
+        rejected_on=posting.rejected_on, hired_on=posting.hired_on, contacts=posting.contacts,
+        interviews=interviews(db, posting.job_posting_id),
+        same_organization=same_organization(db, posting),
         suggested_header=None if posting.header_id else suggested_header(db, posting),
         lone_interviews=len(lone_interviews(db, posting.job_posting_id)))
 
@@ -137,6 +192,18 @@ def create_posting(body: PostingIn, db: DbSession, account_id: AccountId) -> Pos
 def update_posting(posting_id: int, body: PostingIn, db: DbSession,
                    account_id: AccountId) -> PostingDetail:
     """Replaces the url, organization, role title, and description."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    for name, value in body.model_dump().items():
+        setattr(posting, name, value)
+    return refreshed(db, posting)
+
+
+@router.put("/{posting_id}/tracking")
+def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
+                 account_id: AccountId) -> PostingDetail:
+    """Replaces the applied, rejected, and hired dates and the contacts, which can change at any
+    time. An applied date locks the posting's versions, and clearing it unlocks them
+    (docs/FRONTEND_CHECKS.md, "Sent versions are locked")."""
     posting = get_owned(db, JobPosting, posting_id, account_id)
     for name, value in body.model_dump().items():
         setattr(posting, name, value)

@@ -28,6 +28,39 @@ export interface PostingDetail extends Posting {
   suggested_header: HeaderFields | null
   // Interviews no other posting is linked to, which deleting the posting deletes too.
   lone_interviews: number
+  rejected_on: string | null
+  hired_on: string | null
+  contacts: string | null
+  // In date order.
+  interviews: Interview[]
+  // The organization's other postings, which an interview can also cover.
+  same_organization: PostingRef[]
+}
+
+export interface TrackingFields {
+  applied_on: string | null
+  rejected_on: string | null
+  hired_on: string | null
+  contacts: string | null
+}
+
+export interface InterviewFields {
+  interview_on: string | null
+  notes: string | null
+}
+
+export interface PostingRef {
+  job_posting_id: number
+  organization: string
+  role_title: string
+}
+
+export interface Interview {
+  interview_id: number
+  interview_on: string
+  notes: string | null
+  // The other postings it covered.
+  also_for: PostingRef[]
 }
 
 // The fields of the new posting and edit forms.
@@ -38,6 +71,24 @@ export const POSTING_FIELDS: Field<PostingFields>[] = [
   { name: 'role_title', label: 'Role title', required: true },
   { name: 'description', label: 'Job description (paste it in)', required: true, multiline: true },
 ]
+
+export const TRACKING_FIELDS: Field<TrackingFields>[] = [
+  { name: 'applied_on', label: 'Applied on', type: 'date' },
+  { name: 'rejected_on', label: 'Turned down on', type: 'date' },
+  { name: 'hired_on', label: 'Hired on', type: 'date' },
+  { name: 'contacts', label: 'Contacts', multiline: true },
+]
+
+export const INTERVIEW_FIELDS: Field<InterviewFields>[] = [
+  { name: 'interview_on', label: 'Date', type: 'date', required: true },
+  { name: 'notes', label: 'Notes', multiline: true },
+]
+
+// "2026-10-05" → "October 5, 2026". Built from its parts, so the time zone can't shift the day.
+export function showDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { dateStyle: 'long' })
+}
 
 // Whether a posting's url field is a web address to link to, not a contact.
 export const isWebAddress = (url: string) => /^https?:\/\//i.test(url.trim())
@@ -56,6 +107,17 @@ export const postingsApi = {
   // The posting and all its resumes and cover letters point at the saved header with exactly
   // these values, or a new one. An applied posting returns VERSION_LOCKED.
   setHeader: (id: number, fields: HeaderFields) => api.put<PostingDetail>(`/job-postings/${id}/header`, fields),
+  // Replaces the dates and contacts, at any time. An applied date locks the posting's versions,
+  // and clearing it unlocks them.
+  setTracking: (id: number, fields: TrackingFields) =>
+    api.put<PostingDetail>(`/job-postings/${id}/tracking`, fields),
+  // An interview, and the other postings it covered. It stays linked to this one.
+  addInterview: (id: number, fields: InterviewFields, also: number[]) =>
+    api.post<PostingDetail>(`/job-postings/${id}/interviews`, { ...fields, also_posting_ids: also }),
+  updateInterview: (id: number, interviewId: number, fields: InterviewFields, also: number[]) =>
+    api.put<PostingDetail>(`/job-postings/${id}/interviews/${interviewId}`, { ...fields, also_posting_ids: also }),
+  // Removes it from every posting it's linked to.
+  deleteInterview: (id: number, interviewId: number) => api.delete(`/job-postings/${id}/interviews/${interviewId}`),
   // Deletes its resumes and cover letters, and the interviews only it is linked to.
   delete: (id: number) => api.delete(`/job-postings/${id}`),
 }

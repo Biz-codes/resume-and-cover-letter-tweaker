@@ -8,7 +8,7 @@ export interface Field<T> {
   name: keyof T & string
   label: string
   required?: boolean
-  type?: 'text' | 'url'
+  type?: 'text' | 'url' | 'date'
   // A textarea, for text longer than a line (an education entry's details).
   multiline?: boolean
 }

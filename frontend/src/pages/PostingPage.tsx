@@ -4,6 +4,7 @@
 // from a copy (StartVersion). A new posting picks its header first, from the suggestion, with
 // that section open, since its versions use it; once picked, the section starts closed. Once the
 // posting is applied to, its versions are a record of what was sent, so no new ones start here.
+// Below them, its tracking: the dates, contacts, and interviews.
 // See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
 // docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
@@ -18,12 +19,15 @@ import {
   postingsApi,
   type PostingDetail,
   type PostingFields,
+  type TrackingFields,
 } from '../api/postings'
 import ConfirmDelete from '../components/ConfirmDelete'
 import Disclosure from '../components/Disclosure'
 import FieldsForm from '../components/FieldsForm'
 import HeaderFields from '../components/HeaderFields'
+import Interviews from '../components/Interviews'
 import StartVersion from '../components/StartVersion'
+import Tracking from '../components/Tracking'
 import { PAGE_HEADING_ID, useFocusLater } from '../hooks/useFocusLater'
 import { usePageTitle } from '../hooks/usePageTitle'
 import type { ListState } from './DocumentsPage'
@@ -107,6 +111,11 @@ export function PostingPage({ id }: { id: number }) {
     setNotice("Saved the application header. This posting's resumes and cover letters use it.")
     // "Use this header" is gone once the header is picked, so focus moves on to the next step.
     if (first) focusLater('start-resume')
+  }
+
+  async function saveTracking(fields: TrackingFields) {
+    setPosting(await postingsApi.setTracking(id, fields))
+    setNotice('Saved the tracking details.')
   }
 
   async function start(kind: DocKind, name: string, fromId: number | null) {
@@ -261,6 +270,16 @@ export function PostingPage({ id }: { id: number }) {
             )
           })}
 
+          <Disclosure title="Application tracking" heading={3}>
+            <Tracking posting={posting} onSave={saveTracking} />
+            <Interviews
+              posting={posting}
+              onChanged={(updated, message) => {
+                setPosting(updated)
+                setNotice(message)
+              }}
+            />
+          </Disclosure>
         </>
       )}
     </section>

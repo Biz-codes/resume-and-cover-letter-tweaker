@@ -210,3 +210,126 @@ def test_delete_a_posting_with_its_versions_and_lone_interviews(client: TestClie
     assert db.scalars(select(Resume.name)).all() == []
     assert db.scalars(select(Interview.interview_id)).all() == [shared.interview_id]
     assert db.get(JobPosting, kept.job_posting_id) is not None
+
+
+TRACKING = {"applied_on": "2026-10-01", "rejected_on": None, "hired_on": None,
+            "contacts": " Pat Lee, hiring manager "}
+
+
+def test_applying_locks_the_versions_and_clearing_unlocks_them(client: TestClient, db: Session,
+                                                               account_id: int):
+    new = created(client)
+    url = f"/api/job-postings/{new['job_posting_id']}"
+    client.put(f"{url}/header", json={"full_name": "Sam Rivera"})
+    resume = client.post("/api/resumes", json={"name": "Lincoln",
+                                               "job_posting_id": new["job_posting_id"]}).json()
+    resume_url = f"/api/resumes/{resume['resume_id']}"
+    change = {"name": "Lincoln", "header_id": resume["header_id"], "tone_set_id": None}
+
+    tracked = client.put(f"{url}/tracking", json=TRACKING).json()
+    assert (tracked["applied_on"], tracked["contacts"], tracked["locked"]) == (
+        "2026-10-01", "Pat Lee, hiring manager", True)
+    assert client.get(resume_url).json()["locked"] is True
+    assert error(client.put(f"{resume_url}/sections", json={"section_ids": []}))[1] == (
+        "VERSION_LOCKED")
+
+    # What happened next can still be recorded, and the applied date changed.
+    later = client.put(f"{url}/tracking", json={
+        **TRACKING, "applied_on": "2026-10-02", "rejected_on": "2026-11-01"}).json()
+    assert (later["applied_on"], later["rejected_on"], later["locked"]) == (
+        "2026-10-02", "2026-11-01", True)
+
+    cleared = client.put(f"{url}/tracking", json={"contacts": " "}).json()
+    assert (cleared["applied_on"], cleared["rejected_on"], cleared["contacts"]) == (
+        None, None, None)
+    assert cleared["locked"] is False
+    assert client.put(resume_url, json=change).status_code == 200
+
+
+def test_tracking_refuses_a_bad_date_and_another_accounts_posting(client: TestClient, db: Session,
+                                                                  account_id: int):
+    url = f"/api/job-postings/{created(client)['job_posting_id']}/tracking"
+    assert error(client.put(url, json={"applied_on": "soon"})) == (
+        422, "VALIDATION_FAILED", "applied_on")
+    theirs = posting(db, add(db, Account()).account_id, sent=False)
+    response = client.put(f"/api/job-postings/{theirs.job_posting_id}/tracking", json=TRACKING)
+    assert error(response)[1] == "NOT_FOUND"
+
+
+def other_posting(client: TestClient, role_title: str, organization: str = "lincoln high") -> dict:
+    return client.post("/api/job-postings", json={
+        **NEW, "role_title": role_title, "organization": organization}).json()
+
+
+def test_interviews_are_shared_across_postings(client: TestClient, db: Session, account_id: int):
+    first = created(client)
+    second = other_posting(client, "Debate Coach")
+    other_posting(client, "Librarian", "Elsewhere")
+    first_id, second_id = first["job_posting_id"], second["job_posting_id"]
+    url = f"/api/job-postings/{first_id}"
+    # Matched ignoring capitals.
+    assert [item["role_title"] for item in client.get(url).json()["same_organization"]] == [
+        "Debate Coach"]
+
+    later = client.post(f"{url}/interviews", json={"interview_on": "2026-10-09"})
+    assert later.status_code == 201
+    shown = client.post(f"{url}/interviews", json={
+        "interview_on": "2026-10-05", "notes": " First round ",
+        "also_posting_ids": [second_id]}).json()
+    assert [item["interview_on"] for item in shown["interviews"]] == ["2026-10-05", "2026-10-09"]
+    interview = shown["interviews"][0]
+    assert (interview["notes"], interview["also_for"][0]["job_posting_id"]) == (
+        "First round", second_id)
+    assert shown["lone_interviews"] == 1
+
+    # The other posting shows it too, and can change it.
+    other_url = f"/api/job-postings/{second_id}"
+    theirs = client.get(other_url).json()["interviews"]
+    assert [item["also_for"][0]["job_posting_id"] for item in theirs] == [first_id]
+    edited = client.put(f"{other_url}/interviews/{interview['interview_id']}", json={
+        "interview_on": "2026-10-06", "notes": "Second round"}).json()
+    assert edited["interviews"][0]["also_for"] == []
+    assert len(client.get(url).json()["interviews"]) == 1
+
+    # An interview can't be reached through a posting it's no longer linked to.
+    gone = f"{url}/interviews/{interview['interview_id']}"
+    assert error(client.delete(gone))[1] == "NOT_FOUND"
+    assert client.delete(f"{other_url}/interviews/{interview['interview_id']}").status_code == 204
+    assert db.get(Interview, interview["interview_id"]) is None
+
+
+def test_deleting_a_shared_interview_removes_it_from_every_posting(client: TestClient, db: Session,
+                                                                   account_id: int):
+    first, second = created(client), other_posting(client, "Debate Coach")
+    first_url = f"/api/job-postings/{first['job_posting_id']}"
+    shown = client.post(f"{first_url}/interviews", json={
+        "interview_on": "2026-10-05", "also_posting_ids": [second["job_posting_id"]]}).json()
+    interview_id = shown["interviews"][0]["interview_id"]
+    assert client.delete(f"{first_url}/interviews/{interview_id}").status_code == 204
+    assert client.get(f"/api/job-postings/{second['job_posting_id']}").json()["interviews"] == []
+
+
+def test_interviews_stay_open_after_applying(client: TestClient, db: Session, account_id: int):
+    applied = posting(db, account_id, sent=True)
+    url = f"/api/job-postings/{applied.job_posting_id}/interviews"
+    assert client.post(url, json={"interview_on": "2026-10-05"}).status_code == 201
+
+
+def test_interview_links_are_checked(client: TestClient, db: Session, account_id: int):
+    new = created(client)
+    url = f"/api/job-postings/{new['job_posting_id']}/interviews"
+    theirs = posting(db, add(db, Account()).account_id, sent=False)
+    day = {"interview_on": "2026-10-05"}
+    assert error(client.post(url, json={"notes": "No date"})) == (
+        422, "VALIDATION_FAILED", "interview_on")
+    assert error(client.post(url, json={**day, "also_posting_ids": [999999]})) == (
+        404, "NOT_FOUND", "also_posting_ids")
+    assert error(client.post(url, json={
+        **day, "also_posting_ids": [theirs.job_posting_id]})) == (
+        422, "CROSS_ACCOUNT_LINK", "also_posting_ids")
+    assert error(client.post(url, json={
+        **day, "also_posting_ids": [new["job_posting_id"]]})) == (
+        409, "DUPLICATE", "also_posting_ids")
+    assert client.get(url.removesuffix("/interviews")).json()["interviews"] == []
+    assert error(client.post(f"/api/job-postings/{theirs.job_posting_id}/interviews",
+                             json=day))[1] == "NOT_FOUND"
