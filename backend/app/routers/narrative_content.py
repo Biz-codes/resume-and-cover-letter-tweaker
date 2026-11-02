@@ -7,14 +7,15 @@ or cover letter stores only which excerpts it picked (resume_narrative_content,
 cover_letter_narrative_content), so editing an excerpt a sent version uses saves a new excerpt,
 listed right after the original in its sections. Sent versions keep the original; unsent ones
 switch to the new one. An excerpt no sent version uses is edited in place
-(docs/FRONTEND_CHECKS.md, "Sent versions are locked").
+(docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is listed the
+same way, and nothing switches to it.
 
 Creating or editing an excerpt can also choose every section that lists it. Those lists only
 drive suggestions, so changing them never makes a new excerpt; when a text edit does, the
 sections chosen apply to the new excerpt, and the original keeps its own.
 """
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -74,6 +75,17 @@ def list_under(db: Session, excerpt: NarrativeContent, section_ids: list[int]) -
                 section_ids)
 
 
+def new_version(db: Session, original: NarrativeContent, body: NarrativeIn,
+                account_id: int) -> NarrativeContent:
+    """A new excerpt with this text, listed right after the original in its sections."""
+    version = NarrativeContent(account_id=account_id, content=body.content)
+    db.add(version)
+    db.flush()
+    list_beside(db, SectionNarrativeContent, "section_id", "content_id", original.content_id,
+                version.content_id)
+    return version
+
+
 @router.get("")
 def list_narrative(db: DbSession, account_id: AccountId) -> list[NarrativeOut]:
     """Oldest first."""
@@ -113,17 +125,25 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
         if not used_by_sent_version(db, NARRATIVE_LINKS, content_id):
             excerpt.content = body.content
         else:
-            saved = NarrativeContent(account_id=account_id, content=body.content)
-            db.add(saved)
-            db.flush()
-            list_beside(db, SectionNarrativeContent, "section_id", "content_id", content_id,
-                        saved.content_id)
+            saved = new_version(db, excerpt, body, account_id)
             switch_unsent(db, NARRATIVE_LINKS, content_id, saved.content_id)
     if body.section_ids is not None:
         list_under(db, saved, body.section_ids)
     db.flush()
     db.refresh(saved)
     return one_out(db, saved)
+
+
+@router.post("/{content_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(content_id: int, body: NarrativeIn, response: Response, db: DbSession,
+                account_id: AccountId) -> NarrativeOut:
+    """Adds another version of the excerpt on purpose. Nothing switches to it. With the text
+    unchanged, the original is returned (status 200) instead of adding a copy."""
+    original = get_owned(db, NarrativeContent, content_id, account_id)
+    if original.content == body.content:
+        response.status_code = status.HTTP_200_OK
+        return one_out(db, original)
+    return one_out(db, new_version(db, original, body, account_id))
 
 
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)

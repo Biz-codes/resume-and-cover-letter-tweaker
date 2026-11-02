@@ -336,6 +336,8 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 
 Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
 
+Note: names are unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`), whether a tone set is added, renamed, or saved as a new version, which copies its rules. See "Versions in the library" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+
 ### tone_rule
 | Column       | Type         | Constraints                                                 | Description                                           |
 |--------------|--------------|-------------------------------------------------------------|-------------------------------------------------------|

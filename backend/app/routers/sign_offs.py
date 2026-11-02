@@ -3,11 +3,11 @@
 A cover letter points to its sign-off (sign_off_id) and prints its text. So editing a sign-off
 a sent cover letter uses saves a new sign-off; sent letters keep the original and unsent ones
 switch to the new one. A sign-off no sent letter uses is edited in place
-(docs/FRONTEND_CHECKS.md, "Sent versions are locked"). Deleting one leaves the letters that
-used it with no closing.
+(docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is a new
+sign-off nothing switches to. Deleting one leaves the letters that used it with no closing.
 """
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -43,6 +43,13 @@ def one_out(db: Session, sign_off: SignOff) -> SignOffOut:
     return to_out(db, [sign_off])[0]
 
 
+def new_version(db: Session, body: SignOffIn, account_id: int) -> SignOff:
+    version = SignOff(account_id=account_id, text=body.text)
+    db.add(version)
+    db.flush()
+    return version
+
+
 @router.get("")
 def list_sign_offs(db: DbSession, account_id: AccountId) -> list[SignOffOut]:
     """Oldest first."""
@@ -58,10 +65,7 @@ def get_one(sign_off_id: int, db: DbSession, account_id: AccountId) -> SignOffOu
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_sign_off(body: SignOffIn, db: DbSession, account_id: AccountId) -> SignOffOut:
-    sign_off = SignOff(account_id=account_id, text=body.text)
-    db.add(sign_off)
-    db.flush()
-    return one_out(db, sign_off)
+    return one_out(db, new_version(db, body, account_id))
 
 
 @router.put("/{sign_off_id}")
@@ -81,11 +85,21 @@ def update_sign_off(sign_off_id: int, body: SignOffIn, db: DbSession,
         db.refresh(sign_off)
         return one_out(db, sign_off)
 
-    replacement = SignOff(account_id=account_id, text=body.text)
-    db.add(replacement)
-    db.flush()
+    replacement = new_version(db, body, account_id)
     switch_unsent_column(db, CoverLetter.sign_off_id, sign_off_id, replacement.sign_off_id)
     return one_out(db, replacement)
+
+
+@router.post("/{sign_off_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(sign_off_id: int, body: SignOffIn, response: Response, db: DbSession,
+                account_id: AccountId) -> SignOffOut:
+    """Adds another version of the sign-off on purpose. Nothing switches to it. With the text
+    unchanged, the original is returned (status 200) instead of adding a copy."""
+    original = get_owned(db, SignOff, sign_off_id, account_id)
+    if original.text == body.text:
+        response.status_code = status.HTTP_200_OK
+        return one_out(db, original)
+    return one_out(db, new_version(db, body, account_id))
 
 
 @router.delete("/{sign_off_id}", status_code=status.HTTP_204_NO_CONTENT)

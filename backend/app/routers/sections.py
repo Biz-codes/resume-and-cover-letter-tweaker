@@ -2,7 +2,8 @@
 
 The five built-in sections are shared by every account and can't be renamed or deleted.
 Renaming a section that a sent version uses saves a new section (docs/FRONTEND_CHECKS.md,
-"Sent versions are locked").
+"Sent versions are locked"). A new version (of any section, built-in ones too) has a new title
+and the same lists. Titles are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId
 from app.db import DbSession
+from app.defaults import SECTION_LISTS
+from app.documents import LIBRARY
 from app.errors import AppError, ErrorCode
 from app.library import check_ids, check_unique_name, copy_children, set_children
 from app.models import (
@@ -46,11 +49,6 @@ from app.schemas import RequiredText
 from app.usage import SECTION_LINKS, Use, switch_unsent, used_by_sent_version, uses
 
 router = APIRouter(prefix="/api/sections", tags=["sections"])
-
-# Every library list a section has, copied to a new version of the section.
-SECTION_LISTS = [SectionNarrativeContent, SectionSkillCategory, SectionExperience,
-                 SectionProject, SectionBulletPoint, SectionEducation]
-
 
 class SectionIn(BaseModel):
     title: RequiredText(100)
@@ -118,6 +116,19 @@ def protect_built_in(section: Section, action: str) -> None:
     if section.account_id is None:
         raise AppError(ErrorCode.BUILT_IN_PROTECTED,
                        f'"{section.title}" is built in and can\'t be {action}.')
+
+
+def new_version(db: Session, original: Section, body: SectionIn, account_id: int) -> Section:
+    """A new section with this title and the same lists (only the account's items, for a
+    built-in section). The caller checks the title is new."""
+    version = Section(account_id=account_id, title=body.title)
+    db.add(version)
+    db.flush()
+    for entry_kind, link in SECTION_LISTS.items():
+        library, item_column, _ = LIBRARY[entry_kind]
+        copy_children(db, link, "section_id", original.id, version.id,
+                      own=(library, item_column, account_id))
+    return version
 
 
 def categories_by_section(db: Session, section_ids: list[int],
@@ -204,13 +215,19 @@ def rename_section(section_id: int, body: SectionIn, db: DbSession,
         db.refresh(section)
         return one_out(db, section, account_id)
 
-    replacement = Section(account_id=account_id, title=body.title)
-    db.add(replacement)
-    db.flush()
-    for link in SECTION_LISTS:
-        copy_children(db, link, "section_id", section_id, replacement.id)
+    replacement = new_version(db, section, body, account_id)
     switch_unsent(db, SECTION_LINKS, section_id, replacement.id)
     return one_out(db, replacement, account_id)
+
+
+@router.post("/{section_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(section_id: int, body: SectionIn, db: DbSession,
+                account_id: AccountId) -> SectionOut:
+    """Adds another version of the section on purpose, with a new title (DUPLICATE otherwise).
+    Nothing switches to it."""
+    original = get_section(db, section_id, account_id)
+    check_unique_name(db, Section.title, account_id, body.title, "section")
+    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.put("/{section_id}/narrative-content")

@@ -82,6 +82,17 @@ def find_identical(db: Session, account_id: int, values: HeaderIn) -> Header | N
     ).first()
 
 
+def find_or_add(db: Session, account_id: int, values: HeaderIn) -> tuple[Header, bool]:
+    """The header with exactly these values, added if there's none. True when it was added."""
+    existing = find_identical(db, account_id, values)
+    if existing is not None:
+        return existing, False
+    header = Header(account_id=account_id, **values.model_dump(include=set(FIELDS)))
+    db.add(header)
+    db.flush()
+    return header, True
+
+
 def used_by_sent_version(db: Session, header_id: int) -> bool:
     return any(use.locked for use in uses(db, [header_id])[header_id])
 
@@ -105,14 +116,20 @@ def get_header(header_id: int, db: DbSession, account_id: AccountId) -> HeaderOu
 def create_header(body: HeaderIn, response: Response, db: DbSession,
                   account_id: AccountId) -> HeaderOut:
     """Adds a header, or returns the identical one that already exists (status 200)."""
-    existing = find_identical(db, account_id, body)
-    if existing is not None:
+    header, added = find_or_add(db, account_id, body)
+    if not added:
         response.status_code = status.HTTP_200_OK
-        return one_out(db, existing)
-    header = Header(account_id=account_id, **body.model_dump())
-    db.add(header)
-    db.flush()
     return one_out(db, header)
+
+
+@router.post("/{header_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(header_id: int, body: HeaderIn, response: Response, db: DbSession,
+                account_id: AccountId) -> HeaderOut:
+    """Adds another version of the header on purpose. Nothing switches to it. When a header
+    with exactly these values exists (the original, with nothing changed), it's returned
+    (status 200) instead."""
+    get_owned(db, Header, header_id, account_id)
+    return create_header(body, response, db, account_id)
 
 
 @router.put("/{header_id}")
@@ -135,12 +152,7 @@ def update_header(header_id: int, body: HeaderIn, db: DbSession,
         db.refresh(header)
         return one_out(db, header)
 
-    replacement = find_identical(db, account_id, body)
-    if replacement is None:
-        replacement = Header(account_id=account_id, **body.model_dump())
-        db.add(replacement)
-        db.flush()
-    return one_out(db, replacement)
+    return one_out(db, find_or_add(db, account_id, body)[0])
 
 
 @router.delete("/{header_id}", status_code=status.HTTP_204_NO_CONTENT)

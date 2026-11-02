@@ -2,7 +2,9 @@
 
 The built-in "Other" category is shared by every account and can't be renamed or deleted.
 Deleting a category moves its skills and its resume and cover letter selections under
-"Other" first (docs/FRONTEND_CHECKS.md, "Deleting a skill category").
+"Other" first (docs/FRONTEND_CHECKS.md, "Deleting a skill category"). A new version (of any
+category, "Other" too) has a new name and lists the same skills, right after the original in its
+sections. Names are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -118,6 +120,21 @@ def one_out(db: Session, category: SkillCategory, account_id: int) -> CategoryOu
     return to_out(db, [category], account_id)[0]
 
 
+def new_version(db: Session, original: SkillCategory, body: CategoryIn,
+                account_id: int) -> SkillCategory:
+    """A new category with this name, listed right after the original in its sections and
+    listing the same skills (only the account's, for "Other"). The caller checks the name is
+    new."""
+    version = SkillCategory(account_id=account_id, category_name=body.category_name)
+    db.add(version)
+    db.flush()
+    list_beside(db, SectionSkillCategory, "section_id", "category_id", original.category_id,
+                version.category_id)
+    copy_children(db, SkillCategorySkill, "category_id", original.category_id,
+                  version.category_id, own=(Skill, "skill_id", account_id))
+    return version
+
+
 def uncategorized(db: Session, skill_ids: list[int]) -> list[int]:
     """The skills no category lists, in the order given."""
     listed = set(db.scalars(select(SkillCategorySkill.skill_id)
@@ -177,14 +194,20 @@ def rename_category(category_id: int, body: CategoryIn, db: DbSession,
         db.refresh(category)
         return one_out(db, category, account_id)
 
-    replacement = SkillCategory(account_id=account_id, category_name=body.category_name)
-    db.add(replacement)
-    db.flush()
-    new_id = replacement.category_id
-    list_beside(db, SectionSkillCategory, "section_id", "category_id", category_id, new_id)
-    copy_children(db, SkillCategorySkill, "category_id", category_id, new_id)
-    switch_unsent(db, CATEGORY_LINKS, category_id, new_id)
+    replacement = new_version(db, category, body, account_id)
+    switch_unsent(db, CATEGORY_LINKS, category_id, replacement.category_id)
     return one_out(db, replacement, account_id)
+
+
+@router.post("/{category_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(category_id: int, body: CategoryIn, db: DbSession,
+                account_id: AccountId) -> CategoryOut:
+    """Adds another version of the category on purpose, with a new name (DUPLICATE otherwise).
+    Nothing switches to it."""
+    original = get_category(db, category_id, account_id)
+    check_unique_name(db, SkillCategory.category_name, account_id, body.category_name,
+                      "skill category")
+    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.put("/{category_id}/skills")

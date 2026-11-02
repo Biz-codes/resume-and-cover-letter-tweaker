@@ -3,7 +3,8 @@
 A resume or cover letter can use one tone set (tone_set_id), which steers the suggestions
 made for it. Tone rules are never printed, so sets and rules are always edited in place, even
 when a sent version uses the set. A rule belongs to one set; deleting the set deletes its
-rules, and the resumes and cover letters that used it keep going with no tone set.
+rules, and the resumes and cover letters that used it keep going with no tone set. Names are
+unique (DUPLICATE), and a new version copies the set's rules.
 """
 
 from fastapi import APIRouter, status
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.account import AccountId, get_owned
 from app.db import DbSession
 from app.errors import AppError, ErrorCode
+from app.library import check_unique_name
 from app.models import CoverLetter, Resume, ToneRule, ToneSet
 from app.schemas import RequiredText
 from app.usage import Use, column_uses
@@ -86,6 +88,7 @@ def get_one(tone_set_id: int, db: DbSession, account_id: AccountId) -> ToneSetOu
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_set(body: ToneSetIn, db: DbSession, account_id: AccountId) -> ToneSetOut:
+    check_unique_name(db, ToneSet.name, account_id, body.name, "tone")
     tone_set = ToneSet(account_id=account_id, name=body.name)
     db.add(tone_set)
     db.flush()
@@ -96,6 +99,8 @@ def create_set(body: ToneSetIn, db: DbSession, account_id: AccountId) -> ToneSet
 def rename_set(tone_set_id: int, body: ToneSetIn, db: DbSession,
                account_id: AccountId) -> ToneSetOut:
     tone_set = get_owned(db, ToneSet, tone_set_id, account_id)
+    check_unique_name(db, ToneSet.name, account_id, body.name, "tone",
+                      exclude=ToneSet.tone_set_id != tone_set_id)
     tone_set.name = body.name
     db.flush()
     db.refresh(tone_set)
@@ -106,6 +111,23 @@ def rename_set(tone_set_id: int, body: ToneSetIn, db: DbSession,
 def delete_set(tone_set_id: int, db: DbSession, account_id: AccountId) -> None:
     """Deletes its rules too. Resumes and cover letters that used it keep going without one."""
     db.delete(get_owned(db, ToneSet, tone_set_id, account_id))
+
+
+@router.post("/{tone_set_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(tone_set_id: int, body: ToneSetIn, db: DbSession,
+                account_id: AccountId) -> ToneSetOut:
+    """Adds another version of the set on purpose: a new set with this name and a copy of each
+    rule, in order. Nothing switches to it."""
+    original = get_owned(db, ToneSet, tone_set_id, account_id)
+    check_unique_name(db, ToneSet.name, account_id, body.name, "tone")
+    version = ToneSet(account_id=account_id, name=body.name)
+    db.add(version)
+    db.flush()
+    for rule in rules_of(db, original.tone_set_id):
+        db.add(ToneRule(tone_set_id=version.tone_set_id, rule_text=rule.rule_text,
+                        position=rule.position))
+    db.flush()
+    return one_out(db, version)
 
 
 @router.post("/{tone_set_id}/rules", status_code=status.HTTP_201_CREATED)

@@ -374,6 +374,24 @@ def test_delete_bullet_removes_it_everywhere(client: TestClient, db: Session, ac
     assert db.get(ResumeExperience, chosen) is not None
 
 
+def test_a_version_of_a_bullet_is_listed_right_after_it_everywhere(client: TestClient,
+                                                                  db: Session, account_id: int):
+    row = role(db, account_id, ["Shipped it", "Tested it"])
+    shipped = bullet(db, account_id, "Shipped it").bullet_id
+    doc = resume(db, account_id, "Draft", sent=False)
+    show_job(db, doc, row, ["Shipped it"])
+    response = client.post(f"/api/bullet-points/{shipped}/versions",
+                           json={"content": "Shipped it on time"})
+    assert response.status_code == 201
+    version = response.json()
+    assert version["used_by"] == []
+    assert listed(db, ExperienceBulletPoint, "experience_id", row.experience_id, "bullet_id") == [
+        shipped, version["bullet_id"], bullet(db, account_id, "Tested it").bullet_id]
+    unchanged = client.post(f"/api/bullet-points/{shipped}/versions",
+                            json={"content": "Shipped it"})
+    assert (unchanged.status_code, unchanged.json()["bullet_id"]) == (200, shipped)
+
+
 # Section lists
 
 

@@ -5,12 +5,13 @@ cover_letter_education) and prints the degree, institution, details, and graduat
 row. So editing an entry a sent version uses saves a new entry, listed right after the
 original in its sections; sent versions keep the original and unsent ones switch to the new
 one. An entry no sent version uses is edited in place (docs/FRONTEND_CHECKS.md, "Sent
-versions are locked").
+versions are locked"). A version added on purpose is listed the same way, and nothing switches
+to it.
 """
 
 from datetime import datetime
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -66,6 +67,17 @@ def one_out(db: Session, entry: Education) -> EducationOut:
     return to_out(db, [entry])[0]
 
 
+def new_version(db: Session, original: Education, body: EducationIn,
+                account_id: int) -> Education:
+    """A new entry with these values, listed right after the original in its sections."""
+    version = Education(account_id=account_id, **body.model_dump(include=set(FIELDS)))
+    db.add(version)
+    db.flush()
+    list_beside(db, SectionEducation, "section_id", "education_id", original.education_id,
+                version.education_id)
+    return version
+
+
 @router.get("")
 def list_education(db: DbSession, account_id: AccountId) -> list[EducationOut]:
     """By institution, then degree, so versions of an entry sit together, oldest first."""
@@ -112,13 +124,21 @@ def update_education(education_id: int, body: EducationIn, db: DbSession,
         db.refresh(entry)
         return one_out(db, entry)
 
-    replacement = Education(account_id=account_id, **body.model_dump())
-    db.add(replacement)
-    db.flush()
-    list_beside(db, SectionEducation, "section_id", "education_id", education_id,
-                replacement.education_id)
+    replacement = new_version(db, entry, body, account_id)
     switch_unsent(db, EDUCATION_LINKS, education_id, replacement.education_id)
     return one_out(db, replacement)
+
+
+@router.post("/{education_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(education_id: int, body: EducationIn, response: Response, db: DbSession,
+                account_id: AccountId) -> EducationOut:
+    """Adds another version of the entry on purpose. Nothing switches to it. With nothing
+    changed, the original is returned (status 200) instead of adding a copy."""
+    original = get_owned(db, Education, education_id, account_id)
+    if all(getattr(original, field) == getattr(body, field) for field in FIELDS):
+        response.status_code = status.HTTP_200_OK
+        return one_out(db, original)
+    return one_out(db, new_version(db, original, body, account_id))
 
 
 @router.delete("/{education_id}", status_code=status.HTTP_204_NO_CONTENT)

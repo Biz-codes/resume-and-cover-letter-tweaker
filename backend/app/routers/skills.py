@@ -1,7 +1,8 @@
 """Skills. Each one is listed under at least one category, and under any projects that used it.
 
 Renaming a skill that a sent version uses saves a new skill (docs/FRONTEND_CHECKS.md, "Sent
-versions are locked").
+versions are locked"). A version added on purpose is listed the same way, and nothing switches
+to it. Names are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -80,6 +81,18 @@ def one_out(db: Session, skill: Skill) -> SkillOut:
     return to_out(db, [skill])[0]
 
 
+def new_version(db: Session, original: Skill, body: SkillIn, account_id: int) -> Skill:
+    """A new skill with this name, listed right after the original in every category and
+    project that lists it. The caller checks the name is new."""
+    version = Skill(account_id=account_id, skill_name=body.skill_name)
+    db.add(version)
+    db.flush()
+    list_beside(db, SkillCategorySkill, "category_id", "skill_id", original.skill_id,
+                version.skill_id)
+    list_beside(db, ProjectSkill, "project_id", "skill_id", original.skill_id, version.skill_id)
+    return version
+
+
 @router.get("")
 def list_skills(db: DbSession, account_id: AccountId) -> list[SkillOut]:
     skills = db.scalars(select(Skill).where(Skill.account_id == account_id)
@@ -122,14 +135,18 @@ def rename_skill(skill_id: int, body: SkillIn, db: DbSession, account_id: Accoun
         db.refresh(skill)
         return one_out(db, skill)
 
-    replacement = Skill(account_id=account_id, skill_name=body.skill_name)
-    db.add(replacement)
-    db.flush()
-    new_id = replacement.skill_id
-    list_beside(db, SkillCategorySkill, "category_id", "skill_id", skill_id, new_id)
-    list_beside(db, ProjectSkill, "project_id", "skill_id", skill_id, new_id)
-    switch_unsent(db, SKILL_LINKS, skill_id, new_id)
+    replacement = new_version(db, skill, body, account_id)
+    switch_unsent(db, SKILL_LINKS, skill_id, replacement.skill_id)
     return one_out(db, replacement)
+
+
+@router.post("/{skill_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(skill_id: int, body: SkillIn, db: DbSession, account_id: AccountId) -> SkillOut:
+    """Adds another version of the skill on purpose, with a new name (DUPLICATE otherwise).
+    Nothing switches to it."""
+    original = get_owned(db, Skill, skill_id, account_id)
+    check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill")
+    return one_out(db, new_version(db, original, body, account_id))
 
 
 @router.delete("/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -8,10 +8,11 @@ read from this row.
 So nothing printed on a sent version can change: editing a bullet a sent version uses saves
 a new bullet, listed right after the original wherever it's listed. Sent versions keep the
 original; unsent ones switch to the new one. A bullet no sent version uses is edited in
-place (docs/FRONTEND_CHECKS.md, "Sent versions are locked").
+place (docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is
+listed the same way, and nothing switches to it.
 """
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -85,6 +86,18 @@ def one_out(db: Session, bullet: BulletPoint, account_id: int) -> BulletOut:
     return to_out(db, [bullet], account_id)[0]
 
 
+def new_version(db: Session, original: BulletPoint, body: BulletIn,
+                account_id: int) -> BulletPoint:
+    """A new bullet with this text, listed right after the original under every role,
+    project, and section that lists it."""
+    version = BulletPoint(account_id=account_id, content=body.content)
+    db.add(version)
+    db.flush()
+    for link, parent_col in BULLET_LISTS:
+        list_beside(db, link, parent_col, "bullet_id", original.bullet_id, version.bullet_id)
+    return version
+
+
 @router.get("")
 def list_bullets(db: DbSession, account_id: AccountId) -> list[BulletOut]:
     """Oldest first."""
@@ -134,13 +147,21 @@ def update_bullet(bullet_id: int, body: BulletIn, db: DbSession,
         db.refresh(bullet)
         return one_out(db, bullet, account_id)
 
-    replacement = BulletPoint(account_id=account_id, content=body.content)
-    db.add(replacement)
-    db.flush()
-    for link, parent_col in BULLET_LISTS:
-        list_beside(db, link, parent_col, "bullet_id", bullet_id, replacement.bullet_id)
+    replacement = new_version(db, bullet, body, account_id)
     switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id)
     return one_out(db, replacement, account_id)
+
+
+@router.post("/{bullet_id}/versions", status_code=status.HTTP_201_CREATED)
+def add_version(bullet_id: int, body: BulletIn, response: Response, db: DbSession,
+                account_id: AccountId) -> BulletOut:
+    """Adds another version of the bullet on purpose. Nothing switches to it. With the text
+    unchanged, the original is returned (status 200) instead of adding a copy."""
+    original = get_owned(db, BulletPoint, bullet_id, account_id)
+    if original.content == body.content:
+        response.status_code = status.HTTP_200_OK
+        return one_out(db, original, account_id)
+    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.delete("/{bullet_id}", status_code=status.HTTP_204_NO_CONTENT)

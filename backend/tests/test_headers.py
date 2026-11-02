@@ -184,6 +184,19 @@ def test_saving_unchanged_values_changes_nothing(client: TestClient, db: Session
     assert db.scalar(select(func.count()).select_from(Header)) == 1
 
 
+def test_a_version_adds_a_header_unless_one_has_those_values(client: TestClient, db: Session,
+                                                             account_id: int):
+    header_id = add_header(db, account_id)
+    other_id = add_header(db, account_id, phone="555-0100")
+    url = f"/api/headers/{header_id}/versions"
+    added = client.post(url, json={**NEPTUNE, "headline": "Engineer"})
+    assert (added.status_code, added.json()["headline"]) == (201, "Engineer")
+    for values, existing in ((NEPTUNE, header_id), ({**NEPTUNE, "phone": "555-0100"}, other_id)):
+        response = client.post(url, json=values)
+        assert (response.status_code, response.json()["header_id"]) == (200, existing)
+    assert client.post("/api/headers/999999/versions", json=NEPTUNE).status_code == 404
+
+
 # Deleting
 
 

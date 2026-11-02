@@ -134,6 +134,24 @@ def test_delete_education_removes_it_from_resumes(client: TestClient, db: Sessio
     assert listed(db, SectionEducation, "section_id", EDUCATION_SECTION_ID, "education_id") == []
 
 
+def test_a_version_of_an_entry_is_listed_right_after_it(client: TestClient, db: Session,
+                                                        account_id: int):
+    original = entry(db, account_id)
+    later = entry(db, account_id, institution="Later College")
+    doc = resume(db, account_id, "Draft", sent=False)
+    show_education(db, doc, original)
+    response = client.post(f"/api/education/{original.education_id}/versions",
+                           json={**DEGREE, "graduation": "2015"})
+    assert response.status_code == 201
+    version = response.json()
+    assert (version["graduation"], version["used_by"]) == ("2015", [])
+    assert listed(db, SectionEducation, "section_id", EDUCATION_SECTION_ID, "education_id") == [
+        original.education_id, version["education_id"], later.education_id]
+    unchanged = client.post(f"/api/education/{original.education_id}/versions", json=DEGREE)
+    assert (unchanged.status_code, unchanged.json()["education_id"]) == (
+        200, original.education_id)
+
+
 # Narrative content
 
 
@@ -240,6 +258,22 @@ def test_delete_narrative(client: TestClient, db: Session, account_id: int):
         == []
 
 
+def test_a_version_of_an_excerpt_is_listed_right_after_it(client: TestClient, db: Session,
+                                                         account_id: int):
+    original = narrative(db, account_id, "I build tools.")
+    later = narrative(db, account_id, "I teach.")
+    response = client.post(f"/api/narrative-content/{original.content_id}/versions",
+                           json={"content": "I build web tools."})
+    assert response.status_code == 201
+    version = response.json()
+    assert (version["content"], version["used_by"]) == ("I build web tools.", [])
+    assert listed(db, SectionNarrativeContent, "section_id", SUMMARY_SECTION_ID,
+                  "content_id") == [original.content_id, version["content_id"], later.content_id]
+    unchanged = client.post(f"/api/narrative-content/{original.content_id}/versions",
+                            json={"content": " I build tools. "})
+    assert (unchanged.status_code, unchanged.json()["content_id"]) == (200, original.content_id)
+
+
 # Section lists
 
 
@@ -332,6 +366,19 @@ def test_tone_rule_order_must_hold_every_rule_once(client: TestClient, db: Sessi
     assert error(response)[1] == "NOT_FOUND"
 
 
+def test_tone_names_are_unique_ignoring_capitals(client: TestClient, db: Session,
+                                                 account_id: int):
+    tech = add(db, ToneSet(account_id=account_id, name="Tech"))
+    teaching = add(db, ToneSet(account_id=account_id, name="Teaching"))
+    response = client.post("/api/tone-sets", json={"name": "tech"})
+    assert error(response) == (409, "DUPLICATE", "name")
+    assert response.json()["error"]["message"] == 'There\'s already a tone named "Tech".'
+    response = client.put(f"/api/tone-sets/{teaching.tone_set_id}", json={"name": "TECH"})
+    assert error(response) == (409, "DUPLICATE", "name")
+    response = client.put(f"/api/tone-sets/{tech.tone_set_id}", json={"name": "TECH"})
+    assert response.json()["name"] == "TECH"
+
+
 def test_delete_tone_set_deletes_its_rules_and_keeps_resumes(client: TestClient, db: Session,
                                                              account_id: int):
     tone_set = add(db, ToneSet(account_id=account_id, name="Tech"))
@@ -346,6 +393,22 @@ def test_delete_tone_set_deletes_its_rules_and_keeps_resumes(client: TestClient,
     db.expire_all()
     assert db.scalar(select(ToneRule).where(ToneRule.tone_rule_id == rule_id)) is None
     assert db.get(Resume, doc.resume_id).tone_set_id is None
+
+
+def test_a_version_of_a_tone_copies_its_rules_and_needs_a_new_name(client: TestClient,
+                                                                   db: Session, account_id: int):
+    original = add(db, ToneSet(account_id=account_id, name="Tech"))
+    for position, text in enumerate(["Lead with tools.", "Use metrics."], start=1):
+        add(db, ToneRule(tone_set_id=original.tone_set_id, rule_text=text, position=position))
+    url = f"/api/tone-sets/{original.tone_set_id}/versions"
+    response = client.post(url, json={"name": "Tech, short"})
+    assert response.status_code == 201
+    version = response.json()
+    assert [rule["rule_text"] for rule in version["rules"]] == ["Lead with tools.", "Use metrics."]
+    original_rules = client.get(f"/api/tone-sets/{original.tone_set_id}").json()["rules"]
+    assert {r["tone_rule_id"] for r in version["rules"]}.isdisjoint(
+        r["tone_rule_id"] for r in original_rules)
+    assert error(client.post(url, json={"name": "tech"})) == (409, "DUPLICATE", "name")
 
 
 # Sign-offs
@@ -384,3 +447,17 @@ def test_delete_sign_off_leaves_letters_with_no_closing(client: TestClient, db: 
     assert error(client.post("/api/sign-offs", json={"text": ""})) == \
         (422, "VALIDATION_FAILED", "text")
     assert db.scalar(select(SignOff).where(SignOff.account_id == account_id)) is None
+
+
+def test_a_version_of_a_sign_off_switches_nothing(client: TestClient, db: Session,
+                                                  account_id: int):
+    sincerely = add(db, SignOff(account_id=account_id, text="Sincerely"))
+    draft = letter(db, account_id, "Draft", sent=False, sign_off_id=sincerely.sign_off_id)
+    url = f"/api/sign-offs/{sincerely.sign_off_id}/versions"
+    response = client.post(url, json={"text": "Best regards"})
+    assert response.status_code == 201
+    assert (response.json()["text"], response.json()["used_by"]) == ("Best regards", [])
+    db.expire_all()
+    assert db.get(CoverLetter, draft.letter_id).sign_off_id == sincerely.sign_off_id
+    unchanged = client.post(url, json={"text": "Sincerely"})
+    assert (unchanged.status_code, unchanged.json()["sign_off_id"]) == (200, sincerely.sign_off_id)

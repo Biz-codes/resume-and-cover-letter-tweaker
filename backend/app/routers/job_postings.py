@@ -21,7 +21,7 @@ from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.routers.headers import FIELDS as HEADER_FIELDS
-from app.routers.headers import HeaderIn, find_identical
+from app.routers.headers import HeaderIn, find_or_add
 from app.schemas import OptionalText, RequiredText
 from app.usage import Use
 
@@ -220,11 +220,7 @@ def set_header(posting_id: int, body: HeaderIn, db: DbSession,
     posting = get_owned(db, JobPosting, posting_id, account_id)
     if posting.applied_on is not None:
         raise AppError(ErrorCode.VERSION_LOCKED)
-    header = find_identical(db, account_id, body)
-    if header is None:
-        header = Header(account_id=account_id, **body.model_dump())
-        db.add(header)
-        db.flush()
+    header = find_or_add(db, account_id, body)[0]
     posting.header_id = header.header_id
     for model in (Resume, CoverLetter):
         db.execute(update(model).where(model.job_posting_id == posting_id)

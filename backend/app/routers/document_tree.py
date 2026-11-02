@@ -44,31 +44,33 @@ from app.documents import (
     standalone_bullets,
 )
 from app.errors import AppError, ErrorCode
-from app.library import append, check_ids, check_unique_name, copy_children, list_beside
+from app.library import append, check_ids, check_unique_name, list_beside
 from app.models import (
     OTHER_CATEGORY_ID,
     BulletPoint,
-    Education,
     ExperienceBulletPoint,
-    Header,
     ProjectBulletPoint,
     ProjectSkill,
     Section,
-    SectionEducation,
     SectionNarrativeContent,
-    SectionSkillCategory,
     Skill,
     SkillCategory,
     SkillCategorySkill,
 )
 from app.routers.bullet_points import BULLET_LISTS
 from app.routers.education import EducationIn
+from app.routers.education import new_version as education_version
 from app.routers.experience import ExperienceIn
 from app.routers.experience import new_version as role_version
-from app.routers.headers import HeaderIn, find_identical
+from app.routers.headers import HeaderIn, find_or_add
 from app.routers.projects import ProjectIn
 from app.routers.projects import new_version as project_version
+from app.routers.sections import SectionIn
+from app.routers.sections import new_version as section_version
 from app.routers.skill_categories import CategoryIn
+from app.routers.skill_categories import new_version as category_version
+from app.routers.skills import SkillIn
+from app.routers.skills import new_version as skill_version
 from app.schemas import RequiredText
 from app.usage import touch
 
@@ -444,11 +446,7 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         doc = editable(db, doc_id, account_id)
         if doc.job_posting_id is not None:
             raise AppError(ErrorCode.VALIDATION_FAILED, POSTING_HEADER, field="header_id")
-        header = find_identical(db, account_id, body)
-        if header is None:
-            header = Header(account_id=account_id, **body.model_dump())
-            db.add(header)
-            db.flush()
+        header = find_or_add(db, account_id, body)[0]
         doc.header_id = header.header_id
         return changed(db, doc)
 
@@ -654,13 +652,8 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         if db.get(Section, section_id).title == body.title:
             raise _unchanged("title")
         check_unique_name(db, Section.title, account_id, body.title, "section")
-        version = Section(account_id=account_id, title=body.title)
-        db.add(version)
-        db.flush()
-        for entry_kind, link in SECTION_LISTS.items():
-            library, item_column, _ = LIBRARY[entry_kind]
-            copy_children(db, link, "section_id", section_id, version.id,
-                          own=(library, item_column, account_id))
+        version = section_version(db, db.get(Section, section_id), SectionIn(title=body.title),
+                                  account_id)
         db.execute(update(kind.section.__table__).where(_pk(kind.section) == row_id)
                    .values(section_id=version.id))
         return changed(db, doc)
@@ -685,22 +678,13 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         elif body.kind == "project":
             version_id = project_version(db, original, ProjectIn(**values), account_id).project_id
         elif body.kind == "education":
-            entry = Education(account_id=account_id, **values)
-            db.add(entry)
-            db.flush()
-            version_id = entry.education_id
-            list_beside(db, SectionEducation, "section_id", "education_id", item_id, version_id)
+            version_id = education_version(db, original, EducationIn(**values),
+                                           account_id).education_id
         else:
             check_unique_name(db, SkillCategory.category_name, account_id,
                               body.category_name, "skill category")
-            category = SkillCategory(account_id=account_id, category_name=body.category_name)
-            db.add(category)
-            db.flush()
-            version_id = category.category_id
-            list_beside(db, SectionSkillCategory, "section_id", "category_id", item_id,
-                        version_id)
-            copy_children(db, SkillCategorySkill, "category_id", item_id, version_id,
-                          own=(Skill, "skill_id", account_id))
+            version_id = category_version(db, original, CategoryIn(**values),
+                                          account_id).category_id
         model = entry_kinds[body.kind]
         db.execute(update(model.__table__).where(_pk(model) == row_id)
                    .values({item_column: version_id}))
@@ -729,11 +713,8 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         if db.get(Skill, skill_id).skill_name == body.skill_name:
             raise _unchanged("skill_name")
         check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill")
-        skill = Skill(account_id=account_id, skill_name=body.skill_name)
-        db.add(skill)
-        db.flush()
-        list_beside(db, SkillCategorySkill, "category_id", "skill_id", skill_id, skill.skill_id)
-        list_beside(db, ProjectSkill, "project_id", "skill_id", skill_id, skill.skill_id)
+        skill = skill_version(db, db.get(Skill, skill_id), SkillIn(skill_name=body.skill_name),
+                              account_id)
         db.execute(update(table).where(_pk(model) == row_id).values(skill_id=skill.skill_id))
         return changed(db, doc)
 
