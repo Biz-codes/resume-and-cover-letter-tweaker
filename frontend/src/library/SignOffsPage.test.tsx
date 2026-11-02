@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { SignOff } from '../shared/api/signOffs'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import SignOffsPage from './SignOffsPage'
 
@@ -30,7 +31,7 @@ describe('SignOffsPage', () => {
     stub()
     render(<SignOffsPage />)
     expect(document.title).toBe('Sign-offs – Resume Tweaker')
-    const card = (await screen.findByRole('heading', { name: 'Sincerely' })).closest('article') as HTMLElement
+    const card = await openCard('Sincerely')
     expect(within(card).getByText('Used by (2)')).toBeInTheDocument()
     expect(within(card).getByText('sent')).toBeInTheDocument()
     await expectNoA11yViolations()

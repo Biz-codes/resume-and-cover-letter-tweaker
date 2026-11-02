@@ -8,10 +8,12 @@ import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../shared/api/s
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { distinctLabels } from '../shared/api/labels'
 
 const FIELDS: Field<EducationFields>[] = [
   { name: 'degree', label: 'Degree and field of study (e.g. B.A. in English)', required: true },
@@ -114,8 +116,13 @@ export default function EducationPage() {
     }
   }
 
+  // Labels that tell versions apart (labels.ts): the full one, for buttons and forms, and the
+  // card's title.
+  const labelOf = distinctLabels(entries ?? [], educationLabel, (item) => item.created_at)
+  const titleOf = distinctLabels(entries ?? [], (item) => `${item.degree}, ${item.institution}`, (item) => item.created_at)
+
   function card(entry: Education) {
-    const label = educationLabel(entry)
+    const label = labelOf(entry)
     if (form?.kind === 'edit' && form.id === entry.education_id) {
       return (
         <FieldsForm
@@ -130,12 +137,11 @@ export default function EducationPage() {
       )
     }
     return (
-      <article key={entry.education_id} className="card">
-        <div className="card-header">
-          <h4>
-            {entry.degree}, {entry.institution}
-          </h4>
-          {deleting !== entry.education_id && (
+      <LibraryCard
+        key={entry.education_id}
+        title={titleOf(entry)}
+        actions={
+          deleting !== entry.education_id && (
             <div className="actions">
               <button
                 type="button"
@@ -158,26 +164,31 @@ export default function EducationPage() {
                 Delete
               </button>
             </div>
-          )}
-        </div>
+          )
+        }
+        shown={
+          <>
+            {deleting === entry.education_id && (
+              <ConfirmDelete
+                what={`"${label}"`}
+                uses={entry.used_by}
+                effect="It's removed from them, and from every section."
+                error={deleteError}
+                onConfirm={() => void confirmDelete(entry)}
+                onCancel={() => {
+                  setDeleting(null)
+                  focusLater(buttonId(entry.education_id, 'delete'))
+                }}
+              />
+            )}
+          </>
+        }
+      >
         {entry.graduation && <p className="muted">{entry.graduation}</p>}
         {entry.details && <p className="details">{entry.details}</p>}
-        {deleting === entry.education_id && (
-          <ConfirmDelete
-            what={`"${label}"`}
-            uses={entry.used_by}
-            effect="It's removed from them, and from every section."
-            error={deleteError}
-            onConfirm={() => void confirmDelete(entry)}
-            onCancel={() => {
-              setDeleting(null)
-              focusLater(buttonId(entry.education_id, 'delete'))
-            }}
-          />
-        )}
         <NameList title="Sections that list it" names={entry.sections.map((section) => section.title)} />
         <UsedBy uses={entry.used_by} />
-      </article>
+      </LibraryCard>
     )
   }
 

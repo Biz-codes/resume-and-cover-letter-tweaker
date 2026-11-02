@@ -11,6 +11,8 @@ export interface EducationFields {
 
 export interface Education extends EducationFields {
   education_id: number
+  // When it was added, which tells versions apart in lists (labels.ts).
+  created_at: string
   sections: { id: number; title: string }[]
   used_by: Use[]
 }

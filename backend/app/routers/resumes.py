@@ -22,6 +22,7 @@ from app.documents import (
     check_link,
     copy_tree,
     doc_info,
+    document_name,
     latest_header_id,
     list_docs,
     load_tree,
@@ -108,6 +109,7 @@ def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> Resu
         body.header_id = posting_header_id(posting, body.header_id)
     elif "header_id" not in body.model_fields_set:
         body.header_id = latest_header_id(db, account_id)
+    body.name = document_name(db, RESUME, account_id, body.name, body.job_posting_id is not None)
     check_links(db, body, account_id)
     resume = Resume(account_id=account_id, **body.model_dump())
     db.add(resume)
@@ -125,6 +127,7 @@ def update_resume(resume_id: int, body: ResumeIn, db: DbSession,
     resume = get_owned(db, Resume, resume_id, account_id)
     refuse_locked_change(resume, doc_info(db, RESUME, [resume])[resume_id], body.model_dump())
     refuse_header_change(resume, body.header_id)
+    body.name = document_name(db, RESUME, account_id, body.name, doc_id=resume_id)
     check_links(db, body, account_id)
     for name, value in body.model_dump().items():
         setattr(resume, name, value)
@@ -143,7 +146,8 @@ def copy_resume(resume_id: int, body: CopyIn, db: DbSession,
     if body.job_posting_id is not None:
         posting = posting_for_version(db, account_id, body.job_posting_id, RESUME)
         header_id = posting_header_id(posting)
-    copy = Resume(account_id=account_id, name=body.name, header_id=header_id,
+    name = document_name(db, RESUME, account_id, body.name, body.job_posting_id is not None)
+    copy = Resume(account_id=account_id, name=name, header_id=header_id,
                   job_posting_id=body.job_posting_id, tone_set_id=original.tone_set_id,
                   based_on_resume_id=resume_id)
     db.add(copy)

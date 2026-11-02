@@ -21,6 +21,7 @@ from app.documents import (
     check_link,
     copy_tree,
     doc_info,
+    document_name,
     latest_header_id,
     list_docs,
     load_tree,
@@ -134,6 +135,8 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
         body.addressee = default_addressee(posting)
     if "sign_off_id" not in given:
         body.sign_off_id = default_sign_off_id(db, account_id)
+    body.name = document_name(db, COVER_LETTER, account_id, body.name,
+                              body.job_posting_id is not None)
     check_links(db, body, account_id)
     letter = CoverLetter(account_id=account_id, **body.model_dump())
     db.add(letter)
@@ -152,6 +155,7 @@ def update_letter(letter_id: int, body: LetterIn, db: DbSession,
     refuse_locked_change(letter, doc_info(db, COVER_LETTER, [letter])[letter_id],
                          body.model_dump())
     refuse_header_change(letter, body.header_id)
+    body.name = document_name(db, COVER_LETTER, account_id, body.name, doc_id=letter_id)
     check_links(db, body, account_id)
     for name, value in body.model_dump().items():
         setattr(letter, name, value)
@@ -172,8 +176,10 @@ def copy_letter(letter_id: int, body: CopyIn, db: DbSession,
         posting = posting_for_version(db, account_id, body.job_posting_id, COVER_LETTER)
         fields["header_id"] = posting_header_id(posting)
         fields["addressee"] = default_addressee(posting)
+    name = document_name(db, COVER_LETTER, account_id, body.name,
+                         body.job_posting_id is not None)
     copy = CoverLetter(account_id=account_id, based_on_letter_id=letter_id,
-                       job_posting_id=body.job_posting_id, **fields, name=body.name)
+                       job_posting_id=body.job_posting_id, **fields, name=name)
     db.add(copy)
     db.flush()
     copy_tree(db, COVER_LETTER, letter_id, copy.letter_id)

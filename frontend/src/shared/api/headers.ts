@@ -18,6 +18,8 @@ export type HeaderUse = Use
 
 export interface Header extends HeaderFields {
   header_id: number
+  // When it was added, which tells versions apart in lists (labels.ts).
+  created_at: string
   used_by: HeaderUse[]
 }
 

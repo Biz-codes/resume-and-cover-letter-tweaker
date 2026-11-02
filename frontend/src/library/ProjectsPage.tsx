@@ -14,11 +14,13 @@ import BulletList from './BulletList'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { distinctLabels } from '../shared/api/labels'
 
 const FIELDS: Field<ProjectFields>[] = [
   { name: 'project_title', label: 'Project title', required: true },
@@ -156,8 +158,13 @@ export default function ProjectsPage() {
     name: skill.skill_name,
   }))
 
+  // Labels that tell versions apart (labels.ts): the full one, for buttons and forms, and the
+  // card's title.
+  const labelOf = distinctLabels(projects ?? [], projectLabel, (item) => item.created_at)
+  const titleOf = distinctLabels(projects ?? [], (item) => item.project_title, (item) => item.created_at)
+
   function card(project: Project) {
-    const label = projectLabel(project)
+    const label = labelOf(project)
     if (form?.kind === 'edit' && form.id === project.project_id) {
       const inProgress = project.used_by.filter((use) => !use.locked)
       return (
@@ -175,10 +182,11 @@ export default function ProjectsPage() {
       )
     }
     return (
-      <article key={project.project_id} className="card">
-        <div className="card-header">
-          <h4>{project.project_title}</h4>
-          {deleting !== project.project_id && (
+      <LibraryCard
+        key={project.project_id}
+        title={titleOf(project)}
+        actions={
+          deleting !== project.project_id && (
             <div className="actions">
               <button
                 type="button"
@@ -209,33 +217,38 @@ export default function ProjectsPage() {
                 Delete
               </button>
             </div>
-          )}
-        </div>
+          )
+        }
+        shown={
+          <>
+            {deleting === project.project_id && (
+              <ConfirmDelete
+                what={`"${label}"`}
+                uses={project.used_by}
+                effect="It's removed from them, along with its skills and bullets there. The skills and bullets stay in the library."
+                error={deleteError}
+                onConfirm={() => void confirmDelete(project)}
+                onCancel={() => {
+                  setDeleting(null)
+                  focusLater(buttonId(project.project_id, 'delete'))
+                }}
+              />
+            )}
+            {form?.kind === 'version' && form.id === project.project_id && (
+              <FieldsForm
+                label={`New version of "${label}"`}
+                fields={FIELDS}
+                initial={fieldsOf(project)}
+                submitLabel="Add version"
+                onSave={(fields) => addVersion(project, fields)}
+                onCancel={() => close(buttonId(project.project_id, 'version'))}
+              />
+            )}
+          </>
+        }
+      >
         <p className="muted">{[project.done_for, project.dates].filter(Boolean).join(' | ')}</p>
         {project.url && <p className="muted">{project.url}</p>}
-        {deleting === project.project_id && (
-          <ConfirmDelete
-            what={`"${label}"`}
-            uses={project.used_by}
-            effect="It's removed from them, along with its skills and bullets there. The skills and bullets stay in the library."
-            error={deleteError}
-            onConfirm={() => void confirmDelete(project)}
-            onCancel={() => {
-              setDeleting(null)
-              focusLater(buttonId(project.project_id, 'delete'))
-            }}
-          />
-        )}
-        {form?.kind === 'version' && form.id === project.project_id && (
-          <FieldsForm
-            label={`New version of "${label}"`}
-            fields={FIELDS}
-            initial={fieldsOf(project)}
-            submitLabel="Add version"
-            onSave={(fields) => addVersion(project, fields)}
-            onCancel={() => close(buttonId(project.project_id, 'version'))}
-          />
-        )}
         <Collapsible title="Skills" count={project.skills.length}>
           <OrderedList
             label={`${label} skills`}
@@ -268,7 +281,7 @@ export default function ProjectsPage() {
         />
         <NameList title="Sections that list it" names={project.sections.map((section) => section.title)} />
         <UsedBy uses={project.used_by} />
-      </article>
+      </LibraryCard>
     )
   }
 

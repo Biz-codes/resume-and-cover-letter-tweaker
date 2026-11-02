@@ -9,6 +9,7 @@ import DocumentsPage from '../DocumentsPage'
 
 const SAM: Header = {
   header_id: 1,
+  created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',
   headline: 'Engineer',
   email: 'sam@example.com',
@@ -168,6 +169,96 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it('undoes and redoes a change, one step at a time', async () => {
+    const toned = resume(24, { tone_set_id: 2 })
+    const fetchMock = stub(24, resume(24), {
+      'PUT /api/resumes/24': [
+        { status: 200, body: toned },
+        { status: 200, body: resume(24) },
+        { status: 200, body: toned },
+      ],
+    })
+    renderAt('/resumes/24')
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    const redo = screen.getByRole('button', { name: 'Redo' })
+    expect(screen.getByRole('group', { name: 'Undo and redo' })).toContainElement(undo)
+    // Nothing to undo or redo yet.
+    expect(undo).toHaveAttribute('aria-disabled', 'true')
+    expect(redo).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
+    await vi.waitFor(() => expect(undo).toHaveAttribute('aria-disabled', 'false'))
+    await expectNoA11yViolations()
+    undo.focus()
+    fireEvent.click(undo)
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Undid a change. Nothing more to undo.'))
+    expect(sentBody(fetchMock, 'PUT /api/resumes/24', 1)).toMatchObject({ tone_set_id: null })
+    expect(screen.getByLabelText('Tone')).toHaveValue('')
+    // Focus stays on Undo, now with nothing left to undo, and Redo can bring it back.
+    expect(undo).toHaveFocus()
+    expect(undo).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(redo)
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Redid a change. Nothing more to redo.'))
+    expect(sentBody(fetchMock, 'PUT /api/resumes/24', 2)).toMatchObject({ tone_set_id: 2 })
+    expect(screen.getByLabelText('Tone')).toHaveValue('2')
+    expect(redo).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('puts back a removed section with everything in it', async () => {
+    const library = ['sections', 'narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const section = {
+      row_id: 100,
+      section_id: 2,
+      title: 'Skills',
+      entries: [
+        {
+          kind: 'category',
+          row_id: 300,
+          item_id: 6,
+          position: 1,
+          values: { category_name: 'Front End' },
+          skills: [{ row_id: 400, item_id: 11, position: 1, text: 'React' }],
+          bullets: [],
+        },
+      ],
+    }
+    const full = resume(25, { sections: [section] })
+    const fetchMock = stub(25, full, {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      'PUT /api/resumes/25/sections': [{ status: 200, body: resume(25) }],
+      'PUT /api/resumes/25/tree': [{ status: 200, body: full }],
+    })
+    renderAt('/resumes/25')
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Skills' }))
+    expect(await screen.findByRole('button', { name: 'Sections (0)' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(await screen.findByRole('button', { name: 'Sections (1)' })).toBeInTheDocument()
+    // The category comes back with the skill it showed, not its defaults.
+    expect(sentBody(fetchMock, 'PUT /api/resumes/25/tree')).toEqual({
+      sections: [{ section_id: 2, entries: [{ kind: 'category', item_id: 6, skill_ids: [11], bullet_ids: [] }] }],
+    })
+  })
+
+  it('shows why an undo failed, keeping the step', async () => {
+    stub(26, resume(26), {
+      'PUT /api/resumes/26': [
+        { status: 200, body: resume(26, { tone_set_id: 2 }) },
+        { status: 404, body: errorBody('NOT_FOUND', "That item doesn't exist.") },
+      ],
+    })
+    renderAt('/resumes/26')
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    await vi.waitFor(() => expect(undo).toHaveAttribute('aria-disabled', 'false'))
+    fireEvent.click(undo)
+    expect(await screen.findByRole('alert')).toHaveTextContent("That item doesn't exist.")
+    expect(undo).toHaveAttribute('aria-disabled', 'false')
+    await expectNoA11yViolations()
+  })
+
   it("doesn't warn again about a version already chosen for editing", async () => {
     stub(4, resume(4))
     renderAt('/resumes/4')
@@ -175,11 +266,15 @@ describe('DocumentPage', () => {
     expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
   })
 
-  it('offers a copy instead of editing a base version', async () => {
-    stub(5, resume(5))
+  it('offers a copy instead of editing a base version, named so no other has its name', async () => {
+    // "Copy of Tech base" is taken, so it starts as the next one free.
+    const taken = [resume(1), resume(2, { name: 'copy of tech base' })]
+    stub(5, resume(5), { 'GET /api/resumes': [{ status: 200, body: taken }] })
     renderAt('/resumes/5')
     fireEvent.click(await screen.findByRole('button', { name: 'Make a copy instead' }))
-    expect(screen.getByLabelText('Name of the copy')).toHaveValue('Copy of Tech base')
+    const name = await screen.findByLabelText('Name of the copy')
+    expect(name).toHaveValue('Copy 2 of Tech base')
+    await vi.waitFor(() => expect(name).toHaveFocus())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Make a copy' })).toHaveFocus())
   })
@@ -279,6 +374,8 @@ describe('DocumentPage', () => {
     expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
     expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
     expect(screen.getByText('Tone: None')).toBeInTheDocument()
+    // Nothing can change, so there's nothing to undo.
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Application header' }))
     // The header's values are listed, with nothing to pick.
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
@@ -299,11 +396,13 @@ describe('DocumentPage', () => {
       'GET /api/resumes/10': [{ status: 200, body: copy }],
       'GET /api/headers': [{ status: 200, body: [SAM] }, { status: 200, body: [SAM] }],
       'GET /api/tone-sets': [{ status: 200, body: [] }, { status: 200, body: [] }],
+      'GET /api/resumes': [{ status: 200, body: [resume(8)] }],
     })
     renderAt('/resumes/8')
     fireEvent.click(await screen.findByRole('button', { name: 'Make a copy' }))
-    const name = screen.getByLabelText('Name of the copy')
-    expect(name).toHaveFocus()
+    const name = await screen.findByLabelText('Name of the copy')
+    expect(name).toHaveValue('Copy of Tech base')
+    await vi.waitFor(() => expect(name).toHaveFocus())
     fireEvent.change(name, { target: { value: 'Tech copy' } })
     fireEvent.click(screen.getByRole('button', { name: 'Make copy' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy Resume' })).toBeInTheDocument()

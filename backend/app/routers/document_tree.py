@@ -8,6 +8,8 @@ their parent"), and places it; a new version of a bullet or narrative content ta
 original's place. A section added, or an item placed without its skills or bullets, starts with
 its defaults (app/defaults.py).
 
+Undo and redo on the document's page send a whole earlier tree back (restore_tree).
+
 Like the library lists, a change to a list sends the whole list in its new order. Rows that stay
 keep their ids, so what's under them stays too; rows left out are removed with everything under
 them. A sent version can't change (VERSION_LOCKED), and every change updates the document's
@@ -96,6 +98,18 @@ class Placed(BaseModel):
 
 class PlacedList(BaseModel):
     items: list[Placed]
+
+
+class RestoredSection(BaseModel):
+    """A section to restore, with its items in order and each item's skills and bullets (none
+    when left out)."""
+
+    section_id: int
+    entries: list[Placed]
+
+
+class RestoredTree(BaseModel):
+    sections: list[RestoredSection]
 
 
 class SkillList(BaseModel):
@@ -299,6 +313,48 @@ def apply_bullets(db: Session, kind: Kind, entry_kind: str, row_id: int, section
           {kind.column("section"): section_row, kind.column(entry_kind): row_id})
 
 
+def restore_section(db: Session, kind: Kind, section_row: int, entries: list[Placed],
+                    account_id: int) -> None:
+    """Place a restored section's items exactly as sent, in order, each with exactly the
+    skills and bullets sent (none when left out). Every id must be the account's own, but a
+    category's skills or a role's bullets needn't still be listed under it in the library: this
+    puts back what the document showed before, even if a list changed since (docs/
+    FRONTEND_CHECKS.md, "Undo")."""
+    for entry_kind in LIBRARY:
+        library, item_column, _ = LIBRARY[entry_kind]
+        ids = [entry.item_id for entry in entries if entry.kind == entry_kind]
+        check_ids(db, library, getattr(library, item_column), ids, account_id, "entries")
+    bullets = [entry.item_id for entry in entries if entry.kind == "bullet"]
+    bullets += [bullet for entry in entries for bullet in entry.bullet_ids or []]
+    if len(set(bullets)) != len(bullets):
+        raise AppError(ErrorCode.DUPLICATE, "A bullet can be in a section once.", field="entries")
+    for position, entry in enumerate(entries, 1):
+        if entry.skill_ids and entry.kind not in ("category", "project"):
+            raise AppError(ErrorCode.VALIDATION_FAILED,
+                           "Only a skill category or project shows skills.", field="skill_ids")
+        if entry.bullet_ids and entry.kind not in ("experience", "project"):
+            raise AppError(ErrorCode.VALIDATION_FAILED,
+                           "Only a role or project shows bullets.", field="bullet_ids")
+        library, item_column, _ = LIBRARY[entry.kind]
+        model = dict(kind.entry_tables())[entry.kind]
+        row = db.scalar(insert(model.__table__).values({
+            kind.column("section"): section_row, item_column: entry.item_id,
+            "position": position}).returning(_pk(model)))
+        if entry.skill_ids:
+            check_ids(db, Skill, Skill.skill_id, entry.skill_ids, account_id, "skill_ids")
+            skills = kind.skill if entry.kind == "category" else kind.project_skill
+            parent = kind.column("skill_category" if entry.kind == "category" else "project")
+            _sync(db, skills, skills.__table__.c[parent] == row, ["skill_id"],
+                  {(skill,): at for at, skill in enumerate(entry.skill_ids, 1)}, {parent: row})
+        if entry.bullet_ids:
+            check_ids(db, BulletPoint, BulletPoint.bullet_id, entry.bullet_ids, account_id,
+                      "bullet_ids")
+            parent = kind.column(entry.kind)
+            _sync(db, kind.bullet, kind.bullet.__table__.c[parent] == row, ["bullet_id"],
+                  {(bullet,): at for at, bullet in enumerate(entry.bullet_ids, 1)},
+                  {kind.column("section"): section_row, parent: row})
+
+
 def place(db: Session, kind: Kind, section_row: int, placed: Placed, doc_id: int,
           account_id: int) -> None:
     """One saved item, placed last in one of the document's sections, with the skills and
@@ -413,6 +469,25 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                                           .where(under).order_by(table.c.position)).all():
             if section_id not in before:
                 fill_section(db, kind, doc_id, row, section_id, account_id)
+        return changed(db, doc)
+
+    @router.put("/{doc_id}/tree")
+    def restore_tree(doc_id: int, body: RestoredTree, db: DbSession, account_id: AccountId):
+        """The whole tree at once, as it was before: every section in order, each with its
+        items and their skills and bullets (see restore_section). Undo and redo send it.
+        Library items are never changed or removed, so anything written since stays in the
+        library (docs/FRONTEND_CHECKS.md, "Undo")."""
+        doc = editable(db, doc_id, account_id)
+        check_ids(db, Section, Section.id, [section.section_id for section in body.sections],
+                  account_id, "sections", allow_built_in=True)
+        table = kind.section.__table__
+        db.execute(delete(table).where(table.c[kind.doc_id] == doc_id))
+        for position, section in enumerate(body.sections, 1):
+            row = db.scalar(insert(table).values({kind.doc_id: doc_id,
+                                                  "section_id": section.section_id,
+                                                  "position": position})
+                            .returning(_pk(kind.section)))
+            restore_section(db, kind, row, section.entries, account_id)
         return changed(db, doc)
 
     @router.post("/{doc_id}/sections/written", status_code=status.HTTP_201_CREATED)

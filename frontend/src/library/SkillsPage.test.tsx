@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../shared/api/sections'
 import type { Skill, SkillCategory } from '../shared/api/skills'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SkillsPage from './SkillsPage'
@@ -51,8 +52,7 @@ function stub(extra: Record<string, Reply[]> = {}) {
   })
 }
 
-const categoryCard = async (name: string) =>
-  (await screen.findByRole('heading', { name: new RegExp(`^${name}`) })).closest('article') as HTMLElement
+const categoryCard = (name: string) => openCard(new RegExp(`^${name}`))
 
 describe('SkillsPage', () => {
   it('shows each category with its skills, sections, and uses', async () => {
@@ -104,7 +104,7 @@ describe('SkillsPage', () => {
     const saved = { ...CLAUDE, skill_id: 12, skill_name: 'Claude Code', used_by: [] }
     stub({ 'PUT /api/skills/10': [{ status: 200, body: saved }] })
     render(<SkillsPage />)
-    const claude = (await screen.findAllByRole('heading', { name: 'Claude' }))[0].closest('article') as HTMLElement
+    const claude = await openCard('Claude')
     expect(within(claude).getByText(/Tweaker \(Independent Project\)/)).toBeInTheDocument()
     fireEvent.click(within(claude).getByRole('button', { name: 'Rename "Claude"' }))
     expect(screen.getByLabelText('Skill name')).toHaveFocus()

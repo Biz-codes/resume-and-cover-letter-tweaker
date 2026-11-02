@@ -8,6 +8,8 @@ one. An entry no sent version uses is edited in place (docs/FRONTEND_CHECKS.md, 
 versions are locked").
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -40,6 +42,8 @@ class NewEducation(EducationIn):
 
 class EducationOut(EducationIn):
     education_id: int
+    # When it was added, which tells versions apart in lists when all else they show matches.
+    created_at: datetime
     sections: list[SectionRef]
     used_by: list[Use]
 
@@ -51,7 +55,8 @@ def to_out(db: Session, entries: list[Education]) -> list[EducationOut]:
     ids = [entry.education_id for entry in entries]
     sections = section_refs(db, SectionEducation, "education_id", ids)
     used_by = uses(db, EDUCATION_LINKS, ids)
-    return [EducationOut(education_id=entry.education_id, sections=sections[entry.education_id],
+    return [EducationOut(education_id=entry.education_id, created_at=entry.created_at,
+                         sections=sections[entry.education_id],
                          used_by=used_by[entry.education_id],
                          **{field: getattr(entry, field) for field in FIELDS})
             for entry in entries]

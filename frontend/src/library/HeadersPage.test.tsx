@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Header } from '../shared/api/headers'
+import { openCard } from '../test/openCard'
 import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
 
 const BASE: Header = {
   header_id: 1,
+  created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',
   headline: 'Software Engineer',
   email: 'sam@example.com',
@@ -25,9 +27,8 @@ const SENT: Header = {
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: true }],
 }
 
-async function cardFor(headline: string) {
-  return (await screen.findByText(headline)).closest('article') as HTMLElement
-}
+// A header's card, opened, by its headline (every header here is Sam Rivera's).
+const cardFor = (headline: string) => openCard(`Sam Rivera, ${headline}`)
 
 describe('HeadersPage', () => {
   it('lists headers with what uses them', async () => {
@@ -159,7 +160,7 @@ describe('HeadersPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Retry'))
-    expect(await screen.findByText('Software Engineer')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sam Rivera, Software Engineer' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

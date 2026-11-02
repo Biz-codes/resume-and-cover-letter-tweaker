@@ -305,6 +305,77 @@ def test_a_sent_version_tree_cant_change(client: TestClient, db: Session, accoun
     assert tree(client, doc.resume_id) == sections
 
 
+def restoring(sections: list[dict]) -> dict:
+    """The body that restores a tree as GET returned it."""
+    def entry(placed: dict) -> dict:
+        return {"kind": placed["kind"], "item_id": placed["item_id"],
+                "skill_ids": [skill["item_id"] for skill in placed["skills"]],
+                "bullet_ids": [bullet["item_id"] for bullet in placed["bullets"]]}
+
+    return {"sections": [{"section_id": section["section_id"],
+                          "entries": [entry(placed) for placed in section["entries"]]}
+                         for section in sections]}
+
+
+def test_restore_puts_back_a_removed_category_with_its_skills(client: TestClient, db: Session,
+                                                              account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    before = tree(client, doc.resume_id)
+    base = f"/api/resumes/{doc.resume_id}"
+    # Remove the Skills section's category, then the Volunteering section.
+    client.put(f"{base}/sections/{before[1]['row_id']}/items", json={"entries": []})
+    client.put(f"{base}/sections", json={"section_ids": [s["section_id"] for s in before[:4]]})
+    assert shape(tree(client, doc.resume_id)) != shape(before)
+    response = client.put(f"{base}/tree", json=restoring(before))
+    assert response.status_code == 200
+    # Exactly as before: the category with React then TypeScript, not its defaults, and the
+    # role's bullets though the role doesn't list them in the library.
+    assert shape(response.json()["sections"]) == shape(before)
+    assert shape(tree(client, doc.resume_id)) == shape(before)
+
+
+def test_restore_keeps_what_was_written_in_the_library(client: TestClient, db: Session,
+                                                       account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    before = tree(client, doc.resume_id)
+    base = f"/api/resumes/{doc.resume_id}"
+    client.post(f"{base}/sections/written", json={"title": "Talks"})
+    client.put(f"{base}/tree", json=restoring(before))
+    assert shape(tree(client, doc.resume_id)) == shape(before)
+    assert db.scalar(select(Section.id).where(Section.title == "Talks")) is not None
+
+
+def test_restore_checks_ids_and_locks(client: TestClient, db: Session, account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    build_resume(db, account_id, doc)
+    before = tree(client, doc.resume_id)
+    base = f"/api/resumes/{doc.resume_id}"
+    other = add(db, Account())
+    theirs = add(db, NarrativeContent(account_id=other.account_id, content="Theirs."))
+    body = restoring(before)
+    body["sections"][0]["entries"].append({"kind": "narrative", "item_id": theirs.content_id})
+    assert error(client.put(f"{base}/tree", json=body))[:2] == (422, "CROSS_ACCOUNT_LINK")
+    body = restoring(before)
+    body["sections"][0]["entries"].append({"kind": "narrative", "item_id": 999999})
+    assert error(client.put(f"{base}/tree", json=body))[:2] == (404, "NOT_FOUND")
+    body = restoring(before)
+    body["sections"][0]["entries"][0]["skill_ids"] = [skill_id(db, "React")]
+    assert error(client.put(f"{base}/tree", json=body))[:2] == (422, "VALIDATION_FAILED")
+    body = restoring(before)
+    standalone = body["sections"][0]["entries"][2]
+    body["sections"][2]["entries"].append(standalone)
+    body["sections"][0]["entries"].append({**standalone})
+    assert error(client.put(f"{base}/tree", json=body))[0] == 409
+    # Nothing changed by the refused requests.
+    assert shape(tree(client, doc.resume_id)) == shape(before)
+    sent = add(db, Resume(account_id=account_id, name="Acme",
+                          job_posting_id=posting(db, account_id, sent=True).job_posting_id))
+    assert error(client.put(f"/api/resumes/{sent.resume_id}/tree",
+                            json={"sections": []}))[:2] == (409, "VERSION_LOCKED")
+
+
 def test_cover_letters_build_the_same_way(client: TestClient, db: Session, account_id: int):
     letter = add(db, CoverLetter(account_id=account_id, name="General"))
     intro = add(db, Section(account_id=account_id, title="intro"))

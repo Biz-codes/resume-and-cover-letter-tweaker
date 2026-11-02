@@ -12,10 +12,12 @@ import ApplyChoice from './ApplyChoice'
 import BulletList from './BulletList'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { distinctLabels } from '../shared/api/labels'
 
 const FIELDS: Field<ExperienceFields>[] = [
   { name: 'role_title', label: 'Title', required: true },
@@ -144,8 +146,13 @@ export default function ExperiencePage() {
     content: bullet.content,
   }))
 
+  // Labels that tell versions apart (labels.ts): the full one, for buttons and forms, and the
+  // card's title.
+  const labelOf = distinctLabels(roles ?? [], experienceLabel, (item) => item.created_at)
+  const titleOf = distinctLabels(roles ?? [], (item) => `${item.role_title}, ${item.organization}`, (item) => item.created_at)
+
   function card(role: Experience) {
-    const label = experienceLabel(role)
+    const label = labelOf(role)
     if (form?.kind === 'edit' && form.id === role.experience_id) {
       const inProgress = role.used_by.filter((use) => !use.locked)
       return (
@@ -163,12 +170,11 @@ export default function ExperiencePage() {
       )
     }
     return (
-      <article key={role.experience_id} className="card">
-        <div className="card-header">
-          <h4>
-            {role.role_title}, {role.organization}
-          </h4>
-          {deleting !== role.experience_id && (
+      <LibraryCard
+        key={role.experience_id}
+        title={titleOf(role)}
+        actions={
+          deleting !== role.experience_id && (
             <div className="actions">
               <button
                 type="button"
@@ -199,32 +205,37 @@ export default function ExperiencePage() {
                 Delete
               </button>
             </div>
-          )}
-        </div>
+          )
+        }
+        shown={
+          <>
+            {deleting === role.experience_id && (
+              <ConfirmDelete
+                what={`"${label}"`}
+                uses={role.used_by}
+                effect="It's removed from them, along with its bullets there. The bullets stay in the library."
+                error={deleteError}
+                onConfirm={() => void confirmDelete(role)}
+                onCancel={() => {
+                  setDeleting(null)
+                  focusLater(buttonId(role.experience_id, 'delete'))
+                }}
+              />
+            )}
+            {form?.kind === 'version' && form.id === role.experience_id && (
+              <FieldsForm
+                label={`New version of "${label}"`}
+                fields={FIELDS}
+                initial={fieldsOf(role)}
+                submitLabel="Add version"
+                onSave={(fields) => addVersion(role, fields)}
+                onCancel={() => close(buttonId(role.experience_id, 'version'))}
+              />
+            )}
+          </>
+        }
+      >
         <p className="muted">{[role.location, role.dates].filter(Boolean).join(' | ')}</p>
-        {deleting === role.experience_id && (
-          <ConfirmDelete
-            what={`"${label}"`}
-            uses={role.used_by}
-            effect="It's removed from them, along with its bullets there. The bullets stay in the library."
-            error={deleteError}
-            onConfirm={() => void confirmDelete(role)}
-            onCancel={() => {
-              setDeleting(null)
-              focusLater(buttonId(role.experience_id, 'delete'))
-            }}
-          />
-        )}
-        {form?.kind === 'version' && form.id === role.experience_id && (
-          <FieldsForm
-            label={`New version of "${label}"`}
-            fields={FIELDS}
-            initial={fieldsOf(role)}
-            submitLabel="Add version"
-            onSave={(fields) => addVersion(role, fields)}
-            onCancel={() => close(buttonId(role.experience_id, 'version'))}
-          />
-        )}
         <BulletList
           owner={label}
           bullets={role.bullets}
@@ -242,7 +253,7 @@ export default function ExperiencePage() {
         />
         <NameList title="Sections that list it" names={role.sections.map((section) => section.title)} />
         <UsedBy uses={role.used_by} />
-      </article>
+      </LibraryCard>
     )
   }
 

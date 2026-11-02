@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ToneSet } from '../shared/api/toneSets'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ToneSetsPage from './ToneSetsPage'
 
@@ -26,9 +27,7 @@ function stub(extra: Record<string, Reply[]> = {}, sets = [TEACHING, TECH]) {
   })
 }
 
-async function techCard() {
-  return (await screen.findByRole('heading', { name: 'Tech' })).closest('article') as HTMLElement
-}
+const techCard = () => openCard('Tech')
 
 describe('ToneSetsPage', () => {
   it('shows each set with its rules in order, and what uses it', async () => {
@@ -44,7 +43,7 @@ describe('ToneSetsPage', () => {
     // Rules belong to the set, so they're deleted (with a warning), not removed.
     expect(within(rules).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(within(card).getByText('Used by (1)')).toBeInTheDocument()
-    expect(screen.getByText('No rules yet.')).toBeInTheDocument()
+    expect(within(await openCard('Teaching')).getByText('No rules yet.')).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
@@ -57,8 +56,9 @@ describe('ToneSetsPage', () => {
     fireEvent.change(await screen.findByLabelText('New tone name'), { target: { value: 'Writing' } })
     fireEvent.click(screen.getByText('Add tone'))
     expect(await screen.findByRole('status')).toHaveTextContent('Added "Writing".')
-    fireEvent.change(screen.getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
-    fireEvent.click(within(screen.getByRole('heading', { name: 'Teaching' }).closest('article') as HTMLElement).getByText('Add rule'))
+    const teaching = await openCard('Teaching')
+    fireEvent.change(within(teaching).getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
+    fireEvent.click(within(teaching).getByText('Add rule'))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/tone-sets/4/rules')).toEqual({ rule_text: 'Name the students.' }),
     )

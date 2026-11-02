@@ -135,6 +135,8 @@ Unique: (job_posting_id)
 
 Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. A tailored version is named "[role title] at [organization]" when it's started, with no name to type (see "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)). For a base resume the user names it (e.g. "Tech base", "Teaching base").
 
+Note: `name` is unique among the account's resumes, ignoring capitals (an app check: `DUPLICATE` for a typed name, and a number added to a posting's version, which the app names). See "Names of resumes and cover letters" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+
 Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting uses the posting's header, which is changed only on the posting. A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
 Note: `based_on_resume_id` uses `ON DELETE SET NULL`, an exception to cascading deletes. Deleting an older version shouldn't delete every resume copied from it.
@@ -532,7 +534,7 @@ Unique: (resume_section_id, category_id)
 
 Unique: (resume_skill_category_id, skill_id)
 
-Note: the database doesn't check that the skill is listed under the selected category in `skill_category_skill`. The app only offers skills from the category's list, so an unlisted skill can't be added.
+Note: the database doesn't check that the skill is listed under the selected category in `skill_category_skill`. The app only offers skills from the category's list, so an unlisted skill can't be added. Undo can put back one the category no longer lists, since it restores what the resume showed (see "Undo" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### resume_experience
 | Column               | Type         | Constraints                                                             | Description                    |
@@ -578,7 +580,7 @@ Note: lets each resume show a different set of skills for the same project, chos
 
 Unique: (resume_section_id, bullet_id)
 
-Note: set `resume_experience_id` or `resume_project_id` when the bullet sits under an experience or project on this resume. Leave both empty for a bullet listed directly in the section. As with skills, the app should only offer bullets listed under the selected experience or project (`experience_bullet_point` / `project_bullet_point`), and parents from the same resume section.
+Note: set `resume_experience_id` or `resume_project_id` when the bullet sits under an experience or project on this resume. Leave both empty for a bullet listed directly in the section. As with skills, the app should only offer bullets listed under the selected experience or project (`experience_bullet_point` / `project_bullet_point`), and parents from the same resume section; undo can put back one no longer listed.
 
 ### resume_education
 | Column              | Type         | Constraints                                                             | Description                   |

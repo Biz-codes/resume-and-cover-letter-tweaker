@@ -3,3 +3,10 @@
   margin: 8px 0 0;
   font-weight: 600;
 }
+
+/* A role's or project's parts (details, skills, bullets), each a level of its own. */
+.parts {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}

@@ -4,6 +4,8 @@ Headers have versions (docs/FRONTEND_CHECKS.md, "Headers"): editing one that a s
 version uses saves a new header instead, and identical headers are reused, never duplicated.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -32,6 +34,8 @@ class HeaderIn(BaseModel):
 
 class HeaderOut(HeaderIn):
     header_id: int
+    # When it was added, which tells versions apart in lists when all else they show matches.
+    created_at: datetime
     used_by: list[Use]
 
 
@@ -59,7 +63,7 @@ def uses(db: Session, header_ids: list[int]) -> dict[int, list[Use]]:
 
 
 def to_out(header: Header, used_by: list[Use]) -> HeaderOut:
-    return HeaderOut(header_id=header.header_id, used_by=used_by,
+    return HeaderOut(header_id=header.header_id, created_at=header.created_at, used_by=used_by,
                      **{field: getattr(header, field) for field in FIELDS})
 
 

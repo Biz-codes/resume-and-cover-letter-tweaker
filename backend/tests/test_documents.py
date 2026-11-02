@@ -264,6 +264,42 @@ def test_links_must_be_the_accounts_own(client: TestClient, db: Session, account
 # Editing
 
 
+def test_names_are_unique_within_each_kind(client: TestClient, db: Session, account_id: int):
+    tech = client.post("/api/resumes", json={"name": "Tech base"}).json()
+    # Typed names must be new, ignoring capitals, when creating, copying, or renaming.
+    taken = (409, "DUPLICATE", "name")
+    response = client.post("/api/resumes", json={"name": "tech BASE"})
+    assert error(response) == taken
+    assert response.json()["error"]["message"] == 'There\'s already a resume named "Tech base".'
+    assert error(client.post(f"/api/resumes/{tech['resume_id']}/copies",
+                             json={"name": "Tech base"})) == taken
+    other = client.post("/api/resumes", json={"name": "Teaching base"}).json()
+    assert error(client.put(f"/api/resumes/{other['resume_id']}",
+                            json={"name": "Tech Base", "header_id": other["header_id"],
+                                  "tone_set_id": None})) == taken
+    # Keeping its own name is fine, and a cover letter can share a resume's name.
+    assert client.put(f"/api/resumes/{tech['resume_id']}",
+                      json={"name": "Tech base", "header_id": tech["header_id"],
+                            "tone_set_id": None}).status_code == 200
+    assert client.post("/api/cover-letters", json={"name": "Tech base"}).status_code == 201
+
+
+def test_a_postings_version_gets_a_number_when_its_name_is_taken(client: TestClient, db: Session,
+                                                                  account_id: int):
+    head = header(db, account_id)
+    first, second = posting(db, account_id, sent=False), posting(db, account_id, sent=False)
+    first.header_id = second.header_id = head.header_id
+    db.flush()
+    name = "Engineer at Acme"
+    made = client.post("/api/resumes", json={"name": name, "job_posting_id": first.job_posting_id})
+    assert made.json()["name"] == name
+    # The same role and organization again: the app names it, so it's numbered, not refused.
+    again = client.post(f"/api/resumes/{made.json()['resume_id']}/copies",
+                        json={"name": name, "job_posting_id": second.job_posting_id})
+    assert again.status_code == 201
+    assert again.json()["name"] == "Engineer at Acme (2)"
+
+
 def test_edit_a_base_resume_in_place(client: TestClient, db: Session, account_id: int):
     doc = add(db, Resume(account_id=account_id, name="Tech base"))
     tone = add(db, ToneSet(account_id=account_id, name="Tech"))

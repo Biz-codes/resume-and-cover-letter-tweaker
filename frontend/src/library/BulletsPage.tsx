@@ -11,6 +11,7 @@ import { projectLabel } from '../shared/api/projects'
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -76,41 +77,28 @@ export default function BulletsPage() {
   function card(bullet: Bullet) {
     const label = `"${shortBullet(bullet.content)}"`
     return (
-      <article key={bullet.bullet_id} className="card">
-        {editing === bullet.bullet_id ? (
-          <NameForm
-            label="Bullet text"
-            field="content"
-            initial={bullet.content}
-            multiline
-            lockedNote={anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined}
-            onSave={(content) => save(bullet, content)}
-            onCancel={() => {
-              setEditing(null)
-              focusLater(buttonId(bullet.bullet_id, 'edit'))
-            }}
-          />
-        ) : (
-          <h4 className="bullet-text">{bullet.content}</h4>
-        )}
-        <NameList title="Roles" names={bullet.experience.map(experienceLabel)} />
-        <NameList title="Projects" names={bullet.projects.map(projectLabel)} />
-        <NameList title="Sections" names={bullet.sections.map((section) => section.title)} />
-        <UsedBy uses={bullet.used_by} />
-        {editing !== bullet.bullet_id &&
-          (deleting === bullet.bullet_id ? (
-            <ConfirmDelete
-              what={label}
-              uses={bullet.used_by}
-              effect="It's removed from them, and from every role, project, and section."
-              error={deleteError}
-              onConfirm={() => void confirmDelete(bullet)}
+      <LibraryCard
+        key={bullet.bullet_id}
+        title={bullet.content}
+        titleClassName="bullet-text"
+        replacesTitle={
+          editing === bullet.bullet_id && (
+            <NameForm
+              label="Bullet text"
+              field="content"
+              initial={bullet.content}
+              multiline
+              lockedNote={anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined}
+              onSave={(content) => save(bullet, content)}
               onCancel={() => {
-                setDeleting(null)
-                focusLater(buttonId(bullet.bullet_id, 'delete'))
+                setEditing(null)
+                focusLater(buttonId(bullet.bullet_id, 'edit'))
               }}
             />
-          ) : (
+          )
+        }
+        actions={
+          deleting !== bullet.bullet_id && (
             <div className="actions">
               <button
                 type="button"
@@ -137,8 +125,29 @@ export default function BulletsPage() {
                 Delete
               </button>
             </div>
-          ))}
-      </article>
+          )
+        }
+        shown={
+          deleting === bullet.bullet_id && (
+            <ConfirmDelete
+              what={label}
+              uses={bullet.used_by}
+              effect="It's removed from them, and from every role, project, and section."
+              error={deleteError}
+              onConfirm={() => void confirmDelete(bullet)}
+              onCancel={() => {
+                setDeleting(null)
+                focusLater(buttonId(bullet.bullet_id, 'delete'))
+              }}
+            />
+          )
+        }
+      >
+        <NameList title="Roles" names={bullet.experience.map(experienceLabel)} />
+        <NameList title="Projects" names={bullet.projects.map(projectLabel)} />
+        <NameList title="Sections" names={bullet.sections.map((section) => section.title)} />
+        <UsedBy uses={bullet.used_by} />
+      </LibraryCard>
     )
   }
 

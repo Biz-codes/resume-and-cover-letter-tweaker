@@ -10,6 +10,7 @@ import { projectLabel, type Project } from '../shared/api/projects'
 import type { Section } from '../shared/api/sections'
 import type { SkillCategory } from '../shared/api/skills'
 import type { ListItem } from '../shared/components/OrderedList/OrderedList'
+import { distinctLabels } from '../shared/api/labels'
 
 export interface Library {
   sections: Section[]
@@ -73,6 +74,12 @@ export function placedItem(entry: TreeEntry) {
   return entryItem(entry.kind, entry.item_id, name, isText(entry.kind) ? `"${shortBullet(name)}"` : name)
 }
 
+// Each item with its label, telling versions apart (labels.ts).
+const named = <T extends { created_at: string }>(items: T[], label: (item: T) => string) => {
+  const labelOf = distinctLabels(items, label, (item) => item.created_at)
+  return items.map((item) => [item, labelOf(item)] as const)
+}
+
 // Every saved item of one kind, as { id, name }, oldest first.
 export function savedItems(library: Library, kind: EntryKind): { id: number; name: string }[] {
   switch (kind) {
@@ -83,11 +90,11 @@ export function savedItems(library: Library, kind: EntryKind): { id: number; nam
     case 'category':
       return library.categories.map((item) => ({ id: item.category_id, name: item.category_name }))
     case 'experience':
-      return library.experience.map((item) => ({ id: item.experience_id, name: experienceLabel(item) }))
+      return named(library.experience, experienceLabel).map(([item, name]) => ({ id: item.experience_id, name }))
     case 'project':
-      return library.projects.map((item) => ({ id: item.project_id, name: projectLabel(item) }))
+      return named(library.projects, projectLabel).map(([item, name]) => ({ id: item.project_id, name }))
     case 'education':
-      return library.education.map((item) => ({ id: item.education_id, name: educationLabel(item) }))
+      return named(library.education, educationLabel).map(([item, name]) => ({ id: item.education_id, name }))
   }
 }
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, and_, insert, select, union_all
+from sqlalchemy import ColumnElement, and_, func, insert, select, union_all
 from sqlalchemy.orm import Session
 
 from app.errors import AppError, ErrorCode
@@ -366,6 +366,36 @@ def posting_for_version(db: Session, account_id: int, job_posting_id: int,
 
 
 POSTING_HEADER = "A posting's resumes and cover letters use its header. Change it on the posting."
+
+
+def document_name(db: Session, kind: Kind, account_id: int, name: str,
+                  for_posting: bool = False, doc_id: int | None = None) -> str:
+    """A name no other resume (or cover letter) of the account has, ignoring capitals, so each
+    is told apart in lists (docs/FRONTEND_CHECKS.md, "Names of resumes and cover letters"). A
+    name the user typed must be new (DUPLICATE, naming the one that has it). A version for a
+    posting, which the app names, gets " (2)", " (3)", and so on instead, cut to fit."""
+    name_column = kind.doc.name
+    others = select(name_column).where(kind.doc.account_id == account_id)
+    if doc_id is not None:
+        others = others.where(getattr(kind.doc, kind.doc_id) != doc_id)
+
+    def taken(candidate: str) -> str | None:
+        return db.scalar(others.where(func.lower(name_column) == candidate.lower()).limit(1))
+
+    existing = taken(name)
+    if existing is None:
+        return name
+    if not for_posting:
+        what = kind.prefix.replace("_", " ")
+        raise AppError(ErrorCode.DUPLICATE, f'There\'s already a {what} named "{existing}".',
+                       field="name")
+    count = 2
+    while True:
+        suffix = f" ({count})"
+        candidate = name[:kind.doc.name.type.length - len(suffix)] + suffix
+        if taken(candidate) is None:
+            return candidate
+        count += 1
 
 
 def posting_header_id(posting: JobPosting, header_id: int | None = None) -> int:

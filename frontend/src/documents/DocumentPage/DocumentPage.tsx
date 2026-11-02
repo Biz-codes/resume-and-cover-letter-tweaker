@@ -10,7 +10,17 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import { capitalize, docsApi, fieldsOf, KINDS, type DocDetail, type DocFields, type DocKind } from '../../shared/api/documents'
+import {
+  capitalize,
+  copyName,
+  docsApi,
+  fieldsOf,
+  KINDS,
+  treeShape,
+  type DocDetail,
+  type DocFields,
+  type DocKind,
+} from '../../shared/api/documents'
 import { headersApi, type Header } from '../../shared/api/headers'
 import { signOffsApi, type SignOff } from '../../shared/api/signOffs'
 import { toneSetsApi, type ToneSet } from '../../shared/api/toneSets'
@@ -108,6 +118,20 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     return () => clearTimeout(timer)
   }, [sentNotice])
 
+  // The copy form starts with a name no other one has, so it reads the names first, and opens
+  // once it has one, so focus goes from Make a copy straight to the name. If reading them fails,
+  // it starts from "Copy of", and the backend still refuses a name that's taken (DUPLICATE).
+  const [copyNameFor, setCopyNameFor] = useState<string | null>(null)
+  async function openCopy() {
+    if (!doc) return
+    const taken = await docsApi(kind)
+      .list()
+      .then((docs) => docs.map((other) => other.name))
+      .catch(() => [])
+    setCopyNameFor(copyName(doc.name, taken))
+    open('copy')
+  }
+
   function open(next: Mode) {
     setMode(next)
     setNotice(null)
@@ -141,6 +165,28 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     latest.current = doc
   }, [doc])
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+
+  // Undo and redo: the document as it was before each change since the page opened, and after
+  // each one undone (docs/FRONTEND_CHECKS.md, "Undo"). Kept in a ref, so steps queued quickly
+  // each take the next one; `historySize` redraws the buttons.
+  const history = useRef<{ undo: DocDetail[]; redo: DocDetail[] }>({ undo: [], redo: [] })
+  const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 })
+  const [historyError, setHistoryError] = useState<ApiError | null>(null)
+  // Counts undos and redos, so the parts that keep typed values of their own (the header, the
+  // greeting, the sign-off) start again from the document they bring back.
+  const [restored, setRestored] = useState(0)
+
+  function setStacks(undo: DocDetail[], redo: DocDetail[]) {
+    history.current = { undo, redo }
+    setHistorySize({ undo: undo.length, redo: redo.length })
+  }
+
+  // Shows a saved change, and keeps what it replaced for Undo. A new change can't be redone past.
+  function record(next: DocDetail) {
+    if (latest.current) setStacks([...history.current.undo, latest.current], [])
+    latest.current = next
+    setDoc(next)
+  }
   // A new sign-off is saved to the library too, so the list is read again.
   async function writeSignOff(text: string) {
     await inTurn(() => docsApi(kind).writeSignOff(id, text), 'Added the new sign-off.')
@@ -148,21 +194,62 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     return latest.current?.sign_off_id ?? null
   }
 
-  function inTurn(save: (current: DocDetail) => Promise<DocDetail>, saved: string) {
+  // `saved` is the notice, or for one that depends on the outcome, a function giving it after.
+  function inTurn(
+    save: (current: DocDetail) => Promise<DocDetail>,
+    saved: string | (() => string),
+    show = record,
+  ) {
     const run = queue.current
       .catch(() => undefined)
       .then(async () => {
         if (!latest.current) return
         const next = await save(latest.current)
-        latest.current = next
-        setDoc(next)
-        setNotice(saved)
+        show(next)
+        setNotice(typeof saved === 'string' ? saved : saved())
       })
     queue.current = run
     return run
   }
   const update = (changes: Partial<DocFields>, saved: string) =>
     inTurn((current) => docsApi(kind).update(id, { ...fieldsOf(kind, current), ...changes }), saved)
+
+  // Back (or forward again) one step: the fields and the tree that differ are sent back as they
+  // were. Library items written since stay in the library.
+  function step(direction: 'undo' | 'redo') {
+    setHistoryError(null)
+    inTurn(
+      async (current) => {
+        const { undo, redo } = history.current
+        const target = (direction === 'undo' ? undo : redo).at(-1)
+        if (!target) return current
+        const api = docsApi(kind)
+        let next = current
+        if (JSON.stringify(fieldsOf(kind, current)) !== JSON.stringify(fieldsOf(kind, target))) {
+          next = await api.update(id, fieldsOf(kind, target))
+        }
+        if (JSON.stringify(treeShape(current.sections)) !== JSON.stringify(treeShape(target.sections))) {
+          next = await api.restoreTree(id, target.sections)
+        }
+        if (direction === 'undo') setStacks(undo.slice(0, -1), [...redo, current])
+        else setStacks([...undo, current], redo.slice(0, -1))
+        return next
+      },
+      // Says how many steps are left, so each press reads differently (a notice that repeats
+      // the same text isn't announced again).
+      () => {
+        const left = history.current[direction].length
+        return direction === 'undo'
+          ? `Undid a change. ${left ? `${left} more can be undone.` : 'Nothing more to undo.'}`
+          : `Redid a change. ${left ? `${left} more can be redone.` : 'Nothing more to redo.'}`
+      },
+      (next) => {
+        latest.current = next
+        setDoc(next)
+        setRestored((count) => count + 1)
+      },
+    ).catch((error: unknown) => setHistoryError(toApiError(error)))
+  }
 
   async function rename(name: string) {
     await update({ name }, 'Renamed.')
@@ -269,11 +356,11 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               onCancel={() => close('rename')}
             />
           )}
-          {mode === 'copy' && (
+          {mode === 'copy' && copyNameFor !== null && (
             <NameForm
               label="Name of the copy"
               field="name"
-              initial={`Copy of ${doc.name}`.slice(0, 204)}
+              initial={copyNameFor ?? `Copy of ${doc.name}`.slice(0, 204)}
               submitLabel="Make copy"
               onSave={copy}
               onCancel={() => close('copy')}
@@ -297,7 +384,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               <button type="button" id={BUTTON_IDS.rename} onClick={() => open('rename')}>
                 Rename
               </button>
-              <button type="button" id={BUTTON_IDS.copy} onClick={() => open('copy')}>
+              <button type="button" id={BUTTON_IDS.copy} onClick={() => void openCopy()}>
                 Make a copy
               </button>
               {inPlace && !readOnly && (
@@ -313,7 +400,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
           <h3>Contents</h3>
           {needsChoice && mode !== 'copy' && (
-            <BaseWarning singular={singular} onEdit={editInPlace} onCopy={() => open('copy')} />
+            <BaseWarning singular={singular} onEdit={editInPlace} onCopy={() => void openCopy()} />
           )}
           {readOnly ? (
             <p>Tone: {toneSet?.name ?? 'None'}</p>
@@ -336,12 +423,35 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             </label>
           )}
           {toneError && <p role="alert">{toneError.message}</p>}
+          {!readOnly && (
+            <>
+              {/* aria-disabled, not disabled, so a focused button keeps focus when its list runs out. */}
+              <div className="actions" role="group" aria-label="Undo and redo">
+                <button
+                  type="button"
+                  aria-disabled={historySize.undo === 0}
+                  onClick={() => historySize.undo > 0 && step('undo')}
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  aria-disabled={historySize.redo === 0}
+                  onClick={() => historySize.redo > 0 && step('redo')}
+                >
+                  Redo
+                </button>
+              </div>
+              {historyError && <p role="alert">{historyError.message}</p>}
+            </>
+          )}
 
           <ul className={styles.tree}>
             <li>
               <Disclosure title={doc.job_posting ? 'Application header' : 'Header'}>
                 {/* A version for a posting uses the posting's header, so it's changed there. */}
                 <HeaderFields
+                  key={restored}
                   header={header}
                   headers={headers}
                   readOnly={readOnly || Boolean(doc.job_posting)}
@@ -356,7 +466,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             </li>
             <li>
               <Disclosure title={`Sections (${doc.sections.length})`}>
-                <DocumentTree kind={kind} doc={doc} readOnly={readOnly} onChange={setDoc} onNotice={setNotice} />
+                <DocumentTree kind={kind} doc={doc} readOnly={readOnly} onChange={record} onNotice={setNotice} />
               </Disclosure>
             </li>
             {kind === 'cover_letter' && (
@@ -364,6 +474,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 <li>
                   <Disclosure title="Greeting">
                     <Greeting
+                      key={restored}
                       doc={doc}
                       readOnly={readOnly}
                       onSave={(fields) => update(fields, 'Greeting saved.')}
@@ -373,6 +484,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 <li>
                   <Disclosure title="Sign-off">
                     <SignOffPart
+                      key={restored}
                       doc={doc}
                       signOffs={signOffs}
                       headerName={header?.full_name ?? null}

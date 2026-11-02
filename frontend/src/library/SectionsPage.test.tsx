@@ -4,6 +4,7 @@ import type { Education } from '../shared/api/education'
 import type { Experience } from '../shared/api/experience'
 import type { Section } from '../shared/api/sections'
 import type { SkillCategory } from '../shared/api/skills'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
@@ -42,6 +43,7 @@ const category = (id: number, name: string, builtIn = false): SkillCategory => (
 })
 const ROLE: Experience = {
   experience_id: 9,
+  created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
   organization: 'Acme',
   location: null,
@@ -52,6 +54,7 @@ const ROLE: Experience = {
 }
 const DEGREE: Education = {
   education_id: 7,
+  created_at: '2026-10-01T09:00:00',
   degree: 'B.A. in English',
   institution: 'State University',
   details: null,
@@ -92,7 +95,8 @@ function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, 
   })
 }
 
-const card = async (title: string) => (await screen.findByText(title)).closest('article') as HTMLElement
+// A section's card, opened. Its heading also holds its tags ("built in"), so match its start.
+const card = (title: string) => openCard(new RegExp(`^${title}`))
 
 const group = (heading: string) => screen.getByRole('heading', { name: heading }).parentElement as HTMLElement
 

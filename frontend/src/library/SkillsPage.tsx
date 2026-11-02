@@ -10,6 +10,7 @@ import { anyLocked } from '../shared/api/usage'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
 import UsedBy from './UsedBy'
@@ -154,22 +155,59 @@ export default function SkillsPage() {
 
       <h3>Categories</h3>
       {categories?.map((category) => (
-        <article key={category.category_id} className="card">
-          {is(renaming, 'category', category.category_id) ? (
-            <NameForm
-              label="Category name"
-              field="category_name"
-              initial={category.category_name}
-              lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
-              onSave={(name) => renameCategory(category, name)}
-              onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'rename')}
+        <LibraryCard
+          key={category.category_id}
+          title={category.category_name}
+          tags={category.built_in && <span className="tag">built in</span>}
+          replacesTitle={
+            is(renaming, 'category', category.category_id) && (
+              <NameForm
+                label="Category name"
+                field="category_name"
+                initial={category.category_name}
+                lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
+                onSave={(name) => renameCategory(category, name)}
+                onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'rename')}
+              />
+            )
+          }
+          actions={
+            !category.built_in &&
+              !is(renaming, 'category', category.category_id) &&
+              !is(deleting, 'category', category.category_id) && (
+              <div className="actions">
+                <button
+                  type="button"
+                  id={buttonId('category', category.category_id, 'rename')}
+                  aria-label={`Rename "${category.category_name}"`}
+                  onClick={() => setRenaming({ kind: 'category', id: category.category_id })}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  id={buttonId('category', category.category_id, 'delete')}
+                  aria-label={`Delete "${category.category_name}"`}
+                  onClick={() => startDeleting({ kind: 'category', id: category.category_id })}
+                >
+                  Delete
+                </button>
+              </div>
+              )
+          }
+          shown={
+            is(deleting, 'category', category.category_id) && (
+            <ConfirmDelete
+              what={`"${category.category_name}"`}
+              uses={category.used_by}
+              effect='They keep showing its skills, under "Other".'
+              error={deleteError}
+              onConfirm={() => void remove({ kind: 'category', id: category.category_id }, category.category_name)}
+              onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'delete')}
             />
-          ) : (
-            <h4>
-              {category.category_name}
-              {category.built_in && <span className="tag">built in</span>}
-            </h4>
-          )}
+            )
+          }
+        >
           {category.built_in ? (
             <p className="muted">Offered wherever skills are added.</p>
           ) : (
@@ -198,94 +236,69 @@ export default function SkillsPage() {
             />
           </Collapsible>
           <UsedBy uses={category.used_by} />
-
-          {!category.built_in &&
-            !is(renaming, 'category', category.category_id) &&
-            (is(deleting, 'category', category.category_id) ? (
-              <ConfirmDelete
-                what={`"${category.category_name}"`}
-                uses={category.used_by}
-                effect='They keep showing its skills, under "Other".'
-                error={deleteError}
-                onConfirm={() => void remove({ kind: 'category', id: category.category_id }, category.category_name)}
-                onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'delete')}
-              />
-            ) : (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={buttonId('category', category.category_id, 'rename')}
-                  aria-label={`Rename "${category.category_name}"`}
-                  onClick={() => setRenaming({ kind: 'category', id: category.category_id })}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  id={buttonId('category', category.category_id, 'delete')}
-                  aria-label={`Delete "${category.category_name}"`}
-                  onClick={() => startDeleting({ kind: 'category', id: category.category_id })}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
           {category.category_id === OTHER_CATEGORY_ID && (
             <p className="muted">Skills no other category lists stay here until you add them to one.</p>
           )}
-        </article>
+        </LibraryCard>
       ))}
 
       {categories && <h3>All skills</h3>}
       {categories && skills.length === 0 && <p>No skills yet.</p>}
       {skills.map((skill) => (
-        <article key={skill.skill_id} className="card">
-          {is(renaming, 'skill', skill.skill_id) ? (
-            <NameForm
-              label="Skill name"
-              field="skill_name"
-              initial={skill.skill_name}
-              lockedNote={anyLocked(skill.used_by) ? lockedNote('skill') : undefined}
-              onSave={(name) => renameSkill(skill, name)}
-              onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'rename')}
+        <LibraryCard
+          key={skill.skill_id}
+          title={skill.skill_name}
+          replacesTitle={
+            is(renaming, 'skill', skill.skill_id) && (
+              <NameForm
+                label="Skill name"
+                field="skill_name"
+                initial={skill.skill_name}
+                lockedNote={anyLocked(skill.used_by) ? lockedNote('skill') : undefined}
+                onSave={(name) => renameSkill(skill, name)}
+                onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'rename')}
+              />
+            )
+          }
+          actions={
+            !is(renaming, 'skill', skill.skill_id) && !is(deleting, 'skill', skill.skill_id) && (
+            <div className="actions">
+              <button
+                type="button"
+                id={buttonId('skill', skill.skill_id, 'rename')}
+                aria-label={`Rename "${skill.skill_name}"`}
+                onClick={() => setRenaming({ kind: 'skill', id: skill.skill_id })}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                id={buttonId('skill', skill.skill_id, 'delete')}
+                aria-label={`Delete "${skill.skill_name}"`}
+                onClick={() => startDeleting({ kind: 'skill', id: skill.skill_id })}
+              >
+                Delete
+              </button>
+            </div>
+            )
+          }
+          shown={
+            is(deleting, 'skill', skill.skill_id) && (
+            <ConfirmDelete
+              what={`"${skill.skill_name}"`}
+              uses={skill.used_by}
+              effect="It's removed from them, and from every category and project."
+              error={deleteError}
+              onConfirm={() => void remove({ kind: 'skill', id: skill.skill_id }, skill.skill_name)}
+              onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'delete')}
             />
-          ) : (
-            <h4>{skill.skill_name}</h4>
-          )}
+            )
+          }
+        >
           <NameList title="Categories" names={skill.categories.map((category) => category.category_name)} />
           <NameList title="Projects" names={skill.projects.map(projectLabel)} />
           <UsedBy uses={skill.used_by} />
-          {!is(renaming, 'skill', skill.skill_id) &&
-            (is(deleting, 'skill', skill.skill_id) ? (
-              <ConfirmDelete
-                what={`"${skill.skill_name}"`}
-                uses={skill.used_by}
-                effect="It's removed from them, and from every category and project."
-                error={deleteError}
-                onConfirm={() => void remove({ kind: 'skill', id: skill.skill_id }, skill.skill_name)}
-                onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'delete')}
-              />
-            ) : (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={buttonId('skill', skill.skill_id, 'rename')}
-                  aria-label={`Rename "${skill.skill_name}"`}
-                  onClick={() => setRenaming({ kind: 'skill', id: skill.skill_id })}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  id={buttonId('skill', skill.skill_id, 'delete')}
-                  aria-label={`Delete "${skill.skill_name}"`}
-                  onClick={() => startDeleting({ kind: 'skill', id: skill.skill_id })}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-        </article>
+        </LibraryCard>
       ))}
     </section>
   )

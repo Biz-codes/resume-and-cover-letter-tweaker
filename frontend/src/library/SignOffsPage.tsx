@@ -7,6 +7,7 @@ import { signOffsApi, type SignOff } from '../shared/api/signOffs'
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import LibraryCard from './LibraryCard'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
@@ -76,66 +77,72 @@ export default function SignOffsPage() {
     const id = signOff.sign_off_id
     const label = `"${signOff.text}"`
     return (
-      <article key={id} className="card">
-        {editing === id ? (
-          <NameForm
-            label="Sign-off"
-            field="text"
-            initial={signOff.text}
-            lockedNote={anyLocked(signOff.used_by) ? LOCKED_NOTE : undefined}
-            onSave={(text) => save(signOff, text)}
-            onCancel={() => {
-              setEditing(null)
-              focusLater(buttonId(id, 'edit'))
-            }}
-          />
-        ) : (
-          <div className="card-header">
-            <h3>{signOff.text}</h3>
-            {deleting !== id && (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={buttonId(id, 'edit')}
-                  aria-label={`Edit ${label}`}
-                  onClick={() => {
-                    setEditing(id)
-                    setDeleting(null)
-                    setNotice(null)
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  id={buttonId(id, 'delete')}
-                  aria-label={`Delete ${label}`}
-                  onClick={() => {
-                    setDeleting(id)
-                    setDeleteError(null)
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        {deleting === id && (
-          <ConfirmDelete
-            what={label}
-            uses={signOff.used_by}
-            effect="They keep going with no closing until you pick another."
-            error={deleteError}
-            onConfirm={() => void confirmDelete(signOff)}
-            onCancel={() => {
-              setDeleting(null)
-              focusLater(buttonId(id, 'delete'))
-            }}
-          />
-        )}
+      <LibraryCard
+        key={id}
+        title={signOff.text}
+        heading={3}
+        replacesTitle={
+          editing === id && (
+            <NameForm
+              label="Sign-off"
+              field="text"
+              initial={signOff.text}
+              lockedNote={anyLocked(signOff.used_by) ? LOCKED_NOTE : undefined}
+              onSave={(text) => save(signOff, text)}
+              onCancel={() => {
+                setEditing(null)
+                focusLater(buttonId(id, 'edit'))
+              }}
+            />
+          )
+        }
+        actions={
+          deleting !== id && (
+            <div className="actions">
+              <button
+                type="button"
+                id={buttonId(id, 'edit')}
+                aria-label={`Edit ${label}`}
+                onClick={() => {
+                  setEditing(id)
+                  setDeleting(null)
+                  setNotice(null)
+                }}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                id={buttonId(id, 'delete')}
+                aria-label={`Delete ${label}`}
+                onClick={() => {
+                  setDeleting(id)
+                  setDeleteError(null)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )
+        }
+        shown={
+          deleting === id && (
+            <ConfirmDelete
+              what={label}
+              uses={signOff.used_by}
+              effect="They keep going with no closing until you pick another."
+              error={deleteError}
+              onConfirm={() => void confirmDelete(signOff)}
+              onCancel={() => {
+                setDeleting(null)
+                focusLater(buttonId(id, 'delete'))
+              }}
+            />
+          )
+        }
+      >
         <UsedBy uses={signOff.used_by} />
-      </article>
+      </LibraryCard>
     )
   }
 

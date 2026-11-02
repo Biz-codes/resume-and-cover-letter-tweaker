@@ -48,8 +48,15 @@ describe('DocumentsPage', () => {
     const fetchMock = stub({ 'POST /api/resumes': [{ status: 201, body: created }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    const field = screen.getByLabelText('Name of the new base resume')
-    expect(field).toHaveFocus()
+    const field = screen.getByLabelText('Name of the new base resume (required)')
+    await vi.waitFor(() => expect(field).toHaveFocus())
+    // Fresh unless another is picked: base versions first, then the ones for postings.
+    expect(screen.getByLabelText('Start from')).toHaveValue('')
+    expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'Fresh, with the usual defaults',
+      'Tech base',
+      'Acme resume (for Acme)',
+    ])
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Teaching base' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
@@ -61,14 +68,45 @@ describe('DocumentsPage', () => {
     stub({ 'POST /api/resumes': [{ status: 422, body: errorBody('VALIDATION_FAILED', 'Name is required.', 'name') }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    const field = screen.getByLabelText('Name of the new base resume')
+    const field = screen.getByLabelText('Name of the new base resume (required)')
     fireEvent.change(field, { target: { value: ' ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.')
     expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveAccessibleDescription('Name is required.')
     expect(field).toHaveValue(' ')
+    await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'New base resume' })).toHaveFocus())
+  })
+
+  it('creates a base version as a copy of any existing one, base or tailored', async () => {
+    const copied = { ...TECH, resume_id: 4, name: 'Acme base', based_on: { id: 2, name: 'Acme resume' }, output: { parts: [], text: '' } }
+    const fetchMock = stub({ 'POST /api/resumes/2/copies': [{ status: 201, body: copied }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
+    fireEvent.change(screen.getByLabelText('Name of the new base resume (required)'), { target: { value: 'Acme base' } })
+    fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
+    expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    // No posting, so it's a new base version; the original isn't changed.
+    expect(sentBody(fetchMock, 'POST /api/resumes/2/copies')).toEqual({ name: 'Acme base' })
+  })
+
+  it('says it is creating', async () => {
+    // The list loads; the create never answers, so the check sees the form mid-save.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) =>
+        init?.method === 'POST' ? new Promise<Response>(() => {}) : Promise.resolve(Response.json([TECH, ACME])),
+      ),
+    )
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
+    fireEvent.change(screen.getByLabelText('Name of the new base resume (required)'), { target: { value: 'Draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
+    expect(await screen.findByRole('button', { name: 'Creating…' })).toHaveAttribute('aria-disabled', 'true')
+    await expectNoA11yViolations()
   })
 
   it('shows the notice it was sent here with', async () => {

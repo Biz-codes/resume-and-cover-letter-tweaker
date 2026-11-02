@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { NarrativeContent } from '../shared/api/narrativeContent'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import NarrativeContentPage from './NarrativeContentPage'
 
@@ -56,7 +57,7 @@ describe('NarrativeContentPage', () => {
     expect(document.title).toBe('Narrative content – Resume Tweaker')
     expect(screen.getByText(/anything from one sentence to a full paragraph, grouped however you choose/)).toBeInTheDocument()
     expect(screen.getByText(/Write new excerpts here OR on the Sections page/)).toBeInTheDocument()
-    const card = (await screen.findByRole('heading', { name: INTRO.content })).closest('article') as HTMLElement
+    const card = await openCard(INTRO.content)
     expect(within(card).getByText('Sections (2)')).toBeInTheDocument()
     expect(within(card).getByText('Intro paragraph')).toBeInTheDocument()
     const unlisted = screen.getByRole('heading', { name: 'Not listed anywhere' })

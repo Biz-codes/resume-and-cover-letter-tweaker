@@ -162,11 +162,12 @@ async function expand(name: string) {
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
 }
 
-// Opens the Experience section and the role and category in it.
+// Opens the Experience section, the role and category in it, and the role's bullets.
 async function openExperience() {
   await expand('Experience')
   await expand('Role: Engineer, Acme')
   await expand('Skills: Front End')
+  await expand('Bullets for Engineer, Acme (1)')
 }
 
 describe('DocumentTree', () => {
@@ -181,7 +182,18 @@ describe('DocumentTree', () => {
     expect(await rowNames('Items in Experience')).toEqual(['Role: Engineer, Acme', 'Skills: Front End'])
     expect(screen.queryByRole('group', { name: 'Engineer, Acme bullets' })).not.toBeInTheDocument()
     await expand('Role: Engineer, Acme')
+    // A role has more than one part, so each opens on its own, named for the role, and starts
+    // closed; a category has only its skills, shown right away.
+    const details = screen.getByRole('button', { name: 'Details for Engineer, Acme' })
+    const bulletsToggle = screen.getByRole('button', { name: 'Bullets for Engineer, Acme (1)' })
+    expect(details).toHaveAttribute('aria-expanded', 'false')
+    expect(bulletsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(bulletsToggle).getByText('for Engineer, Acme')).toHaveClass('visually-hidden')
+    expect(screen.queryByRole('group', { name: 'Engineer, Acme bullets' })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
     await expand('Skills: Front End')
+    expect(screen.getByRole('group', { name: 'Front End skills' })).toBeInTheDocument()
+    await expand('Bullets for Engineer, Acme (1)')
     expect(await rowNames('Engineer, Acme bullets')).toEqual(['Led the redesign.'])
     // What else each list could show waits under "More options".
     expect(screen.getByRole('button', { name: 'More options for Front End skills (1)' })).toBeInTheDocument()
@@ -195,6 +207,7 @@ describe('DocumentTree', () => {
     stub()
     renderTree()
     await openExperience()
+    await expand('Details for Engineer, Acme')
     const fields = screen.getAllByRole('definition').map((field) => field.textContent)
     expect(fields).toEqual(['Engineer', 'Acme', 'None', 'None'])
     // Add content is inside the section's More options.
@@ -488,6 +501,7 @@ describe('DocumentTree', () => {
     renderTree(DOC, true)
     await expand('Experience')
     await expand('Role: Engineer, Acme')
+    await expand('Bullets for Engineer, Acme (1)')
     expect(await rowNames('Engineer, Acme bullets')).toEqual(['Led the redesign.'])
     expect(screen.queryByRole('button', { name: /^Move|^Remove|^New|^Add/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()

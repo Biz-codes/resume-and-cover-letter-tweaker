@@ -11,6 +11,8 @@ export interface ExperienceFields {
 
 export interface Experience extends ExperienceFields {
   experience_id: number
+  // When it was added, which tells versions apart in lists (labels.ts).
+  created_at: string
   bullets: { bullet_id: number; content: string }[]
   sections: { id: number; title: string }[]
   used_by: Use[]

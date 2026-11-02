@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Bullet } from '../shared/api/bullets'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
 
@@ -35,7 +36,7 @@ describe('BulletsPage', () => {
     stub()
     render(<BulletsPage />)
     expect(document.title).toBe('Bullet points – Resume Tweaker')
-    const card = (await screen.findByRole('heading', { name: SHIPPED.content })).closest('article') as HTMLElement
+    const card = await openCard(SHIPPED.content)
     expect(within(card).getByText('Roles (2)')).toBeInTheDocument()
     expect(within(card).getByText('Engineer, Acme (2020)')).toBeInTheDocument()
     expect(within(card).getByText('Senior Engineer, Acme')).toBeInTheDocument()

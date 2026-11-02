@@ -5,9 +5,11 @@ import { toApiError, type ApiError } from '../shared/api/client'
 import { headersApi, type Header, type HeaderFields } from '../shared/api/headers'
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
+import LibraryCard from './LibraryCard'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { distinctLabels } from '../shared/api/labels'
 
 // autoComplete lets browsers fill in the user's own details (WCAG 1.3.5).
 const FIELDS: { name: keyof HeaderFields; label: string; type?: string; autoComplete?: string }[] = [
@@ -205,6 +207,8 @@ export default function HeadersPage() {
     }
   }
 
+  // Names that tell versions apart (labels.ts), for the cards and their buttons.
+  const labelOf = distinctLabels(headers ?? [], headerLabel, (item) => item.created_at)
   const editedHeader = headers?.find((header) => header.header_id === editing?.headerId)
 
   function cancelEditing() {
@@ -264,58 +268,64 @@ export default function HeadersPage() {
             onCancel={cancelEditing}
           />
         ) : (
-          <article key={header.header_id} className="card">
-            <h3>{header.full_name}</h3>
-            {header.headline && <p>{header.headline}</p>}
-            <p className="muted">
-              {[header.phone, header.email, header.location].filter(Boolean).join(' | ')}
-            </p>
-            {[header.linkedin_url, header.github_url, header.portfolio_url]
-              .filter(Boolean)
-              .map((url) => (
-                <p key={url} className="muted">
-                  {url}
-                </p>
-              ))}
-            <UsedBy uses={header.used_by} />
-
-            {deleting?.header_id === header.header_id ? (
-              <ConfirmDelete
-                what={`"${headerLabel(header)}"`}
-                uses={header.used_by}
-                effect="They keep going with no header until you pick another."
-                error={deleteError}
-                onConfirm={() => void confirmDelete()}
-                onCancel={() => {
-                  setDeleting(null)
-                  focusLater(buttonId(header.header_id, 'delete'))
-                }}
-              />
-            ) : (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={buttonId(header.header_id, 'edit')}
-                  aria-label={`Edit "${headerLabel(header)}"`}
-                  onClick={() => startEditing({ headerId: header.header_id, fields: fieldsOf(header) })}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  id={buttonId(header.header_id, 'delete')}
-                  aria-label={`Delete "${headerLabel(header)}"`}
-                  onClick={() => {
-                    setDeleting(header)
-                    setDeleteError(null)
-                    setEditing(null)
+          <LibraryCard
+            key={header.header_id}
+            title={labelOf(header)}
+            heading={3}
+            actions={
+              deleting?.header_id !== header.header_id && (
+                <div className="actions">
+                  <button
+                    type="button"
+                    id={buttonId(header.header_id, 'edit')}
+                    aria-label={`Edit "${labelOf(header)}"`}
+                    onClick={() => startEditing({ headerId: header.header_id, fields: fieldsOf(header) })}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    id={buttonId(header.header_id, 'delete')}
+                    aria-label={`Delete "${labelOf(header)}"`}
+                    onClick={() => {
+                      setDeleting(header)
+                      setDeleteError(null)
+                      setEditing(null)
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )
+            }
+            shown={
+              deleting?.header_id === header.header_id && (
+                <ConfirmDelete
+                  what={`"${labelOf(header)}"`}
+                  uses={header.used_by}
+                  effect="They keep going with no header until you pick another."
+                  error={deleteError}
+                  onConfirm={() => void confirmDelete()}
+                  onCancel={() => {
+                    setDeleting(null)
+                    focusLater(buttonId(header.header_id, 'delete'))
                   }}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </article>
+                />
+              )
+            }
+          >
+          <p className="muted">
+            {[header.phone, header.email, header.location].filter(Boolean).join(' | ')}
+          </p>
+          {[header.linkedin_url, header.github_url, header.portfolio_url]
+            .filter(Boolean)
+            .map((url) => (
+              <p key={url} className="muted">
+                {url}
+              </p>
+            ))}
+          <UsedBy uses={header.used_by} />
+          </LibraryCard>
         ),
       )}
     </section>

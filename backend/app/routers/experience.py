@@ -13,6 +13,8 @@ docs/FRONTEND_CHECKS.md:
   so they're stored once. Otherwise the row is edited in place.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -56,6 +58,8 @@ class ExperienceChange(ExperienceIn):
 
 class ExperienceOut(ExperienceIn):
     experience_id: int
+    # When it was added, which tells versions apart in lists when all else they show matches.
+    created_at: datetime
     bullets: list[BulletRef]
     sections: list[SectionRef]
     used_by: list[Use]
@@ -74,6 +78,7 @@ def to_out(db: Session, roles: list[Experience], account_id: int) -> list[Experi
     sections = section_refs(db, SectionExperience, "experience_id", ids)
     used_by = uses(db, EXPERIENCE_LINKS, ids)
     return [ExperienceOut(experience_id=experience.experience_id,
+                          created_at=experience.created_at,
                           bullets=bullets[experience.experience_id],
                           sections=sections[experience.experience_id],
                           used_by=used_by[experience.experience_id],

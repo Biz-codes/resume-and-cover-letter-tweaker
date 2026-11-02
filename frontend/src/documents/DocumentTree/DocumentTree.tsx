@@ -9,7 +9,7 @@
 // placed in a section) can be rewritten as a new version, which takes its place here and leaves
 // the original in the library. Each change is saved right away and returns the document with its
 // new output.
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { docsApi, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection } from '../../shared/api/documents'
@@ -21,6 +21,7 @@ import { sectionsApi } from '../../shared/api/sections'
 import { skillCategoriesApi } from '../../shared/api/skills'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import AddContent from '../AddContent'
+import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import FieldsForm from '../../shared/components/FieldsForm'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList, { type ListItem, type ListKey } from '../../shared/components/OrderedList/OrderedList'
@@ -260,10 +261,15 @@ function EntryChildren({
   )
 
   const shownFields = SHOWN_FIELDS[entry.kind]
-
-  return (
-    <>
-      {shownFields && (
+  // Each part of the item: its fields, its skills, its bullets. An item with more than one (a role
+  // or project) shows each as a level that opens and closes, named for the item so screen readers
+  // can tell one item's "Bullets" from another's; one with a single part shows it as it is.
+  const parts: { key: string; title: string; count?: number; content: ReactNode }[] = []
+  if (shownFields) {
+    parts.push({
+      key: 'details',
+      title: 'Details',
+      content: (
         <dl className="details-list">
           {shownFields.map((field) => (
             <Fragment key={field.name}>
@@ -272,10 +278,16 @@ function EntryChildren({
             </Fragment>
           ))}
         </dl>
-      )}
-      {(entry.kind === 'category' || entry.kind === 'project') && (
+      ),
+    })
+  }
+  if (entry.kind === 'category' || entry.kind === 'project') {
+    parts.push({
+      key: 'skills',
+      title: 'Skills',
+      count: entry.skills.length,
+      content: (
         <>
-          <p className={styles.listLabel}>Skills</p>
           <OrderedList
             label={`${name} skills`}
             items={skills}
@@ -305,10 +317,16 @@ function EntryChildren({
             />
           )}
         </>
-      )}
-      {(entry.kind === 'experience' || entry.kind === 'project') && (
+      ),
+    })
+  }
+  if (entry.kind === 'experience' || entry.kind === 'project') {
+    parts.push({
+      key: 'bullets',
+      title: 'Bullets',
+      count: entry.bullets.length,
+      content: (
         <>
-          <p className={styles.listLabel}>Bullets</p>
           <OrderedList
             label={`${name} bullets`}
             items={bullets}
@@ -338,8 +356,36 @@ function EntryChildren({
             />
           )}
         </>
-      )}
-    </>
+      ),
+    })
+  }
+
+  if (parts.length === 1) {
+    const [part] = parts
+    return (
+      <>
+        {part.key !== 'details' && <p className={styles.listLabel}>{part.title}</p>}
+        {part.content}
+      </>
+    )
+  }
+  return (
+    <ul className={styles.parts}>
+      {parts.map((part) => (
+        <li key={part.key}>
+          <Disclosure
+            title={
+              <>
+                {part.title} <span className="visually-hidden">for {name}</span>
+                {part.count !== undefined && ` (${part.count})`}
+              </>
+            }
+          >
+            {part.content}
+          </Disclosure>
+        </li>
+      ))}
+    </ul>
   )
 }
 

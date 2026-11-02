@@ -4,12 +4,14 @@ import type { Project } from '../shared/api/projects'
 import type { Section } from '../shared/api/sections'
 import type { Skill } from '../shared/api/skills'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ProjectsPage from './ProjectsPage'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const TWEAKER: Project = {
   project_id: 4,
+  created_at: '2026-10-01T09:00:00',
   project_title: 'Tweaker',
   done_for: 'Freelance',
   url: 'https://example.com/tweaker',
@@ -51,7 +53,7 @@ describe('ProjectsPage', () => {
     stub()
     render(<ProjectsPage />)
     expect(document.title).toBe('Projects – Resume Tweaker')
-    const card = (await screen.findByRole('heading', { name: 'Tweaker' })).closest('article') as HTMLElement
+    const card = await openCard('Tweaker')
     expect(within(card).getByText('Freelance | Spring 2024')).toBeInTheDocument()
     expect(within(card).getByText('https://example.com/tweaker')).toBeInTheDocument()
     expect(within(card).getByText('Skills (1)')).toBeInTheDocument()
@@ -63,6 +65,7 @@ describe('ProjectsPage', () => {
   it("saves a project's skill list", async () => {
     const fetchMock = stub({ 'PUT /api/projects/4/skills': [{ status: 200, body: TWEAKER }] })
     render(<ProjectsPage />)
+    await openCard('Tweaker')
     const picker = await screen.findByLabelText(`Add to ${LABEL} skills`)
     fireEvent.change(picker, { target: { value: '21' } })
     fireEvent.click(within(picker.parentElement as HTMLElement).getByText('Add'))

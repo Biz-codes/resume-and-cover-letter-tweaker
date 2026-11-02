@@ -2,8 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Bullet } from '../shared/api/bullets'
 import type { Experience } from '../shared/api/experience'
+import { addedOn } from '../shared/api/labels'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ExperiencePage from './ExperiencePage'
 
@@ -12,6 +14,7 @@ const SHIPPED = { bullet_id: 10, content: 'Shipped the checkout flow' }
 const TESTED = { bullet_id: 11, content: 'Tested it' }
 const ENGINEER: Experience = {
   experience_id: 4,
+  created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
   organization: 'Acme',
   location: 'Remote',
@@ -55,8 +58,7 @@ function stub(extra: Record<string, Reply[]> = {}, roles = [ENGINEER, GIG]) {
   })
 }
 
-const roleCard = async (name: string) =>
-  (await screen.findByRole('heading', { name })).closest('article') as HTMLElement
+const roleCard = openCard
 
 describe('ExperiencePage', () => {
   it('shows each role with its bullets, sections, and uses, and unlisted roles first', async () => {
@@ -71,6 +73,20 @@ describe('ExperiencePage', () => {
     expect(within(engineer).getByText(/Acme resume/)).toBeInTheDocument()
     const unlisted = screen.getByRole('heading', { name: 'Not listed under any section' })
     expect(unlisted.parentElement).toContainElement(await roleCard('Consultant, Self'))
+    await expectNoA11yViolations()
+  })
+
+  it('tells versions apart by when they were added, where everything else they show matches', async () => {
+    const later = { ...ENGINEER, experience_id: 9, dates: '2020 – 2023', created_at: '2026-10-02T10:30:00', used_by: [] }
+    stub({}, [ENGINEER, later])
+    render(<ExperiencePage />)
+    // Both titles read "Engineer, Acme", so each adds when it was added.
+    expect(
+      await screen.findByRole('heading', { name: `Engineer, Acme, added ${addedOn(ENGINEER.created_at)}` }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: `Engineer, Acme, added ${addedOn(later.created_at)}` })).toBeInTheDocument()
+    // Their buttons already differ by their dates, so nothing is added there.
+    expect(screen.getByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2023)"' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 

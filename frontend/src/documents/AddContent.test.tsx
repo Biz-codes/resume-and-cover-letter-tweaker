@@ -8,6 +8,7 @@ import type { Library } from './treeItems'
 
 const role = (id: number, organization: string, bullets: { bullet_id: number; content: string }[] = []) => ({
   experience_id: id,
+  created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
   organization,
   location: null,

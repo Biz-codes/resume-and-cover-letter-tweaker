@@ -16,10 +16,12 @@ import BulletList from './BulletList'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import LibraryCard from './LibraryCard'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { distinctLabels } from '../shared/api/labels'
 
 type Group = 'resume' | 'letter' | 'unused'
 
@@ -93,8 +95,17 @@ export default function SectionsPage() {
   const categoryChoices = categories
     .filter((category) => !category.built_in)
     .map((category) => ({ id: category.category_id, name: category.category_name }))
-  const roleChoices = roles.map((role) => ({ id: role.experience_id, name: experienceLabel(role) }))
-  const projectChoices = projects.map((project) => ({ id: project.project_id, name: projectLabel(project) }))
+  // Labels that tell versions apart (labels.ts), for what's listed and what can be added. A
+  // section's lists hold short refs, so each is named from the full item.
+  const roleLabel = distinctLabels(roles, experienceLabel, (item) => item.created_at)
+  const projectLabelOf = distinctLabels(projects, projectLabel, (item) => item.created_at)
+  const educationLabelOf = distinctLabels(education, educationLabel, (item) => item.created_at)
+  const named = <T, R>(list: T[], id: (item: T) => number, labelOf: (item: T) => string, ref: R, refId: number, fallback: (ref: R) => string) => {
+    const item = list.find((candidate) => id(candidate) === refId)
+    return item ? labelOf(item) : fallback(ref)
+  }
+  const roleChoices = roles.map((role) => ({ id: role.experience_id, name: roleLabel(role) }))
+  const projectChoices = projects.map((project) => ({ id: project.project_id, name: projectLabelOf(project) }))
   const allBullets = bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))
   const narrativeItem = (excerpt: { content_id: number; content: string }) => ({
     id: excerpt.content_id,
@@ -102,7 +113,7 @@ export default function SectionsPage() {
     label: `"${shortBullet(excerpt.content)}"`,
   })
   const narrativeChoices = narrative.map(narrativeItem)
-  const educationChoices = education.map((entry) => ({ id: entry.education_id, name: educationLabel(entry) }))
+  const educationChoices = education.map((entry) => ({ id: entry.education_id, name: educationLabelOf(entry) }))
 
   async function create(title: string) {
     await sectionsApi.create(title)
@@ -166,29 +177,73 @@ export default function SectionsPage() {
               <h3>{heading}</h3>
               <p className="muted">{note}</p>
               {members.map((section) => (
-                <article key={section.id} className="card">
-                  {renaming === section.id ? (
-                    <NameForm
-                      label="Section title"
-                      field="title"
-                      initial={section.title}
-                      lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
-                      onSave={(title) => rename(section, title)}
+                <LibraryCard
+                  key={section.id}
+                  title={section.title}
+                  tags={
+                    <>
+                    {section.built_in && <span className="tag">built in</span>}
+                    {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
+                      <span className="tag">also a cover letter label</span>
+                    )}
+                    </>
+                  }
+                  replacesTitle={
+                    renaming === section.id && (
+                      <NameForm
+                        label="Section title"
+                        field="title"
+                        initial={section.title}
+                        lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
+                        onSave={(title) => rename(section, title)}
+                        onCancel={() => {
+                          setRenaming(null)
+                          focusLater(`section-${section.id}-rename`)
+                        }}
+                      />
+                    )
+                  }
+                  actions={
+                    !section.built_in && deleting !== section.id && (
+                    <div className="actions">
+                      <button
+                        type="button"
+                        id={`section-${section.id}-rename`}
+                        aria-label={`Rename "${section.title}"`}
+                        onClick={() => setRenaming(section.id)}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        id={`section-${section.id}-delete`}
+                        aria-label={`Delete "${section.title}"`}
+                        onClick={() => {
+                          setDeleting(section.id)
+                          setDeleteError(null)
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    )
+                  }
+                  shown={
+                    deleting === section.id && (
+                    <ConfirmDelete
+                      what={`"${section.title}"`}
+                      uses={section.used_by}
+                      effect="It and everything placed in it are removed from them. The library items it lists stay in the library."
+                      error={deleteError}
+                      onConfirm={() => void confirmDelete(section)}
                       onCancel={() => {
-                        setRenaming(null)
-                        focusLater(`section-${section.id}-rename`)
+                        setDeleting(null)
+                        focusLater(`section-${section.id}-delete`)
                       }}
                     />
-                  ) : (
-                    <h4>
-                      {section.title}
-                      {section.built_in && <span className="tag">built in</span>}
-                      {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
-                        <span className="tag">also a cover letter label</span>
-                      )}
-                    </h4>
-                  )}
-
+                    )
+                  }
+                >
                   <Collapsible title="Narrative content it lists" count={section.narrative_content.length}>
                     <OrderedList
                       label={`${section.title} narrative content`}
@@ -231,7 +286,10 @@ export default function SectionsPage() {
                   <Collapsible title="Roles it lists" count={section.experience.length}>
                     <OrderedList
                       label={`${section.title} roles`}
-                      items={section.experience.map((role) => ({ id: role.experience_id, name: experienceLabel(role) }))}
+                      items={section.experience.map((role) => ({
+                        id: role.experience_id,
+                        name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
+                      }))}
                       choices={roleChoices}
                       emptyText="None."
                       onChange={async (ids) => {
@@ -246,7 +304,7 @@ export default function SectionsPage() {
                       label={`${section.title} projects`}
                       items={section.projects.map((project) => ({
                         id: project.project_id,
-                        name: projectLabel(project),
+                        name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
                       }))}
                       choices={projectChoices}
                       emptyText="None."
@@ -275,7 +333,10 @@ export default function SectionsPage() {
                   <Collapsible title="Education it lists" count={section.education.length}>
                     <OrderedList
                       label={`${section.title} education`}
-                      items={section.education.map((entry) => ({ id: entry.education_id, name: educationLabel(entry) }))}
+                      items={section.education.map((entry) => ({
+                        id: entry.education_id,
+                        name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
+                      }))}
                       choices={educationChoices}
                       emptyText="None."
                       onChange={async (ids) => {
@@ -286,45 +347,7 @@ export default function SectionsPage() {
                   </Collapsible>
 
                   <UsedBy uses={section.used_by} />
-
-                  {!section.built_in &&
-                    renaming !== section.id &&
-                    (deleting === section.id ? (
-                      <ConfirmDelete
-                        what={`"${section.title}"`}
-                        uses={section.used_by}
-                        effect="It and everything placed in it are removed from them. The library items it lists stay in the library."
-                        error={deleteError}
-                        onConfirm={() => void confirmDelete(section)}
-                        onCancel={() => {
-                          setDeleting(null)
-                          focusLater(`section-${section.id}-delete`)
-                        }}
-                      />
-                    ) : (
-                      <div className="actions">
-                        <button
-                          type="button"
-                          id={`section-${section.id}-rename`}
-                          aria-label={`Rename "${section.title}"`}
-                          onClick={() => setRenaming(section.id)}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          id={`section-${section.id}-delete`}
-                          aria-label={`Delete "${section.title}"`}
-                          onClick={() => {
-                            setDeleting(section.id)
-                            setDeleteError(null)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-                </article>
+                </LibraryCard>
               ))}
             </div>
           )

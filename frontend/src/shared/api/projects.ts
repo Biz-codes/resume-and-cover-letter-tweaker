@@ -11,6 +11,8 @@ export interface ProjectFields {
 
 export interface Project extends ProjectFields {
   project_id: number
+  // When it was added, which tells versions apart in lists (labels.ts).
+  created_at: string
   skills: { skill_id: number; skill_name: string }[]
   bullets: { bullet_id: number; content: string }[]
   sections: { id: number; title: string }[]

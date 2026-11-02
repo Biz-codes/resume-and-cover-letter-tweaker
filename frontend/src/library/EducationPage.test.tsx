@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Education } from '../shared/api/education'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
+import { openCard } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import EducationPage from './EducationPage'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const DEGREE: Education = {
   education_id: 7,
+  created_at: '2026-10-01T09:00:00',
   degree: 'B.A. in English',
   institution: 'State University',
   details: 'Minor in Computer Science',
@@ -50,9 +52,7 @@ describe('EducationPage', () => {
     stub()
     render(<EducationPage />)
     expect(document.title).toBe('Education – Resume Tweaker')
-    const card = (await screen.findByRole('heading', { name: 'B.A. in English, State University' })).closest(
-      'article',
-    ) as HTMLElement
+    const card = await openCard('B.A. in English, State University')
     expect(within(card).getByText('May 2015')).toBeInTheDocument()
     expect(within(card).getByText('Minor in Computer Science')).toBeInTheDocument()
     expect(within(card).getByText('Sections that list it (1)')).toBeInTheDocument()

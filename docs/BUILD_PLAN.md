@@ -91,10 +91,34 @@ What to do:
 4. **Update every reference to the old paths:** "Project layout and tooling" and "API conventions" in [TECH_STACK.md](TECH_STACK.md), [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md), CLAUDE.md, the skills in `.claude/skills/`, and code comments (search for `components/`, `pages/`, and `api/`). The `a11y_review.py` hook and the sibling-test rule in `a11yChecks.ts` work with any folder layout.
 5. **Check:** `scripts/check.sh`, then `/a11y` over the whole front end, then try every page in the browser to confirm nothing looks or behaves differently.
 
-## After the reorganize: status notices as alert dialogs
+## After the reorganize: one dialog to edit each item
+Goal: every item is edited the same way wherever it appears. Lists are changed where they're shown (a role's bullets are reordered, added, and removed on the role), and an item itself only in its own dialog, which every place it appears opens with the same Edit button.
+
+- [ ] **Start after the user approves this plan.** Build it in the steps below, each with its tests, and check each off.
+
+Decided with the user:
+- **The dialog holds the item and where it's used:** its fields with Save, New version, Delete, its own lists (a role's bullets, a category's skills, a project's skills and bullets, a section's lists), the sections that list it, and Used by. Library cards slim down to the title, a short summary, and Edit.
+- **The same actions for every kind:** Edit, New version (a copy listed right after the original, as roles and projects have now), and Delete, for headers, sections, narrative content, skill categories, skills, roles, projects, bullets, education, sign-offs, and tones. Built-in sections and "Other" still can't be renamed or deleted.
+- **Library and the resume and cover letter tree:** each row in the tree has Edit too, opening the same dialog. There, New version takes the item's place in that document only, as it does now.
+- **One dialog at a time, never one inside another:** a name of another item inside the dialog (a bullet under a role, a role that lists a bullet) opens that item in the same dialog, with "Back to [the item before]" at the top; Close returns focus to where the dialog was first opened. Names shown on the pages open the dialog the same way. Names of resumes and cover letters (in Used by) stay links to their pages.
+- **Hide instead of deleting what a sent application uses:** a sent application always keeps its record, so an item one uses can't be deleted (`VERSION_LOCKED`, with a message pointing to Hide), and its dialog offers Hide in place of Delete. Deleting the sent application itself, or its posting, still works after its warning. This replaces "Deleting is still allowed" in "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+- **Any item can be hidden,** used or not, to set it aside without losing it. A hidden item isn't offered anywhere new (pickers, More options, defaults, the library's lists), but every resume and cover letter that already shows it keeps it, sent or not. Built-in sections and "Other" can't be hidden, since every account shares them.
+- **Each library page ends with "Hidden (n)",** closed to start, listing its hidden items with Unhide and Edit.
+- **Accessibility:** a native modal `<dialog>` named by its heading, with focus moved to the heading when it opens or shows another item, Escape and Close to close it, focus returned to the button that opened it, and nothing behind it reachable while it's open.
+
+Steps:
+1. [ ] **`Dialog`** in `frontend/src/shared/components/`: the modal, its focus handling, and its tests. The alert dialogs step below reuses it.
+2. [ ] **New version for every kind in the library:** a `POST /api/<items>/{id}/versions` like roles and projects have, for the kinds without one, each listed right after the original and listing the same children. Names and titles must be new (`DUPLICATE`).
+3. [ ] **The item dialog,** one shell with each kind's contents, opened from the library cards, which slim down.
+4. [ ] **Names open the dialog** everywhere they're shown, with Back inside it.
+5. [ ] **Hide:** a `hidden` column on each library table (through `/db-table`), Hide and Unhide in the dialog, hidden items left out of every list that offers items to add and out of the defaults, the "Hidden (n)" group on each page, and deletes refused while a sent application uses the item.
+6. [ ] **The resume and cover letter tree:** Edit on each row, with New version from the dialog taking the item's place in that document.
+7. [ ] **Docs:** APP_FLOW.md, FRONTEND_CHECKS.md, and TECH_STACK.md describe the pattern, then `/a11y` over the whole front end.
+
+## After the item dialogs: status notices as alert dialogs
 Goal: the success notices that now show as text on the page (the `role="status"` line under each page's heading, such as "Saved the posting." or "Header saved.") show as alert dialogs instead, so they don't stay on the page.
 
-- [ ] **Start after the front end reorganize above is done.** Design the details with the user first: which notices become dialogs (every one, or only some), whether they close on their own or with an OK button, and whether errors change too.
+- [ ] **Start after the item dialogs above are done**, reusing their `Dialog`. Design the details with the user first: which notices become dialogs (every one, or only some), whether they close on their own or with an OK button, and whether errors change too.
 
 Accessibility to keep in mind (WCAG 2.2 AA): a modal `<dialog>` (or `role="alertdialog"`) with a name, focus moved into it when it opens and back to where it was (or to the next step, as the notices do now) when it closes, Escape to close, and nothing announced twice. Update "Messages" under "Accessibility" in [TECH_STACK.md](TECH_STACK.md), and the tests that check the status text.
 

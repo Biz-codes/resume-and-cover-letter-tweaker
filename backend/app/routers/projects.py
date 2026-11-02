@@ -13,6 +13,8 @@ changing a project's fields follows "Changing a role or project" in docs/FRONTEN
   and bullets. Otherwise the row is edited in place.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -63,6 +65,8 @@ class ProjectChange(ProjectIn):
 
 class ProjectOut(ProjectIn):
     project_id: int
+    # When it was added, which tells versions apart in lists when all else they show matches.
+    created_at: datetime
     skills: list[SkillRef]
     bullets: list[BulletRef]
     sections: list[SectionRef]
@@ -92,7 +96,8 @@ def to_out(db: Session, projects: list[Project], account_id: int) -> list[Projec
     bullets = bullet_refs(db, ProjectBulletPoint, "project_id", ids, account_id)
     sections = section_refs(db, SectionProject, "project_id", ids)
     used_by = uses(db, PROJECT_LINKS, ids)
-    return [ProjectOut(project_id=project.project_id, skills=skills[project.project_id],
+    return [ProjectOut(project_id=project.project_id, created_at=project.created_at,
+                       skills=skills[project.project_id],
                        bullets=bullets[project.project_id],
                        sections=sections[project.project_id],
                        used_by=used_by[project.project_id],

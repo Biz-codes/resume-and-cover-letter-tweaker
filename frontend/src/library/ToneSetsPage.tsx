@@ -10,6 +10,7 @@ import { toneSetsApi, type ToneSet } from '../shared/api/toneSets'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import LibraryCard from './LibraryCard'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -97,59 +98,64 @@ export default function ToneSetsPage() {
     const here = open?.setId === id ? open : null
     const rule = here && 'ruleId' in here ? toneSet.rules.find((r) => r.tone_rule_id === here.ruleId) : undefined
     return (
-      <article key={id} className="card">
-        {here?.kind === 'rename' ? (
-          <NameForm
-            label="Tone name"
-            field="name"
-            initial={toneSet.name}
-            onSave={(text) => rename(toneSet, text)}
-            onCancel={() => {
-              show(null)
-              focusLater(setButtonId(id, 'rename'))
-            }}
-          />
-        ) : (
-          <div className="card-header">
-            <h3>{toneSet.name}</h3>
-            {here?.kind !== 'delete' && (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={setButtonId(id, 'rename')}
-                  aria-label={`Rename ${name}`}
-                  onClick={() => show({ kind: 'rename', setId: id })}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  id={setButtonId(id, 'delete')}
-                  aria-label={`Delete ${name}`}
-                  onClick={() => show({ kind: 'delete', setId: id })}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        {here?.kind === 'delete' && (
-          <ConfirmDelete
-            what={name}
-            uses={toneSet.used_by}
-            effect="They keep going with no tone."
-            error={deleteError}
-            onConfirm={() =>
-              void confirmDelete(() => toneSetsApi.delete(id), `Deleted ${name} and its rules.`)
-            }
-            onCancel={() => {
-              show(null)
-              focusLater(setButtonId(id, 'delete'))
-            }}
-          />
-        )}
-
+      <LibraryCard
+        key={id}
+        title={toneSet.name}
+        heading={3}
+        replacesTitle={
+          here?.kind === 'rename' && (
+            <NameForm
+              label="Tone name"
+              field="name"
+              initial={toneSet.name}
+              onSave={(text) => rename(toneSet, text)}
+              onCancel={() => {
+                show(null)
+                focusLater(setButtonId(id, 'rename'))
+              }}
+            />
+          )
+        }
+        actions={
+          here?.kind !== 'delete' && (
+            <div className="actions">
+              <button
+                type="button"
+                id={setButtonId(id, 'rename')}
+                aria-label={`Rename ${name}`}
+                onClick={() => show({ kind: 'rename', setId: id })}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                id={setButtonId(id, 'delete')}
+                aria-label={`Delete ${name}`}
+                onClick={() => show({ kind: 'delete', setId: id })}
+              >
+                Delete
+              </button>
+            </div>
+          )
+        }
+        shown={
+          here?.kind === 'delete' && (
+            <ConfirmDelete
+              what={name}
+              uses={toneSet.used_by}
+              effect="They keep going with no tone."
+              error={deleteError}
+              onConfirm={() =>
+                void confirmDelete(() => toneSetsApi.delete(id), `Deleted ${name} and its rules.`)
+              }
+              onCancel={() => {
+                show(null)
+                focusLater(setButtonId(id, 'delete'))
+              }}
+            />
+          )
+        }
+      >
         <Collapsible title="Rules" count={toneSet.rules.length}>
           <OrderedList
             label={`${toneSet.name} rules`}
@@ -227,7 +233,7 @@ export default function ToneSetsPage() {
         </Collapsible>
 
         <UsedBy uses={toneSet.used_by} />
-      </article>
+      </LibraryCard>
     )
   }
 

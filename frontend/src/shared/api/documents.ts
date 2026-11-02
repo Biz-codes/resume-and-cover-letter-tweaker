@@ -98,6 +98,17 @@ export const KINDS: Record<DocKind, KindInfo> = {
   cover_letter: { path: '/cover-letters', singular: 'cover letter', plural: 'Cover letters', idKey: 'letter_id' },
 }
 
+// The first of "Copy of [name]", "Copy 2 of [name]", and so on that no other resume (or cover
+// letter) has, ignoring capitals, since names are unique (docs/FRONTEND_CHECKS.md, "Names of
+// resumes and cover letters").
+export function copyName(name: string, taken: string[]) {
+  const names = new Set(taken.map((other) => other.toLowerCase()))
+  for (let count = 1; ; count++) {
+    const candidate = `${count === 1 ? 'Copy' : `Copy ${count}`} of ${name}`.slice(0, 204)
+    if (!names.has(candidate.toLowerCase())) return candidate
+  }
+}
+
 // "resume" → "Resume", for a heading.
 export const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
 
@@ -113,6 +124,19 @@ export function fieldsOf(kind: DocKind, doc: Doc): DocFields {
   }
   return fields
 }
+
+// A tree as restoreTree sends it: each section with its items in order, and each item with
+// exactly its skills and bullets. Two trees with the same shape show the same thing.
+export const treeShape = (sections: TreeSection[]) =>
+  sections.map((section) => ({
+    section_id: section.section_id,
+    entries: section.entries.map((entry) => ({
+      kind: entry.kind,
+      item_id: entry.item_id,
+      skill_ids: entry.skills.map((skill) => skill.item_id),
+      bullet_ids: entry.bullets.map((bullet) => bullet.item_id),
+    })),
+  }))
 
 type Raw = Omit<Doc, 'id'> & { resume_id?: number; letter_id?: number }
 
@@ -144,6 +168,10 @@ export function docsApi(kind: DocKind) {
     // The header's values, each picked or typed on its own: the document points at the saved header
     // with exactly these values, or a new one. No saved header changes.
     setHeader: (id: number, fields: HeaderFields) => one(api.put<Raw>(`${path}/${id}/header`, fields)),
+    // The whole tree as it was before (undo and redo): every section, item, skill, and bullet,
+    // exactly as sent. Library items aren't changed, so anything written since stays there.
+    restoreTree: (id: number, sections: TreeSection[]) =>
+      one(api.put<Raw>(`${path}/${id}/tree`, { sections: treeShape(sections) })),
     // A new section: saved to the library and shown last, empty. Its title must be new (DUPLICATE).
     writeSection: (id: number, title: string) => one(api.post<Raw>(`${path}/${id}/sections/written`, { title })),
     // A letter's new sign-off: saved to the library (or the one with the same text) and used here.

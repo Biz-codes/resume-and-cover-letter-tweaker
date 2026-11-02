@@ -12,6 +12,7 @@ import { anyLocked } from '../shared/api/usage'
 import Checklist from '../shared/components/Checklist'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -133,52 +134,60 @@ export default function NarrativeContentPage() {
       )
     }
     return (
-      <article key={excerpt.content_id} className="card">
-        <h4 className="bullet-text">{excerpt.content}</h4>
+      <LibraryCard
+        key={excerpt.content_id}
+        title={excerpt.content}
+        titleClassName="bullet-text"
+        actions={
+          deleting !== excerpt.content_id && (
+            <div className="actions">
+              <button
+                type="button"
+                id={buttonId(excerpt.content_id, 'edit')}
+                aria-label={`Edit ${label}`}
+                onClick={() =>
+                  open(
+                    { kind: 'edit', id: excerpt.content_id },
+                    excerpt.sections.map((section) => section.id),
+                  )
+                }
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                id={buttonId(excerpt.content_id, 'delete')}
+                aria-label={`Delete ${label}`}
+                onClick={() => {
+                  setDeleting(excerpt.content_id)
+                  setDeleteError(null)
+                  setForm(null)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )
+        }
+        shown={
+          deleting === excerpt.content_id && (
+            <ConfirmDelete
+              what={label}
+              uses={excerpt.used_by}
+              effect="It's removed from them, and from every section."
+              error={deleteError}
+              onConfirm={() => void confirmDelete(excerpt)}
+              onCancel={() => {
+                setDeleting(null)
+                focusLater(buttonId(excerpt.content_id, 'delete'))
+              }}
+            />
+          )
+        }
+      >
         <NameList title="Sections" names={excerpt.sections.map((section) => section.title)} />
         <UsedBy uses={excerpt.used_by} />
-        {deleting === excerpt.content_id ? (
-          <ConfirmDelete
-            what={label}
-            uses={excerpt.used_by}
-            effect="It's removed from them, and from every section."
-            error={deleteError}
-            onConfirm={() => void confirmDelete(excerpt)}
-            onCancel={() => {
-              setDeleting(null)
-              focusLater(buttonId(excerpt.content_id, 'delete'))
-            }}
-          />
-        ) : (
-          <div className="actions">
-            <button
-              type="button"
-              id={buttonId(excerpt.content_id, 'edit')}
-              aria-label={`Edit ${label}`}
-              onClick={() =>
-                open(
-                  { kind: 'edit', id: excerpt.content_id },
-                  excerpt.sections.map((section) => section.id),
-                )
-              }
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              id={buttonId(excerpt.content_id, 'delete')}
-              aria-label={`Delete ${label}`}
-              onClick={() => {
-                setDeleting(excerpt.content_id)
-                setDeleteError(null)
-                setForm(null)
-              }}
-            >
-              Delete
-            </button>
-          </div>
-        )}
-      </article>
+      </LibraryCard>
     )
   }
 
