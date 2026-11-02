@@ -60,7 +60,7 @@ export default function PostingsPage() {
   async function create(fields: PostingFields) {
     const posting = await postingsApi.create(fields)
     navigate(`/postings/${posting.job_posting_id}`, {
-      state: { notice: `Saved the posting. Next, create an application header.` } satisfies ListState,
+      state: { notice: `Saved the posting. Next, create a header.` } satisfies ListState,
     })
   }
 
@@ -70,7 +70,7 @@ export default function PostingsPage() {
         Job postings
       </h2>
       <p className="muted">
-        Each application starts with its posting. Its resumes and cover letters start with the posting&apos;s
+        Each application starts with its posting. Its resumes and cover letters use the posting&apos;s
         header, and are locked once you apply.
       </p>
       <p role="status">{notice}</p>

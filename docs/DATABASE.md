@@ -124,7 +124,7 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 | resume_id          | SERIAL       | PRIMARY KEY                                               | unique resume id                             |
 | account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                         |
 | job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                    |
-| name               | VARCHAR(100) | NOT NULL                                                  | label for this version                       |
+| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                       |
 | tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version         |
 | header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                         |
 | based_on_resume_id | INTEGER      | REFERENCES resume(resume_id) ON DELETE SET NULL           | id of resume this version was copied from    |
@@ -149,7 +149,7 @@ Note: base resumes can be edited directly at any time, but the database keeps no
 | letter_id          | SERIAL       | PRIMARY KEY                                               | unique cover letter id                          |
 | account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                            |
 | job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                       |
-| name               | VARCHAR(100) | NOT NULL                                                  | label for this version                          |
+| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                          |
 | header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                            |
 | tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version            |
 | based_on_letter_id | INTEGER      | REFERENCES cover_letter(letter_id) ON DELETE SET NULL     | id of cover letter this version was copied from |

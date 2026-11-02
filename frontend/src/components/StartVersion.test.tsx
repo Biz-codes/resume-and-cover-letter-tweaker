@@ -2,29 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Doc } from '../api/documents'
-import type { PostingDetail } from '../api/postings'
 import { expectNoA11yViolations } from '../test/axe'
 import StartVersion from './StartVersion'
 
-const POSTING: PostingDetail = {
-  job_posting_id: 9,
-  url: 'https://example.com/jobs/1',
-  organization: 'Lincoln High',
-  role_title: 'English Teacher',
-  description: 'Teach ninth grade English.',
-  header_id: 2,
-  applied_on: null,
-  locked: false,
-  versions: [],
-  updated_at: null,
-  suggested_header: null,
-  lone_interviews: 0,
-  rejected_on: null,
-  hired_on: null,
-  contacts: null,
-  interviews: [],
-  same_organization: [],
-}
 const doc = (id: number, name: string, organization?: string): Doc => ({
   id,
   name,
@@ -40,7 +20,7 @@ const doc = (id: number, name: string, organization?: string): Doc => ({
 const DOCS = [doc(5, 'Acme resume', 'Acme'), doc(1, 'Tech base')]
 
 function renderStart(onStart = vi.fn(() => Promise.resolve())) {
-  render(<StartVersion kind="resume" posting={POSTING} docs={DOCS}onStart={onStart} />)
+  render(<StartVersion kind="resume" docs={DOCS} onStart={onStart} />)
   return onStart
 }
 
@@ -53,10 +33,11 @@ describe('StartVersion', () => {
     const button = screen.getByRole('button', { name: 'Start a resume' })
     await expectNoA11yViolations()
     fireEvent.click(button)
-    const name = screen.getByLabelText('Resume name (required)')
-    await vi.waitFor(() => expect(name).toHaveFocus())
-    expect(name).toHaveValue('English Teacher (Lincoln High)')
-    expect(screen.getByLabelText('Start from')).toHaveValue('')
+    const from = screen.getByLabelText('Start from')
+    await vi.waitFor(() => expect(from).toHaveFocus())
+    expect(from).toHaveValue('')
+    // It's named for the posting, so there's no name to type.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech base', 'Acme resume (for Acme)'])
     // One list, base versions first.
     expect(screen.getByLabelText('Start from').querySelectorAll('optgroup')).toHaveLength(0)
@@ -64,7 +45,7 @@ describe('StartVersion', () => {
     expect(screen.queryByLabelText('Header')).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith('English Teacher (Lincoln High)', null))
+    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith(null))
   })
 
   it('starts from a copy', async () => {
@@ -72,7 +53,7 @@ describe('StartVersion', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith('English Teacher (Lincoln High)', 5))
+    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith(5))
   })
 
   it('says it is starting', async () => {
@@ -83,14 +64,11 @@ describe('StartVersion', () => {
     await expectNoA11yViolations()
   })
 
-  it('highlights the field a refusal names, and cancels back to its button', async () => {
-    renderStart(vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'Name is required.', 'name', 422))))
+  it('shows a refusal, and cancels back to its button', async () => {
+    renderStart(vi.fn(() => Promise.reject(new ApiError('VERSION_LOCKED', 'This version was already sent.', null, 409))))
     fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.')
-    const name = screen.getByLabelText('Resume name (required)')
-    expect(name).toHaveAttribute('aria-invalid', 'true')
-    expect(name).toHaveAccessibleDescription('Name is required.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('This version was already sent.')
     await expectNoA11yViolations()
     const form = screen.getByRole('form', { name: 'Start a resume for this posting' })
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))

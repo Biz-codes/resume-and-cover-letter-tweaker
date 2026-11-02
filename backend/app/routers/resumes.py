@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
 
 class ResumeIn(BaseModel):
-    name: RequiredText(100)
+    name: RequiredText(204)
     header_id: int | None = None
     tone_set_id: int | None = None
 
@@ -55,7 +55,7 @@ class CopyIn(BaseModel):
     """A copy: a new base version, or with job_posting_id, a version for that posting, which
     uses the posting's header."""
 
-    name: RequiredText(100)
+    name: RequiredText(204)
     job_posting_id: int | None = None
 
 

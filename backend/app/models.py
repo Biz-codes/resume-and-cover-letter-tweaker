@@ -100,7 +100,7 @@ class JobPosting(Base):
     organization: Mapped[str] = mapped_column(String(100))
     role_title: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(Text)
-    # Header chosen for the posting; its new resumes and cover letters start with it.
+    # Header chosen for the posting, which all its resumes and cover letters use.
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
     applied_on: Mapped[date | None] = mapped_column(Date)
     rejected_on: Mapped[date | None] = mapped_column(Date)
@@ -138,7 +138,7 @@ class Resume(Base):
     resume_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     job_posting_id: Mapped[int | None] = mapped_column(fk("job_posting.job_posting_id"))
-    name: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(204))
     tone_set_id: Mapped[int | None] = mapped_column(fk("tone_set.tone_set_id", "SET NULL"))
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
     based_on_resume_id: Mapped[int | None] = mapped_column(fk("resume.resume_id", "SET NULL"))
@@ -153,7 +153,7 @@ class CoverLetter(Base):
     letter_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     job_posting_id: Mapped[int | None] = mapped_column(fk("job_posting.job_posting_id"))
-    name: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(204))
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
     tone_set_id: Mapped[int | None] = mapped_column(fk("tone_set.tone_set_id", "SET NULL"))
     based_on_letter_id: Mapped[int | None] = mapped_column(

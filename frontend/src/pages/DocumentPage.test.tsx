@@ -93,7 +93,7 @@ describe('DocumentPage', () => {
     stub(1, resume(1, { tone_set_id: 2 }))
     renderAt('/resumes/1')
     expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
-    expect(document.title).toBe('Tech base Resume – Resume Tweaker')
+    await vi.waitFor(() => expect(document.title).toBe('Tech base Resume – Resume Tweaker'))
     expect(screen.getByText('Base resume')).toBeInTheDocument()
     expect(screen.getByText('Tone: Tech')).toBeInTheDocument()
     const header = screen.getByRole('button', { name: 'Header' })

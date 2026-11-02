@@ -1,5 +1,6 @@
-"""Job postings by hand: the posting itself, its header, and starting its resumes and cover
-letters (docs/FRONTEND_CHECKS.md, "Headers" and "Starting a version for a posting")."""
+"""Job postings by hand: the posting itself, its header, starting its resumes and cover letters,
+and tracking the application (docs/FRONTEND_CHECKS.md, "Headers", "Starting a version for a
+posting", and "Tracking an application")."""
 
 from datetime import date
 

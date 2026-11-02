@@ -272,7 +272,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             <NameForm
               label="Name of the copy"
               field="name"
-              initial={`Copy of ${doc.name}`.slice(0, 100)}
+              initial={`Copy of ${doc.name}`.slice(0, 204)}
               submitLabel="Make copy"
               onSave={copy}
               onCancel={() => close('copy')}
@@ -345,7 +345,6 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                   headers={headers}
                   readOnly={readOnly || Boolean(doc.job_posting)}
                   onSave={saveHeader}
-                  label={doc.job_posting ? 'Application header' : 'Header'}
                 />
                 {doc.job_posting && !doc.locked && (
                   <p>

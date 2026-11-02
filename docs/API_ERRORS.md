@@ -27,7 +27,7 @@ Every error response has an HTTP status and this body:
 | `VALIDATION_FAILED`    | 422         | bad or missing input, or a link the app's rules don't allow (see FRONTEND_CHECKS.md)                              |
 | `DUPLICATE`            | 409         | a value that must be unique already exists (e.g. a section title, or the same item picked twice under one parent) |
 | `CROSS_ACCOUNT_LINK`   | 422         | linking items that belong to different accounts                                                                   |
-| `VERSION_LOCKED`       | 409         | changing a resume or cover letter whose job posting has an `applied_on` date (a sent version)                     |
+| `VERSION_LOCKED`       | 409         | changing a sent version, or an applied posting's header, or starting a version for an applied posting             |
 | `POSTING_FETCH_FAILED` | 502         | the job posting page couldn't be fetched or no job description was found on it                                    |
 | `AI_UNAVAILABLE`       | 503         | the Claude API failed, timed out, or declined the request after the SDK's automatic retries                       |
 | `INTERNAL_ERROR`       | 500         | anything unexpected                                                                                               |
@@ -51,7 +51,7 @@ Every error response has an HTTP status and this body:
 - **Show the message** near what failed. When the error names a `field`, highlight it.
 - **Offer the next step:**
   - `POSTING_FETCH_FAILED`: show the box for pasting in the job description.
-  - `VERSION_LOCKED`: shouldn't happen, since locked versions aren't editable in the UI. If it does, offer to make a copy (a new base version, or a version for another posting).
+  - `VERSION_LOCKED`: shouldn't happen, since locked versions aren't editable in the UI. If it does, show the message.
   - `AI_UNAVAILABLE`: offer a Retry button. The user can keep working on anything that doesn't need AI.
   - `BUILT_IN_PROTECTED`: shouldn't happen, since the option isn't offered. If it does, show the message.
   - `INTERNAL_ERROR`: say what failed and that nothing was changed, and offer Retry.

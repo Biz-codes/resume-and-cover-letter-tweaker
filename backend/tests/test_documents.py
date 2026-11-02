@@ -232,6 +232,13 @@ def test_new_resume_starts_with_the_most_recently_used_header(client: TestClient
         "header_id"] is None
 
 
+def test_a_name_holds_the_longest_role_title_and_organization(client: TestClient):
+    longest = f"{'R' * 100} at {'O' * 100}"
+    for path in ("/api/resumes", "/api/cover-letters"):
+        assert client.post(path, json={"name": longest}).status_code == 201
+        assert client.post(path, json={"name": longest + "x"}).status_code == 422
+
+
 def test_new_cover_letter_defaults(client: TestClient, db: Session, account_id: int):
     sincerely = add(db, SignOff(account_id=account_id, text="Sincerely"))
     letter = client.post("/api/cover-letters", json={"name": "General"}).json()

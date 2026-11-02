@@ -55,7 +55,6 @@ export default function HeaderFields({
   suggested,
   readOnly,
   onSave,
-  label = 'Header',
 }: {
   // The document's or posting's header, if it has one.
   header: Header | undefined
@@ -66,8 +65,6 @@ export default function HeaderFields({
   suggested?: Fields
   readOnly: boolean
   onSave: (fields: Fields) => Promise<void>
-  // The form's name: a posting's is its application header.
-  label?: string
 }) {
   const [start] = useState(() => starting(header, headers, suggested))
   const [choices, setChoices] = useState(start.choices)
@@ -138,7 +135,7 @@ export default function HeaderFields({
   })
 
   return (
-    <form className="stacked-form" onSubmit={submit} aria-label={label}>
+    <form className="stacked-form" onSubmit={submit} aria-label="Header">
       {FIELDS.map(({ name, label, autoComplete }) => {
         const required = name === 'full_name'
         const isNew = choices[name] === NEW

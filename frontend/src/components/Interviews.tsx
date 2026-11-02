@@ -1,6 +1,7 @@
 // A posting's interviews, in date order. One interview can cover several of the organization's
 // postings, so the form offers them as checkboxes, and a delete says which others lose it. They
-// can change at any time, including after the posting is applied to.
+// can change at any time, including after the posting is applied to. See "Tracking an
+// application" in docs/FRONTEND_CHECKS.md.
 import { useState } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import {

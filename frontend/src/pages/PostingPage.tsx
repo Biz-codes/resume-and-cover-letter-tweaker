@@ -1,10 +1,10 @@
 // One job posting, headed as the user's application to it: its link and job description (with
-// Edit details and Delete inside it), its application header (the header for the user's
-// application, used by all its versions), and its resume and cover letter, each started fresh or
-// from a copy (StartVersion). A new posting picks its header first, from the suggestion, with
-// that section open, since its versions use it; once picked, the section starts closed. Once the
-// posting is applied to, its versions are a record of what was sent, so no new ones start here.
-// Below them, its tracking: the dates, contacts, and interviews.
+// Edit details and Delete inside it), its header (used by all its versions), and its resume and
+// cover letter, each started fresh or from a copy (StartVersion) and named for the posting. A new
+// posting picks its header first, from the suggestion, with that section open, since its versions
+// use it; once picked, the section starts closed. Once the posting is applied to, its versions are
+// a record of what was sent, so no new ones start here. Below them, its tracking: the dates,
+// contacts, and interviews.
 // See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
 // docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
@@ -21,6 +21,7 @@ import {
   type PostingFields,
   type TrackingFields,
 } from '../api/postings'
+import { KIND_LABELS } from '../api/usage'
 import ConfirmDelete from '../components/ConfirmDelete'
 import Disclosure from '../components/Disclosure'
 import FieldsForm from '../components/FieldsForm'
@@ -108,7 +109,7 @@ export function PostingPage({ id }: { id: number }) {
     const headerList = await headersApi.list()
     setHeaders(headerList)
     setPosting(updated)
-    setNotice("Saved the application header. This posting's resumes and cover letters use it.")
+    setNotice("Saved the header. This posting's resumes and cover letters use it.")
     // "Use this header" is gone once the header is picked, so focus moves on to the next step.
     if (first) focusLater('start-resume')
   }
@@ -118,8 +119,9 @@ export function PostingPage({ id }: { id: number }) {
     setNotice('Saved the tracking details.')
   }
 
-  async function start(kind: DocKind, name: string, fromId: number | null) {
+  async function start(kind: DocKind, current: PostingDetail, fromId: number | null) {
     const api = docsApi(kind)
+    const name = postingName(current)
     const forPosting = { job_posting_id: id }
     const doc = fromId === null ? await api.create(name, forPosting) : await api.copy(fromId, name, forPosting)
     navigate(`${KINDS[kind].path}/${doc.id}`, {
@@ -188,7 +190,8 @@ export function PostingPage({ id }: { id: number }) {
             {mode === 'delete' && (
               <ConfirmDelete
                 what={`"${postingName(posting)}"`}
-                uses={posting.versions}
+                // Named by kind, since both are named for the posting.
+                uses={posting.versions.map((use) => ({ ...use, name: KIND_LABELS[use.kind] }))}
                 usesLabel="Its resumes and cover letters"
                 effect="They're deleted too."
                 locked={posting.locked}
@@ -223,7 +226,7 @@ export function PostingPage({ id }: { id: number }) {
           )}
 
           <Disclosure
-            title="Application header"
+            title="Header"
             heading={3}
             // Open until the first header is picked, then a new one, closed, starting from the
             // saved values. Later changes keep it open, like a resume's header fields.
@@ -235,24 +238,25 @@ export function PostingPage({ id }: { id: number }) {
               headers={headers}
               suggested={posting.suggested_header ?? undefined}
               readOnly={posting.locked}
-              label="Application header"
               onSave={saveHeader}
             />
           </Disclosure>
           {!posting.header_id && !posting.locked && (
-            <p className="muted">Resumes and cover letters can start once the posting has an application header.</p>
+            <p className="muted">Resumes and cover letters can start once the posting has a header.</p>
           )}
 
           {(['resume', 'cover_letter'] as const).map((kind) => {
             // A posting has one of each, edited in place until it's applied to.
             const version = posting.versions.find((use) => use.kind === kind)
             const { path, singular } = KINDS[kind]
+            const name = capitalize(singular)
             return (
               <div key={kind}>
-                <h3>{capitalize(singular)}</h3>
                 {version ? (
                   <p>
-                    <Link to={`${path}/${version.id}`}>{version.name}</Link>
+                    <Link to={`${path}/${version.id}`} aria-label={`${name} for ${postingName(posting)}`}>
+                      {name}
+                    </Link>
                     {version.locked && <span className="tag">sent</span>}
                   </p>
                 ) : (
@@ -261,9 +265,8 @@ export function PostingPage({ id }: { id: number }) {
                 {!version && !posting.locked && posting.header_id && (
                   <StartVersion
                     kind={kind}
-                    posting={posting}
                     docs={docs[kind]}
-                    onStart={(name, fromId) => start(kind, name, fromId)}
+                    onStart={(fromId) => start(kind, posting, fromId)}
                   />
                 )}
               </div>

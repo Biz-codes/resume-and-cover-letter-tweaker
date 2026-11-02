@@ -9,8 +9,8 @@ Decisions and gaps to resolve before coding starts. When one is answered, record
 4. ~~**Output format**~~: decided. Plain text to copy and paste. See [APP_FLOW.md](APP_FLOW.md).
 
 ## Missing data
-5. ~~**Header information**~~: decided. Name, headline, contact details, and links in a `header` table, with versions. A job posting has a header, and its resumes and cover letters start with it. See [DATABASE.md](DATABASE.md).
-6. ~~**Cover letter details**~~: decided. No date, address, or closing fields. The letter starts with its job posting's header (`header_id`), with no direct link to a resume, and its name under the sign-off can differ (`signature_name`). See [DATABASE.md](DATABASE.md).
+5. ~~**Header information**~~: decided. Name, headline, contact details, and links in a `header` table, with versions. A job posting has a header, and its resumes and cover letters use it. See [DATABASE.md](DATABASE.md).
+6. ~~**Cover letter details**~~: decided. No date, address, or closing fields. The letter uses its job posting's header (`header_id`), with no direct link to a resume, and its name under the sign-off can differ (`signature_name`). See [DATABASE.md](DATABASE.md).
 7. ~~**Thin tables**~~: decided.
    - ~~`project`~~: decided. Added optional `url` and `dates`. No description, since bullet points and skills cover it.
    - ~~`education`~~: decided. Added an optional `details` column. `degree` includes the field of study, and `graduation` includes any honors.

@@ -1,5 +1,6 @@
-// Job postings, entered by hand: the posting, its header, and the resumes and cover letters made
-// for it. See backend/app/routers/job_postings.py and "Headers" in docs/FRONTEND_CHECKS.md.
+// Job postings, entered by hand: the posting, its header, the resumes and cover letters made for
+// it, and its tracking. See backend/app/routers/job_postings.py and interviews.py, and "Headers"
+// and "Tracking an application" in docs/FRONTEND_CHECKS.md.
 import type { Field } from '../components/FieldsForm'
 import { api } from './client'
 import type { HeaderFields } from './headers'

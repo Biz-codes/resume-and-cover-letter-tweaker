@@ -43,7 +43,7 @@ DEFAULT_SIGN_OFF = "Sincerely"
 
 
 class LetterIn(BaseModel):
-    name: RequiredText(100)
+    name: RequiredText(204)
     header_id: int | None = None
     tone_set_id: int | None = None
     addressee: OptionalText(100)

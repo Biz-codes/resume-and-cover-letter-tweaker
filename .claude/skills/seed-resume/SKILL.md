@@ -29,7 +29,7 @@ Add a `job_posting` row with the `url`, `organization`, the posting's own `role_
 - If it can't be fetched, ask the user to paste the description. Never invent or summarize it.
 - Reuse an existing `job_posting` row with the same url instead of adding another.
 - Set the posting's `header_id` to the header the sent resume or letter shows (`pg_temp.header(...)`).
-- Set `resume.job_posting_id` to it, and give the resume the posting's `header_id` (unless it was sent with a different header).
+- Set `resume.job_posting_id` to it, and give the resume the posting's `header_id`. A posting's resume and cover letter always use its header, and it has at most one of each (`job_posting_id` is unique), so if the posting already has a resume, or the resume and letter went out with different headers, stop and ask the user.
 
 ## Matching against the library
 
@@ -74,7 +74,7 @@ Cover letters use the same join tables as resumes, with the `cover_letter_` pref
 - **Sentences** → `narrative_content`, one row per sentence. **Bullets** in a paragraph → `bullet_point`, listed directly under the section (`section_bullet_point`), unless they belong under a role or project.
 - **Greeting:** everything after "Dear" (without the comma) is the `addressee`.
 - **Closing:** the closing word(s) → `sign_off` (reuse the account's existing one, e.g. "Sincerely"). The name under it goes in `signature_name` only if it differs from the header's `full_name` (e.g. without a nickname); otherwise leave it empty.
-- **Links:** a letter has no direct link to a resume. A sent letter gets its posting's `job_posting_id` and, unless it was sent with a different header, the posting's `header_id`. A base letter has no posting.
+- **Links:** a letter has no direct link to a resume. A sent letter gets its posting's `job_posting_id` and `header_id`. A base letter has no posting.
 - Name the file after the letter, e.g. `03_neptune_cover_letter.sql`, and follow it as the example.
 
 ## Mapping a resume onto the tables

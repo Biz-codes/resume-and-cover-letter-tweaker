@@ -1,6 +1,7 @@
 """A posting's interviews. One interview can cover several postings (docs/DATABASE.md,
 "job_posting_interview"), so it's reached through any posting it's linked to and always stays
-linked to that one. Each can be changed at any time, including after the posting is applied to.
+linked to that one. Each can be changed at any time, including after the posting is applied to
+(docs/FRONTEND_CHECKS.md, "Tracking an application").
 """
 
 from datetime import date

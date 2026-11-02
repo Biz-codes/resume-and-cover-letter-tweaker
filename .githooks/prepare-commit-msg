@@ -101,7 +101,9 @@ ROOT="$(git rev-parse --show-toplevel)"
 # Only read-only git commands are allowed, so it can't change anything.
 message=$(cd "$ROOT" && claude -p "/commit-message $type $level --raw" \
     --allowedTools "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Read" 2>/dev/null \
-    | sed -e '/^```/d' -e '/^Co-Authored-By:/d')  # In case of a code block or trailer anyway.
+    | sed -e '/^```/d' -e '/^Co-Authored-By:/d' \
+    | sed -E -n '/^\*{0,2}(feat|fix|refactor|docs|chore):/,$p' \
+    | sed -E '1s/\*\*//g')  # Only the message: no code block, trailer, or narration above it.
 if [ -z "$message" ]; then
     echo "Couldn't write one, so it's yours to write." >/dev/tty
     message="$type: "

@@ -4,7 +4,7 @@ The order for building the app, starting from the finished design docs. Each pha
 
 ## Before starting (user)
 - [ ] **Anthropic API key** (needed by phase 5, not before): create an Anthropic Console account, add billing (separate from a Claude.ai subscription), and create a key. It goes in `backend/.env` as `ANTHROPIC_API_KEY=...`.
-- [ ] **Existing resumes** (needed by phase 2): have them ready as PDFs or text to paste.
+- [x] **Existing resumes** (needed by phase 2): have them ready as PDFs or text to paste.
 
 Claude can't read or write `.env` files (a hook blocks it), so the user creates `backend/.env` by copying `backend/.env.example` and filling in the values.
 
@@ -80,7 +80,7 @@ What to do:
 1. **Feature folders** in `frontend/src/` instead of `components/` and `pages/` (the layout Bulletproof React recommends for apps this size):
    - `shared/`: components and hooks more than one feature uses (`OrderedList`, `MoreOptions`, `Disclosure`, `Collapsible`, `FieldsForm`, `NameForm`, `NameList`, `BulletList`, `Checklist`, `ConfirmDelete`, `UsedBy`, `ApplyChoice`, `HeaderFields`, `useFocusLater`, `usePageTitle`) and the API client (`client.ts`, `usage.ts`).
    - `library/`: the library pages (`LibraryPage` and one per table) and their API modules.
-   - `postings/`: `PostingsPage`, `PostingPage`, and `postings.ts`.
+   - `postings/`: `PostingsPage`, `PostingPage`, `Tracking`, `Interviews`, and `postings.ts`.
    - `documents/`: `DocumentsPage`, `DocumentPage`, `DocumentTree`, `AddContent`, `LetterParts`, `StartVersion`, `treeItems.ts`, and `documents.ts`.
    - `App.tsx`, `main.tsx`, `modes.ts`, `index.css`, and `test/` stay at the top. Where a component ends up used by only one feature, it goes in that feature; where a feature's component is used by another, it goes in `shared/`.
    - Move `LIBRARY_PAGES` out of `LibraryPage.tsx` into its own file in `library/` while there (question 14 in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md); mark it decided).
@@ -88,7 +88,7 @@ What to do:
 2. **CSS Modules:** move styles used by one component from `index.css` into a `Name.module.css` beside it. `index.css` keeps what's site-wide: the colors, base element styles, layout and breakpoints, and shared classes (`muted`, `tag`, `actions`, `card`, `visually-hidden`, and the like).
    - Keep every color in `index.css`, as CSS custom properties that modules use, so the contrast check in `frontend/a11yChecks.ts` (which reads only `index.css`) still covers every color. Or extend the check to read the module files too.
 3. **Move with `git mv`**, so each file keeps its history, and update every import. Tests change only in their import paths.
-4. **Update every reference to the old paths:** "Project layout" and "API conventions" in [TECH_STACK.md](TECH_STACK.md), [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md), CLAUDE.md, the skills in `.claude/skills/`, and code comments (search for `components/`, `pages/`, and `api/`). The `a11y_review.py` hook and the sibling-test rule in `a11yChecks.ts` work with any folder layout.
+4. **Update every reference to the old paths:** "Project layout and tooling" and "API conventions" in [TECH_STACK.md](TECH_STACK.md), [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md), CLAUDE.md, the skills in `.claude/skills/`, and code comments (search for `components/`, `pages/`, and `api/`). The `a11y_review.py` hook and the sibling-test rule in `a11yChecks.ts` work with any folder layout.
 5. **Check:** `scripts/check.sh`, then `/a11y` over the whole front end, then try every page in the browser to confirm nothing looks or behaves differently.
 
 ## After the reorganize: status notices as alert dialogs
