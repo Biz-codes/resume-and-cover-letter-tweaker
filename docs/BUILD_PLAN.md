@@ -71,18 +71,18 @@ What the steps cover:
 - Record the applied date on a posting (plus rejection and hire dates, contacts, and interviews, which can be shared across postings), which locks its resumes and cover letters; editing a library item a locked version uses saves a new row, per "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - Plain-text output with copy buttons, using the layout in [APP_FLOW.md](APP_FLOW.md).
 
-## Between phases 4 and 5: reorganize the front end
+## Between phases 4 and 5: reorganize the front end (done)
 Goal: the front end is grouped by feature, with each component's styles beside it, before phase 5 adds the AI pieces. Nothing a user sees or does changes.
 
-- [ ] **Start only after the user has approved all of phase 4** (every step above checked off, and the user saying so). Ask before starting, and present the planned file moves for approval first.
+- [x] **Start only after the user has approved all of phase 4** (every step above checked off, and the user saying so). Ask before starting, and present the planned file moves for approval first.
 
 What to do:
 1. **Feature folders** in `frontend/src/` instead of `components/` and `pages/` (the layout Bulletproof React recommends for apps this size):
-   - `shared/`: components and hooks more than one feature uses (`OrderedList`, `MoreOptions`, `Disclosure`, `Collapsible`, `FieldsForm`, `NameForm`, `NameList`, `BulletList`, `Checklist`, `ConfirmDelete`, `UsedBy`, `ApplyChoice`, `HeaderFields`, `useFocusLater`, `usePageTitle`) and the API client (`client.ts`, `usage.ts`).
-   - `library/`: the library pages (`LibraryPage` and one per table) and their API modules.
-   - `postings/`: `PostingsPage`, `PostingPage`, `Tracking`, `Interviews`, and `postings.ts`.
-   - `documents/`: `DocumentsPage`, `DocumentPage`, `DocumentTree`, `AddContent`, `LetterParts`, `StartVersion`, `treeItems.ts`, and `documents.ts`.
-   - `App.tsx`, `main.tsx`, `modes.ts`, `index.css`, and `test/` stay at the top. Where a component ends up used by only one feature, it goes in that feature; where a feature's component is used by another, it goes in `shared/`.
+   - `shared/`: components and hooks more than one feature uses (`OrderedList`, `MoreOptions`, `Disclosure`, `FieldsForm`, `NameForm`, `Checklist`, `ConfirmDelete`, `HeaderFields`, `useFocusLater`, `usePageTitle`) and the API modules more than one feature reads (`client.ts`, `usage.ts`, `documents.ts`, and every library table's but `writingRules.ts`).
+   - `library/`: the library pages (`LibraryPage` and one per table), the components only they use (`Collapsible`, `NameList`, `UsedBy`, `BulletList`, `ApplyChoice`), and `writingRules.ts`.
+   - `postings/`: `PostingsPage`, `PostingPage`, `StartVersion`, `Tracking`, `Interviews`, and `postings.ts`.
+   - `documents/`: `DocumentsPage`, `DocumentPage`, `DocumentTree`, `AddContent`, `LetterParts`, and `treeItems.ts`.
+   - `App.tsx`, `main.tsx`, `modes.ts`, `HomePage.tsx`, `index.css`, and `test/` stay at the top. Where a component ends up used by only one feature, it goes in that feature; where a feature's component is used by another, it goes in `shared/`.
    - Move `LIBRARY_PAGES` out of `LibraryPage.tsx` into its own file in `library/` while there (question 14 in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md); mark it decided).
    - A component gets its own subfolder only if it has three or more files (e.g. once it has a `.module.css`); otherwise its `.tsx` and `.test.tsx` sit side by side in the feature folder.
 2. **CSS Modules:** move styles used by one component from `index.css` into a `Name.module.css` beside it. `index.css` keeps what's site-wide: the colors, base element styles, layout and breakpoints, and shared classes (`muted`, `tag`, `actions`, `card`, `visually-hidden`, and the like).

@@ -20,7 +20,7 @@ from app.models import Base
 ROOT = BACKEND_DIR.parent
 DATABASE_MD = (ROOT / "docs" / "DATABASE.md").read_text()
 API_ERRORS_MD = (ROOT / "docs" / "API_ERRORS.md").read_text()
-CLIENT_TS = (ROOT / "frontend" / "src" / "api" / "client.ts").read_text()
+CLIENT_TS = (ROOT / "frontend" / "src" / "shared" / "api" / "client.ts").read_text()
 
 
 def column_lists(body: str, label: str) -> list[tuple[str, ...]]:
@@ -125,7 +125,7 @@ def test_error_codes_match_the_doc():
 
 def test_front_end_error_codes_match_the_doc():
     union = re.search(r"export type ErrorCode =([^\n]*\n(?:\s*\|[^\n]*\n)+)", CLIENT_TS)
-    assert union, "ErrorCode type not found in frontend/src/api/client.ts"
+    assert union, "ErrorCode type not found in frontend/src/shared/api/client.ts"
     assert set(re.findall(r"'(\w+)'", union[1])) == set(documented_error_codes())
 
 
