@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Education } from '../shared/api/education'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import EducationPage from './EducationPage'
 
@@ -52,10 +52,11 @@ describe('EducationPage', () => {
     stub()
     render(<EducationPage />)
     expect(document.title).toBe('Education – Resume Tweaker')
-    const card = await openCard('B.A. in English, State University')
+    const card = await findCard('B.A. in English, State University')
     expect(within(card).getByText('May 2015')).toBeInTheDocument()
-    expect(within(card).getByText('Minor in Computer Science')).toBeInTheDocument()
-    expect(within(card).getByText('Sections that list it (1)')).toBeInTheDocument()
+    const dialog = await openItem('B.A. in English, State University')
+    expect(within(dialog).getByLabelText('Details')).toHaveValue('Minor in Computer Science')
+    expect(within(dialog).getByText('Sections that list it (1)')).toBeInTheDocument()
     const unlisted = screen.getByRole('heading', { name: 'Not listed under any section' })
     expect(unlisted.parentElement).toHaveTextContent('Web Development Certificate')
     await expectNoA11yViolations()
@@ -86,10 +87,9 @@ describe('EducationPage', () => {
     const saved = { ...DEGREE, education_id: 10, graduation: '2015', used_by: [] }
     const fetchMock = stub({ 'PUT /api/education/7': [{ status: 200, body: saved }] })
     render(<EducationPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
+    await openItem('B.A. in English, State University')
     const form = screen.getByRole('form', { name: `Edit "${LABEL}"` })
     const degree = within(form).getByLabelText(/^Degree and field of study/)
-    expect(degree).toHaveFocus()
     expect(degree).toHaveAccessibleDescription(/A sent version uses this entry, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
@@ -100,18 +100,35 @@ describe('EducationPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/education/7')).toMatchObject({ graduation: '2015' })
   })
 
-  it('returns focus to Edit when the form is cancelled', async () => {
+  it('closes the dialog and returns focus to Edit when the form is cancelled', async () => {
     stub()
     render(<EducationPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
-    fireEvent.click(screen.getByText('Cancel'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: `Edit "${LABEL}"` })).toHaveFocus())
+    const edit = await screen.findByRole('button', { name: `Edit "${LABEL}"` })
+    edit.focus()
+    fireEvent.click(edit)
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Cancel'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(edit).toHaveFocus()
+  })
+
+  it('adds a new version of an entry', async () => {
+    const version = { ...DEGREE, education_id: 11, graduation: '2015', used_by: [] }
+    const fetchMock = stub({ 'POST /api/education/7/versions': [{ status: 201, body: version }] })
+    render(<EducationPage />)
+    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: 'New version' }))
+    const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
+    fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
+    await expectNoA11yViolations()
+    fireEvent.click(within(form).getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent(`keep "${LABEL}" until you pick the new one`)
+    expect(sentBody(fetchMock, 'POST /api/education/7/versions')).toMatchObject({ graduation: '2015' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/education/7': [{ status: 204 }] })
     render(<EducationPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Delete "${LABEL}"` }))
+    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete "${LABEL}"?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('A sent version uses it')

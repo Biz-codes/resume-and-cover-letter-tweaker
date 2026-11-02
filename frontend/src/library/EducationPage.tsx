@@ -1,4 +1,5 @@
-// Library page for education: add, edit, and delete entries. Editing an entry a sent version
+// Library page for education: add entries, and open each one's dialog (ItemDialog) to edit it,
+// add a version of it, or delete it. Editing an entry a sent version
 // uses saves a new entry (docs/FRONTEND_CHECKS.md, "Sent versions are locked"). Entries no
 // section lists come first, so they can be listed again or deleted ("Unlisted items").
 import { useCallback, useEffect, useState } from 'react'
@@ -8,6 +9,7 @@ import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../shared/api/s
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
@@ -27,11 +29,9 @@ const EMPTY: EducationFields = { degree: '', institution: '', details: null, gra
 const SENT_NOTE = 'A sent version uses this entry, so saving adds a new one. The sent version keeps this one.'
 
 // Which form is open: a new entry, or editing one.
-type Form = { kind: 'new' } | { kind: 'edit'; id: number }
-
-// Ids of the buttons that open a form, where focus returns when it closes.
+// Ids of the buttons that open a form or dialog, where focus returns when it closes.
 const NEW_ENTRY_ID = 'new-education'
-const buttonId = (id: number, action: 'edit' | 'delete') => `education-${id}-${action}`
+const editId = (id: number) => `education-${id}-edit`
 
 function fieldsOf(entry: Education): EducationFields {
   return {
@@ -46,9 +46,10 @@ export default function EducationPage() {
   const [entries, setEntries] = useState<Education[] | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [form, setForm] = useState<Form | null>(null)
+  const [adding, setAdding] = useState(false)
+  // The entry whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   const [newSection, setNewSection] = useState(String(BUILT_IN_SECTION_IDS.education))
-  const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
@@ -70,22 +71,18 @@ export default function EducationPage() {
     void load()
   }, [load])
 
-  function open(next: Form) {
-    setForm(next)
+  function openItem(id: number) {
+    setEditing(id)
+    setDeleteError(null)
     setNotice(null)
-    setDeleting(null)
-  }
-
-  function close(returnTo: string) {
-    setForm(null)
-    focusLater(returnTo)
   }
 
   async function saved(entry: Education, message: string) {
-    setForm(null)
-    setNotice(message)
+    setAdding(false)
+    setEditing(null)
     await load()
-    focusLater(buttonId(entry.education_id, 'edit'))
+    setNotice(message)
+    focusLater(editId(entry.education_id))
   }
 
   async function create(fields: EducationFields) {
@@ -103,14 +100,24 @@ export default function EducationPage() {
     )
   }
 
+  async function addVersion(original: Education, fields: EducationFields) {
+    const entry = await educationApi.addVersion(original.education_id, fields)
+    await saved(
+      entry,
+      entry.education_id === original.education_id
+        ? 'Nothing changed, so no new version was added.'
+        : `Added a new version, "${educationLabel(entry)}". Resumes and cover letters keep "${educationLabel(original)}" until you pick the new one.`,
+    )
+  }
+
   async function confirmDelete(entry: Education) {
     setDeleteError(null)
     try {
       await educationApi.delete(entry.education_id)
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${educationLabel(entry)}".`)
       await load()
+      setNotice(`Deleted "${educationLabel(entry)}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -122,76 +129,63 @@ export default function EducationPage() {
   const titleOf = distinctLabels(entries ?? [], (item) => `${item.degree}, ${item.institution}`, (item) => item.created_at)
 
   function card(entry: Education) {
-    const label = labelOf(entry)
-    if (form?.kind === 'edit' && form.id === entry.education_id) {
-      return (
-        <FieldsForm
-          key={entry.education_id}
-          label={`Edit "${label}"`}
-          fields={FIELDS}
-          initial={fieldsOf(entry)}
-          note={anyLocked(entry.used_by) ? SENT_NOTE : undefined}
-          onSave={(fields) => update(entry, fields)}
-          onCancel={() => close(buttonId(entry.education_id, 'edit'))}
-        />
-      )
-    }
     return (
       <LibraryCard
         key={entry.education_id}
         title={titleOf(entry)}
-        actions={
-          deleting !== entry.education_id && (
-            <div className="actions">
-              <button
-                type="button"
-                id={buttonId(entry.education_id, 'edit')}
-                aria-label={`Edit "${label}"`}
-                onClick={() => open({ kind: 'edit', id: entry.education_id })}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                id={buttonId(entry.education_id, 'delete')}
-                aria-label={`Delete "${label}"`}
-                onClick={() => {
-                  setDeleting(entry.education_id)
-                  setDeleteError(null)
-                  setForm(null)
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )
-        }
-        shown={
-          <>
-            {deleting === entry.education_id && (
-              <ConfirmDelete
-                what={`"${label}"`}
-                uses={entry.used_by}
-                effect="It's removed from them, and from every section."
-                error={deleteError}
-                onConfirm={() => void confirmDelete(entry)}
-                onCancel={() => {
-                  setDeleting(null)
-                  focusLater(buttonId(entry.education_id, 'delete'))
-                }}
-              />
-            )}
-          </>
-        }
+        editId={editId(entry.education_id)}
+        editLabel={`Edit "${labelOf(entry)}"`}
+        onEdit={() => openItem(entry.education_id)}
       >
         {entry.graduation && <p className="muted">{entry.graduation}</p>}
-        {entry.details && <p className="details">{entry.details}</p>}
-        <NameList title="Sections that list it" names={entry.sections.map((section) => section.title)} />
-        <UsedBy uses={entry.used_by} />
       </LibraryCard>
     )
   }
 
+  function itemDialog(entry: Education) {
+    const label = labelOf(entry)
+    return (
+      <ItemDialog
+        title={label}
+        onClose={() => setEditing(null)}
+        form={
+          <FieldsForm
+            label={`Edit "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(entry)}
+            note={anyLocked(entry.used_by) ? SENT_NOTE : undefined}
+            onSave={(fields) => update(entry, fields)}
+            onCancel={() => setEditing(null)}
+          />
+        }
+        newVersion={(back) => (
+          <FieldsForm
+            label={`New version of "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(entry)}
+            submitLabel="Add version"
+            onSave={(fields) => addVersion(entry, fields)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={`"${label}"`}
+            uses={entry.used_by}
+            effect="It's removed from them, and from every section."
+            error={deleteError}
+            onConfirm={() => void confirmDelete(entry)}
+            onCancel={back}
+          />
+        )}
+      >
+        <NameList title="Sections that list it" names={entry.sections.map((section) => section.title)} />
+        <UsedBy uses={entry.used_by} />
+      </ItemDialog>
+    )
+  }
+
+  const editingEntry = entries?.find((entry) => entry.education_id === editing)
   const listed = entries?.filter((entry) => entry.sections.length > 0) ?? []
   const unlisted = entries?.filter((entry) => entry.sections.length === 0) ?? []
 
@@ -215,14 +209,17 @@ export default function EducationPage() {
       )}
       {!entries && !loadError && <p>Loading…</p>}
 
-      {form?.kind === 'new' ? (
+      {adding ? (
         <FieldsForm
           label="New education entry"
           fields={FIELDS}
           initial={EMPTY}
           submitLabel="Add entry"
           onSave={create}
-          onCancel={() => close(NEW_ENTRY_ID)}
+          onCancel={() => {
+            setAdding(false)
+            focusLater(NEW_ENTRY_ID)
+          }}
         >
           <label>
             List it under
@@ -238,7 +235,14 @@ export default function EducationPage() {
         </FieldsForm>
       ) : (
         entries && (
-          <button type="button" id={NEW_ENTRY_ID} onClick={() => open({ kind: 'new' })}>
+          <button
+            type="button"
+            id={NEW_ENTRY_ID}
+            onClick={() => {
+              setAdding(true)
+              setNotice(null)
+            }}
+          >
             New entry
           </button>
         )
@@ -254,6 +258,7 @@ export default function EducationPage() {
       {entries && <h3>Entries</h3>}
       {entries && listed.length === 0 && <p>No education yet.</p>}
       {listed.map(card)}
+      {editingEntry && itemDialog(editingEntry)}
     </section>
   )
 }

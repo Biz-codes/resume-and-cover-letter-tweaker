@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { SignOff } from '../shared/api/signOffs'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import SignOffsPage from './SignOffsPage'
 
@@ -31,7 +31,7 @@ describe('SignOffsPage', () => {
     stub()
     render(<SignOffsPage />)
     expect(document.title).toBe('Sign-offs – Resume Tweaker')
-    const card = await openCard('Sincerely')
+    const card = await openItem('Sincerely')
     expect(within(card).getByText('Used by (2)')).toBeInTheDocument()
     expect(within(card).getByText('sent')).toBeInTheDocument()
     await expectNoA11yViolations()
@@ -52,7 +52,6 @@ describe('SignOffsPage', () => {
     render(<SignOffsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sincerely"' }))
     const field = screen.getByLabelText('Sign-off')
-    expect(field).toHaveFocus()
     expect(field).toHaveAccessibleDescription(/A sent version uses this sign-off, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Sincerely yours' } })
@@ -75,18 +74,37 @@ describe('SignOffsPage', () => {
     expect(field).toHaveValue(' ')
   })
 
-  it('returns focus to Edit when editing is cancelled', async () => {
+  it('closes the dialog and returns focus to Edit when editing is cancelled', async () => {
     stub()
     render(<SignOffsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Best regards"' }))
-    fireEvent.click(screen.getByText('Cancel'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit "Best regards"' })).toHaveFocus())
+    const edit = await screen.findByRole('button', { name: 'Edit "Best regards"' })
+    edit.focus()
+    fireEvent.click(edit)
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Cancel'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(edit).toHaveFocus()
+  })
+
+  it('adds a new version of a sign-off', async () => {
+    const version = { ...SINCERELY, sign_off_id: 7, text: 'Sincerely yours', used_by: [] }
+    const fetchMock = stub({ 'POST /api/sign-offs/1/versions': [{ status: 201, body: version }] })
+    render(<SignOffsPage />)
+    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: 'New version' }))
+    const field = screen.getByLabelText("New version's sign-off")
+    expect(field).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.change(field, { target: { value: 'Sincerely yours' } })
+    fireEvent.click(screen.getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Added "Sincerely yours". Cover letters keep "Sincerely" until you pick the new one.',
+    )
+    expect(sentBody(fetchMock, 'POST /api/sign-offs/1/versions')).toEqual({ text: 'Sincerely yours' })
   })
 
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/sign-offs/1': [{ status: 204 }] })
     render(<SignOffsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Sincerely"' }))
+    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sincerely"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep going with no closing')

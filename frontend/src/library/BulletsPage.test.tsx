@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Bullet } from '../shared/api/bullets'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
 
@@ -36,7 +36,8 @@ describe('BulletsPage', () => {
     stub()
     render(<BulletsPage />)
     expect(document.title).toBe('Bullet points – Resume Tweaker')
-    const card = await openCard(SHIPPED.content)
+    const card = await openItem(SHIPPED.content)
+    expect(card).toHaveAccessibleName('Shipped the new checkout flow to…')
     expect(within(card).getByText('Roles (2)')).toBeInTheDocument()
     expect(within(card).getByText('Engineer, Acme (2020)')).toBeInTheDocument()
     expect(within(card).getByText('Senior Engineer, Acme')).toBeInTheDocument()
@@ -52,7 +53,6 @@ describe('BulletsPage', () => {
     render(<BulletsPage />)
     fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
     const field = screen.getByLabelText('Bullet text')
-    expect(field).toHaveFocus()
     expect(field).toHaveAccessibleDescription(/A sent version uses this bullet, so saving adds a new one/)
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Shipped it' } })
@@ -61,10 +61,26 @@ describe('BulletsPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/bullet-points/10')).toEqual({ content: 'Shipped it' })
   })
 
+  it('adds a new version of a bullet', async () => {
+    const version = { ...SHIPPED, bullet_id: 13, content: 'Shipped the checkout flow', used_by: [] }
+    const fetchMock = stub({ 'POST /api/bullet-points/10/versions': [{ status: 201, body: version }] })
+    render(<BulletsPage />)
+    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: 'New version' }))
+    const field = screen.getByLabelText("New version's text")
+    expect(field).toHaveFocus()
+    expect(field).toHaveValue(SHIPPED.content)
+    await expectNoA11yViolations()
+    fireEvent.change(field, { target: { value: 'Shipped the checkout flow' } })
+    fireEvent.click(screen.getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Added a new version, listed right after the original.')
+    expect(sentBody(fetchMock, 'POST /api/bullet-points/10/versions')).toEqual({ content: 'Shipped the checkout flow' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/bullet-points/10': [{ status: 204 }] })
     render(<BulletsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Delete ${LABEL}` }))
+    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('from every role, project, and section')

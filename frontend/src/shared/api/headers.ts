@@ -34,5 +34,6 @@ export const headersApi = {
   // When a sent version uses the header, the change is saved as a new header with a new id.
   update: (headerId: number, fields: HeaderFields) =>
     api.put<Header>(`/headers/${headerId}`, fields),
+  addVersion: (headerId: number, fields: HeaderFields) => api.post<Header>(`/headers/${headerId}/versions`, fields),
   delete: (headerId: number) => api.delete(`/headers/${headerId}`),
 }

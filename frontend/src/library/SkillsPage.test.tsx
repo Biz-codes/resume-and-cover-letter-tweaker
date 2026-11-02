@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Section } from '../shared/api/sections'
 import type { Skill, SkillCategory } from '../shared/api/skills'
-import { openCard } from '../test/openCard'
+import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SkillsPage from './SkillsPage'
@@ -52,20 +52,25 @@ function stub(extra: Record<string, Reply[]> = {}) {
   })
 }
 
-const categoryCard = (name: string) => openCard(new RegExp(`^${name}`))
+// A category's dialog. Its card's heading also holds its tags ("built in"), so match its start.
+const categoryCard = (name: string) => openItem(new RegExp(`^${name}`))
 
 describe('SkillsPage', () => {
   it('shows each category with its skills, sections, and uses', async () => {
     stub()
     render(<SkillsPage />)
     expect(document.title).toBe('Skills – Resume Tweaker')
+    expect(within(await findCard(/^AI/)).getByText('Claude, Gemini')).toBeInTheDocument()
     const ai = await categoryCard('AI')
     expect(within(ai).getByText('Sections that list it (1)')).toBeInTheDocument()
     expect(within(ai).getByText('Skills', { selector: 'li' })).toBeInTheDocument()
     expect(within(ai).getAllByRole('listitem').map((item) => item.textContent)).toContain('Resume: Acme resumesent')
+    await expectNoA11yViolations()
+    fireEvent.click(within(ai).getByRole('button', { name: 'Close' }))
     const other = await categoryCard('Other')
     expect(within(other).queryByText('Delete')).not.toBeInTheDocument()
-    await expectNoA11yViolations()
+    expect(within(other).queryByLabelText('Category name')).not.toBeInTheDocument()
+    expect(within(other).getByRole('button', { name: 'New version' })).toBeInTheDocument()
   })
 
   it('saves a reordered skill list', async () => {
@@ -88,6 +93,7 @@ describe('SkillsPage', () => {
     fireEvent.click(within(ai).getByText('Add skill'))
     await new Promise((resolve) => setTimeout(resolve))
     expect(sentBody(fetchMock, 'POST /api/skills')).toEqual({ skill_name: 'Claude Code', category_id: 6 })
+    await vi.waitFor(() => expect(within(ai).getByRole('status')).toHaveTextContent('Added the skill "Claude Code".'))
   })
 
   it('adds a category under the chosen section, or none', async () => {
@@ -104,10 +110,8 @@ describe('SkillsPage', () => {
     const saved = { ...CLAUDE, skill_id: 12, skill_name: 'Claude Code', used_by: [] }
     stub({ 'PUT /api/skills/10': [{ status: 200, body: saved }] })
     render(<SkillsPage />)
-    const claude = await openCard('Claude')
+    const claude = await openItem('Claude')
     expect(within(claude).getByText(/Tweaker \(Independent Project\)/)).toBeInTheDocument()
-    fireEvent.click(within(claude).getByRole('button', { name: 'Rename "Claude"' }))
-    expect(screen.getByLabelText('Skill name')).toHaveFocus()
     expect(screen.getByLabelText('Skill name')).toHaveAccessibleDescription(/saved as a new skill/)
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Skill name'), { target: { value: 'Claude Code' } })
@@ -118,7 +122,7 @@ describe('SkillsPage', () => {
   it('explains that deleting a category keeps its skills under "Other"', async () => {
     stub({ 'DELETE /api/skill-categories/6': [{ status: 204 }] })
     render(<SkillsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete "AI"' }))
+    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "AI"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep showing its skills, under "Other".')
@@ -160,13 +164,33 @@ describe('SkillsPage', () => {
   it('lists what uses a skill before deleting it, and returns focus on cancel', async () => {
     stub()
     render(<SkillsPage />)
-    const deleteButton = await screen.findByRole('button', { name: 'Delete "Claude"' })
-    fireEvent.click(deleteButton)
+    const dialog = await openItem('Claude')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Claude"?' })
     expect(confirm).toHaveTextContent('Used by: Acme resume.')
     expect(confirm).toHaveTextContent('from every category and project')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Cancel'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Delete "Claude"' })).toHaveFocus())
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveFocus())
+  })
+
+  it('adds a new version of a category, and of a skill', async () => {
+    const fetchMock = stub({
+      'POST /api/skill-categories/6/versions': [{ status: 201, body: { ...AI, category_id: 8, category_name: 'ML' } }],
+      'POST /api/skills/10/versions': [{ status: 201, body: { ...CLAUDE, skill_id: 13, skill_name: 'Claude Code' } }],
+    })
+    render(<SkillsPage />)
+    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: 'New version' }))
+    expect(screen.getByLabelText("New version's name")).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'ML' } })
+    fireEvent.click(screen.getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Added "ML", with the same skills.')
+    expect(sentBody(fetchMock, 'POST /api/skill-categories/6/versions')).toEqual({ category_name: 'ML' })
+    fireEvent.click(within(await openItem('Claude')).getByRole('button', { name: 'New version' }))
+    fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'Claude Code' } })
+    fireEvent.click(screen.getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Added "Claude Code", listed right after "Claude".')
+    expect(sentBody(fetchMock, 'POST /api/skills/10/versions')).toEqual({ skill_name: 'Claude Code' })
   })
 })

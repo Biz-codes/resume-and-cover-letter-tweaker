@@ -471,7 +471,10 @@ function SectionBody({
             <AddContent
               section={section}
               library={library}
-              onAdd={(addKind, itemId) => saved(api.placeItems(doc.id, section.row_id, [{ kind: addKind, item_id: itemId }]))}
+              onAdd={async (addKind, itemId) => {
+                await saved(api.placeItems(doc.id, section.row_id, [{ kind: addKind, item_id: itemId }]))
+                onNotice(`Added the ${KIND_NAMES[addKind].lower} to ${section.title}.`)
+              }}
               onWrite={(item) =>
                 written(
                   api.write(doc.id, section.row_id, item),

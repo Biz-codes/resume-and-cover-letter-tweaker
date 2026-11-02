@@ -1,9 +1,9 @@
-// Library page for projects: add, edit, add a version of, and delete projects, and edit each
-// project's ordered skill and bullet lists. Editing follows "Changing a role or project" in
+// Library page for projects: add projects, and open each one's dialog (ItemDialog) to edit it,
+// add a version of it, delete it, and edit its ordered skill and bullet lists. Editing follows "Changing a role or project" in
 // docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters in
 // progress change only if the user says so; otherwise the change is a new version.
 import { useCallback, useEffect, useState } from 'react'
-import { bulletsApi, type Bullet } from '../shared/api/bullets'
+import { bulletsApi, shortBullet, type Bullet } from '../shared/api/bullets'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { projectLabel, projectsApi, type Project, type ProjectFields } from '../shared/api/projects'
 import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../shared/api/sections'
@@ -14,6 +14,7 @@ import BulletList from './BulletList'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
@@ -41,12 +42,9 @@ const EMPTY: ProjectFields = {
 
 const SENT_NOTE = 'A sent version uses this project, so saving adds a new version. The sent version keeps this one.'
 
-// Which form is open: a new project, or editing a project or adding a version of it.
-type Form = { kind: 'new' } | { kind: 'edit' | 'version'; id: number }
-
-// Ids of the buttons that open a form, where focus returns when it closes.
+// Ids of the buttons that open a form or dialog, where focus returns when it closes.
 const NEW_PROJECT_ID = 'new-project'
-const buttonId = (id: number, action: 'edit' | 'version' | 'delete') => `project-${id}-${action}`
+const editId = (id: number) => `project-${id}-edit`
 
 function fieldsOf(project: Project): ProjectFields {
   return {
@@ -63,12 +61,15 @@ export default function ProjectsPage() {
   const [bullets, setBullets] = useState<Bullet[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [form, setForm] = useState<Form | null>(null)
+  const [adding, setAdding] = useState(false)
+  // The project whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   const [applyToUnsent, setApplyToUnsent] = useState(false)
   const [newSection, setNewSection] = useState(String(BUILT_IN_SECTION_IDS.projects))
-  const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Said in the dialog, for a change that keeps it open (something new written in it).
+  const [dialogNotice, setDialogNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
   usePageTitle('Projects')
 
@@ -90,23 +91,20 @@ export default function ProjectsPage() {
     void load()
   }, [load])
 
-  function open(next: Form) {
-    setForm(next)
+  function openItem(id: number) {
+    setEditing(id)
+    setDialogNotice(null)
     setApplyToUnsent(false)
+    setDeleteError(null)
     setNotice(null)
-    setDeleting(null)
-  }
-
-  function close(returnTo: string) {
-    setForm(null)
-    focusLater(returnTo)
   }
 
   async function saved(project: Project, message: string) {
-    setForm(null)
-    setNotice(message)
+    setAdding(false)
+    setEditing(null)
     await load()
-    focusLater(buttonId(project.project_id, 'edit'))
+    setNotice(message)
+    focusLater(editId(project.project_id))
   }
 
   async function create(fields: ProjectFields) {
@@ -140,10 +138,10 @@ export default function ProjectsPage() {
     setDeleteError(null)
     try {
       await projectsApi.delete(project.project_id)
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${projectLabel(project)}".`)
       await load()
+      setNotice(`Deleted "${projectLabel(project)}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -164,91 +162,61 @@ export default function ProjectsPage() {
   const titleOf = distinctLabels(projects ?? [], (item) => item.project_title, (item) => item.created_at)
 
   function card(project: Project) {
-    const label = labelOf(project)
-    if (form?.kind === 'edit' && form.id === project.project_id) {
-      const inProgress = project.used_by.filter((use) => !use.locked)
-      return (
-        <FieldsForm
-          key={project.project_id}
-          label={`Edit "${label}"`}
-          fields={FIELDS}
-          initial={fieldsOf(project)}
-          note={anyLocked(project.used_by) ? SENT_NOTE : undefined}
-          onSave={(fields) => update(project, fields, inProgress.length > 0)}
-          onCancel={() => close(buttonId(project.project_id, 'edit'))}
-        >
-          {inProgress.length > 0 && <ApplyChoice uses={inProgress} apply={applyToUnsent} onChange={setApplyToUnsent} />}
-        </FieldsForm>
-      )
-    }
     return (
       <LibraryCard
         key={project.project_id}
         title={titleOf(project)}
-        actions={
-          deleting !== project.project_id && (
-            <div className="actions">
-              <button
-                type="button"
-                id={buttonId(project.project_id, 'edit')}
-                aria-label={`Edit "${label}"`}
-                onClick={() => open({ kind: 'edit', id: project.project_id })}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                id={buttonId(project.project_id, 'version')}
-                aria-label={`New version of "${label}"`}
-                onClick={() => open({ kind: 'version', id: project.project_id })}
-              >
-                New version
-              </button>
-              <button
-                type="button"
-                id={buttonId(project.project_id, 'delete')}
-                aria-label={`Delete "${label}"`}
-                onClick={() => {
-                  setDeleting(project.project_id)
-                  setDeleteError(null)
-                  setForm(null)
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )
-        }
-        shown={
-          <>
-            {deleting === project.project_id && (
-              <ConfirmDelete
-                what={`"${label}"`}
-                uses={project.used_by}
-                effect="It's removed from them, along with its skills and bullets there. The skills and bullets stay in the library."
-                error={deleteError}
-                onConfirm={() => void confirmDelete(project)}
-                onCancel={() => {
-                  setDeleting(null)
-                  focusLater(buttonId(project.project_id, 'delete'))
-                }}
-              />
-            )}
-            {form?.kind === 'version' && form.id === project.project_id && (
-              <FieldsForm
-                label={`New version of "${label}"`}
-                fields={FIELDS}
-                initial={fieldsOf(project)}
-                submitLabel="Add version"
-                onSave={(fields) => addVersion(project, fields)}
-                onCancel={() => close(buttonId(project.project_id, 'version'))}
-              />
-            )}
-          </>
-        }
+        editId={editId(project.project_id)}
+        editLabel={`Edit "${labelOf(project)}"`}
+        onEdit={() => openItem(project.project_id)}
       >
         <p className="muted">{[project.done_for, project.dates].filter(Boolean).join(' | ')}</p>
         {project.url && <p className="muted">{project.url}</p>}
+      </LibraryCard>
+    )
+  }
+
+  function itemDialog(project: Project) {
+    const label = labelOf(project)
+    const inProgress = project.used_by.filter((use) => !use.locked)
+    return (
+      <ItemDialog
+        notice={dialogNotice}
+        title={label}
+        onClose={() => setEditing(null)}
+        form={
+          <FieldsForm
+            label={`Edit "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(project)}
+            note={anyLocked(project.used_by) ? SENT_NOTE : undefined}
+            onSave={(fields) => update(project, fields, inProgress.length > 0)}
+            onCancel={() => setEditing(null)}
+          >
+            {inProgress.length > 0 && <ApplyChoice uses={inProgress} apply={applyToUnsent} onChange={setApplyToUnsent} />}
+          </FieldsForm>
+        }
+        newVersion={(back) => (
+          <FieldsForm
+            label={`New version of "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(project)}
+            submitLabel="Add version"
+            onSave={(fields) => addVersion(project, fields)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={`"${label}"`}
+            uses={project.used_by}
+            effect="It's removed from them, along with its skills and bullets there. The skills and bullets stay in the library."
+            error={deleteError}
+            onConfirm={() => void confirmDelete(project)}
+            onCancel={back}
+          />
+        )}
+      >
         <Collapsible title="Skills" count={project.skills.length}>
           <OrderedList
             label={`${label} skills`}
@@ -277,14 +245,16 @@ export default function ProjectsPage() {
               project_id: project.project_id,
             })
             await load()
+            setDialogNotice(`Added the bullet "${shortBullet(content)}".`)
           }}
         />
         <NameList title="Sections that list it" names={project.sections.map((section) => section.title)} />
         <UsedBy uses={project.used_by} />
-      </LibraryCard>
+      </ItemDialog>
     )
   }
 
+  const editingProject = projects?.find((project) => project.project_id === editing)
   const listed = projects?.filter((project) => project.sections.length > 0) ?? []
   const unlisted = projects?.filter((project) => project.sections.length === 0) ?? []
 
@@ -308,14 +278,17 @@ export default function ProjectsPage() {
       )}
       {!projects && !loadError && <p>Loading…</p>}
 
-      {form?.kind === 'new' ? (
+      {adding ? (
         <FieldsForm
           label="New project"
           fields={FIELDS}
           initial={EMPTY}
           submitLabel="Add project"
           onSave={create}
-          onCancel={() => close(NEW_PROJECT_ID)}
+          onCancel={() => {
+            setAdding(false)
+            focusLater(NEW_PROJECT_ID)
+          }}
         >
           <label>
             List it under
@@ -331,7 +304,14 @@ export default function ProjectsPage() {
         </FieldsForm>
       ) : (
         projects && (
-          <button type="button" id={NEW_PROJECT_ID} onClick={() => open({ kind: 'new' })}>
+          <button
+            type="button"
+            id={NEW_PROJECT_ID}
+            onClick={() => {
+              setAdding(true)
+              setNotice(null)
+            }}
+          >
             New project
           </button>
         )
@@ -347,6 +327,7 @@ export default function ProjectsPage() {
       {projects && <h3>Projects</h3>}
       {projects && listed.length === 0 && <p>No projects yet.</p>}
       {listed.map(card)}
+      {editingProject && itemDialog(editingProject)}
     </section>
   )
 }

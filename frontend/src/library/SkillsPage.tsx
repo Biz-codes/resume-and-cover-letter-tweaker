@@ -1,5 +1,5 @@
-// Library page for skill categories and skills: each category's ordered skill list, adding,
-// renaming, and deleting both. Rules from docs/FRONTEND_CHECKS.md: "Other" is built in,
+// Library page for skill categories and skills: adding both, and each one's dialog (ItemDialog),
+// where it's renamed, given a new version, or deleted, with a category's ordered skill list. Rules from docs/FRONTEND_CHECKS.md: "Other" is built in,
 // every skill keeps a category, and deleting a category moves its skills under "Other".
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
@@ -10,6 +10,7 @@ import { anyLocked } from '../shared/api/usage'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
@@ -22,8 +23,8 @@ const lockedNote = (what: string) =>
 
 type Target = { kind: 'category' | 'skill'; id: number }
 
-// Ids of each card's Rename and Delete buttons, where focus returns when a form closes.
-const buttonId = (kind: Target['kind'], id: number, action: 'rename' | 'delete') => `${kind}-${id}-${action}`
+// Each card's Edit button id, where focus returns when the dialog closes after a save.
+const editId = (kind: Target['kind'], id: number) => `${kind}-${id}-edit`
 
 export default function SkillsPage() {
   const [categories, setCategories] = useState<SkillCategory[] | null>(null)
@@ -31,10 +32,12 @@ export default function SkillsPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [newCategorySection, setNewCategorySection] = useState(String(BUILT_IN_SECTION_IDS.skills))
-  const [renaming, setRenaming] = useState<Target | null>(null)
-  const [deleting, setDeleting] = useState<Target | null>(null)
+  // The category or skill whose dialog is open.
+  const [editing, setEditing] = useState<Target | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Said in the dialog, for a change that keeps it open (something new written in it).
+  const [dialogNotice, setDialogNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
   usePageTitle('Skills')
 
@@ -56,56 +59,198 @@ export default function SkillsPage() {
   }, [load])
 
   const skillChoices = skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))
-  const is = (target: Target | null, kind: Target['kind'], id: number) => target?.kind === kind && target.id === id
 
-  function closeForm(target: Target, action: 'rename' | 'delete') {
-    if (action === 'rename') setRenaming(null)
-    else setDeleting(null)
-    focusLater(buttonId(target.kind, target.id, action))
-  }
-
-  function startDeleting(target: Target) {
-    setDeleting(target)
+  function openItem(target: Target) {
+    setEditing(target)
+    setDialogNotice(null)
     setDeleteError(null)
-    setRenaming(null)
+    setNotice(null)
   }
 
   async function remove(target: Target, name: string) {
     setDeleteError(null)
     try {
       await (target.kind === 'category' ? skillCategoriesApi.delete(target.id) : skillsApi.delete(target.id))
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${name}".`)
       await load()
+      setNotice(`Deleted "${name}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
   }
 
-  async function renameCategory(category: SkillCategory, name: string) {
-    const saved = await skillCategoriesApi.rename(category.category_id, name)
-    setRenaming(null)
-    focusLater(buttonId('category', saved.category_id, 'rename'))
-    setNotice(
-      saved.category_id === category.category_id
-        ? 'Saved.'
-        : `Saved as a new category, "${saved.category_name}". Sent versions keep "${category.category_name}".`,
-    )
+  async function saved(target: Target, message: string) {
+    setEditing(null)
     await load()
+    setNotice(message)
+    focusLater(editId(target.kind, target.id))
+  }
+
+  async function renameCategory(category: SkillCategory, name: string) {
+    const renamed = await skillCategoriesApi.rename(category.category_id, name)
+    await saved(
+      { kind: 'category', id: renamed.category_id },
+      renamed.category_id === category.category_id
+        ? 'Saved.'
+        : `Saved as a new category, "${renamed.category_name}". Sent versions keep "${category.category_name}".`,
+    )
+  }
+
+  async function categoryVersion(category: SkillCategory, name: string) {
+    const version = await skillCategoriesApi.addVersion(category.category_id, name)
+    await saved(
+      { kind: 'category', id: version.category_id },
+      `Added "${version.category_name}", with the same skills. Resumes and cover letters keep "${category.category_name}" until you pick the new one.`,
+    )
   }
 
   async function renameSkill(skill: Skill, name: string) {
-    const saved = await skillsApi.rename(skill.skill_id, name)
-    setRenaming(null)
-    focusLater(buttonId('skill', saved.skill_id, 'rename'))
-    setNotice(
-      saved.skill_id === skill.skill_id
+    const renamed = await skillsApi.rename(skill.skill_id, name)
+    await saved(
+      { kind: 'skill', id: renamed.skill_id },
+      renamed.skill_id === skill.skill_id
         ? 'Saved.'
-        : `Saved as a new skill, "${saved.skill_name}". Sent versions keep "${skill.skill_name}".`,
+        : `Saved as a new skill, "${renamed.skill_name}". Sent versions keep "${skill.skill_name}".`,
     )
-    await load()
   }
+
+  async function skillVersion(skill: Skill, name: string) {
+    const version = await skillsApi.addVersion(skill.skill_id, name)
+    await saved(
+      { kind: 'skill', id: version.skill_id },
+      `Added "${version.skill_name}", listed right after "${skill.skill_name}". Resumes and cover letters keep "${skill.skill_name}" until you pick the new one.`,
+    )
+  }
+
+  // "Other" can't be renamed or deleted, so its dialog has only New version and its skills.
+  function categoryDialog(category: SkillCategory) {
+    const target: Target = { kind: 'category', id: category.category_id }
+    return (
+      <ItemDialog
+        notice={dialogNotice}
+        title={category.category_name}
+        onClose={() => setEditing(null)}
+        form={
+          !category.built_in && (
+            <NameForm
+              label="Category name"
+              field="category_name"
+              initial={category.category_name}
+              lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
+              onSave={(name) => renameCategory(category, name)}
+              onCancel={() => setEditing(null)}
+            />
+          )
+        }
+        newVersion={(back) => (
+          <NameForm
+            label="New version's name"
+            field="category_name"
+            initial={category.category_name}
+            submitLabel="Add version"
+            onSave={(name) => categoryVersion(category, name)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={
+          category.built_in
+            ? undefined
+            : (back) => (
+                <ConfirmDelete
+                  what={`"${category.category_name}"`}
+                  uses={category.used_by}
+                  effect='They keep showing its skills, under "Other".'
+                  error={deleteError}
+                  onConfirm={() => void remove(target, category.category_name)}
+                  onCancel={back}
+                />
+              )
+        }
+      >
+        {category.built_in ? (
+          <p className="muted">Offered wherever skills are added.</p>
+        ) : (
+          <NameList title="Sections that list it" names={category.sections.map((section) => section.title)} />
+        )}
+
+        <Collapsible title="Skills" count={category.skills.length}>
+          <OrderedList
+            label={`${category.category_name} skills`}
+            items={category.skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
+            choices={skillChoices}
+            emptyText="No skills yet."
+            onChange={async (ids) => {
+              await skillCategoriesApi.setSkills(category.category_id, ids)
+              await load()
+            }}
+          />
+          <NameForm
+            label={`New skill in ${category.category_name}`}
+            field="skill_name"
+            submitLabel="Add skill"
+            onSave={async (name) => {
+              await skillsApi.create(name, category.category_id)
+              await load()
+              setDialogNotice(`Added the skill "${name.trim()}".`)
+            }}
+          />
+        </Collapsible>
+        <UsedBy uses={category.used_by} />
+        {category.category_id === OTHER_CATEGORY_ID && (
+          <p className="muted">Skills no other category lists stay here until you add them to one.</p>
+        )}
+      </ItemDialog>
+    )
+  }
+
+  function skillDialog(skill: Skill) {
+    return (
+      <ItemDialog
+        notice={dialogNotice}
+        title={skill.skill_name}
+        onClose={() => setEditing(null)}
+        form={
+          <NameForm
+            label="Skill name"
+            field="skill_name"
+            initial={skill.skill_name}
+            lockedNote={anyLocked(skill.used_by) ? lockedNote('skill') : undefined}
+            onSave={(name) => renameSkill(skill, name)}
+            onCancel={() => setEditing(null)}
+          />
+        }
+        newVersion={(back) => (
+          <NameForm
+            label="New version's name"
+            field="skill_name"
+            initial={skill.skill_name}
+            submitLabel="Add version"
+            onSave={(name) => skillVersion(skill, name)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={`"${skill.skill_name}"`}
+            uses={skill.used_by}
+            effect="It's removed from them, and from every category and project."
+            error={deleteError}
+            onConfirm={() => void remove({ kind: 'skill', id: skill.skill_id }, skill.skill_name)}
+            onCancel={back}
+          />
+        )}
+      >
+        <NameList title="Categories" names={skill.categories.map((category) => category.category_name)} />
+        <NameList title="Projects" names={skill.projects.map(projectLabel)} />
+        <UsedBy uses={skill.used_by} />
+      </ItemDialog>
+    )
+  }
+
+  const editingCategory =
+    editing?.kind === 'category' ? categories?.find((category) => category.category_id === editing.id) : undefined
+  const editingSkill = editing?.kind === 'skill' ? skills.find((skill) => skill.skill_id === editing.id) : undefined
 
   return (
     <section>
@@ -159,86 +304,11 @@ export default function SkillsPage() {
           key={category.category_id}
           title={category.category_name}
           tags={category.built_in && <span className="tag">built in</span>}
-          replacesTitle={
-            is(renaming, 'category', category.category_id) && (
-              <NameForm
-                label="Category name"
-                field="category_name"
-                initial={category.category_name}
-                lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
-                onSave={(name) => renameCategory(category, name)}
-                onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'rename')}
-              />
-            )
-          }
-          actions={
-            !category.built_in &&
-              !is(renaming, 'category', category.category_id) &&
-              !is(deleting, 'category', category.category_id) && (
-              <div className="actions">
-                <button
-                  type="button"
-                  id={buttonId('category', category.category_id, 'rename')}
-                  aria-label={`Rename "${category.category_name}"`}
-                  onClick={() => setRenaming({ kind: 'category', id: category.category_id })}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  id={buttonId('category', category.category_id, 'delete')}
-                  aria-label={`Delete "${category.category_name}"`}
-                  onClick={() => startDeleting({ kind: 'category', id: category.category_id })}
-                >
-                  Delete
-                </button>
-              </div>
-              )
-          }
-          shown={
-            is(deleting, 'category', category.category_id) && (
-            <ConfirmDelete
-              what={`"${category.category_name}"`}
-              uses={category.used_by}
-              effect='They keep showing its skills, under "Other".'
-              error={deleteError}
-              onConfirm={() => void remove({ kind: 'category', id: category.category_id }, category.category_name)}
-              onCancel={() => closeForm({ kind: 'category', id: category.category_id }, 'delete')}
-            />
-            )
-          }
+          editId={editId('category', category.category_id)}
+          editLabel={`Edit "${category.category_name}"`}
+          onEdit={() => openItem({ kind: 'category', id: category.category_id })}
         >
-          {category.built_in ? (
-            <p className="muted">Offered wherever skills are added.</p>
-          ) : (
-            <NameList title="Sections that list it" names={category.sections.map((section) => section.title)} />
-          )}
-
-          <Collapsible title="Skills" count={category.skills.length}>
-            <OrderedList
-              label={`${category.category_name} skills`}
-              items={category.skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
-              choices={skillChoices}
-              emptyText="No skills yet."
-              onChange={async (ids) => {
-                await skillCategoriesApi.setSkills(category.category_id, ids)
-                await load()
-              }}
-            />
-            <NameForm
-              label={`New skill in ${category.category_name}`}
-              field="skill_name"
-              submitLabel="Add skill"
-              onSave={async (name) => {
-                await skillsApi.create(name, category.category_id)
-                await load()
-              }}
-            />
-          </Collapsible>
-          <UsedBy uses={category.used_by} />
-          {category.category_id === OTHER_CATEGORY_ID && (
-            <p className="muted">Skills no other category lists stay here until you add them to one.</p>
-          )}
+          <p className="muted">{category.skills.map((skill) => skill.skill_name).join(', ') || 'No skills yet.'}</p>
         </LibraryCard>
       ))}
 
@@ -248,58 +318,13 @@ export default function SkillsPage() {
         <LibraryCard
           key={skill.skill_id}
           title={skill.skill_name}
-          replacesTitle={
-            is(renaming, 'skill', skill.skill_id) && (
-              <NameForm
-                label="Skill name"
-                field="skill_name"
-                initial={skill.skill_name}
-                lockedNote={anyLocked(skill.used_by) ? lockedNote('skill') : undefined}
-                onSave={(name) => renameSkill(skill, name)}
-                onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'rename')}
-              />
-            )
-          }
-          actions={
-            !is(renaming, 'skill', skill.skill_id) && !is(deleting, 'skill', skill.skill_id) && (
-            <div className="actions">
-              <button
-                type="button"
-                id={buttonId('skill', skill.skill_id, 'rename')}
-                aria-label={`Rename "${skill.skill_name}"`}
-                onClick={() => setRenaming({ kind: 'skill', id: skill.skill_id })}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                id={buttonId('skill', skill.skill_id, 'delete')}
-                aria-label={`Delete "${skill.skill_name}"`}
-                onClick={() => startDeleting({ kind: 'skill', id: skill.skill_id })}
-              >
-                Delete
-              </button>
-            </div>
-            )
-          }
-          shown={
-            is(deleting, 'skill', skill.skill_id) && (
-            <ConfirmDelete
-              what={`"${skill.skill_name}"`}
-              uses={skill.used_by}
-              effect="It's removed from them, and from every category and project."
-              error={deleteError}
-              onConfirm={() => void remove({ kind: 'skill', id: skill.skill_id }, skill.skill_name)}
-              onCancel={() => closeForm({ kind: 'skill', id: skill.skill_id }, 'delete')}
-            />
-            )
-          }
-        >
-          <NameList title="Categories" names={skill.categories.map((category) => category.category_name)} />
-          <NameList title="Projects" names={skill.projects.map(projectLabel)} />
-          <UsedBy uses={skill.used_by} />
-        </LibraryCard>
+          editId={editId('skill', skill.skill_id)}
+          editLabel={`Edit "${skill.skill_name}"`}
+          onEdit={() => openItem({ kind: 'skill', id: skill.skill_id })}
+        />
       ))}
+      {editingCategory && categoryDialog(editingCategory)}
+      {editingSkill && skillDialog(editingSkill)}
     </section>
   )
 }

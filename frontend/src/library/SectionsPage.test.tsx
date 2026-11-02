@@ -4,7 +4,7 @@ import type { Education } from '../shared/api/education'
 import type { Experience } from '../shared/api/experience'
 import type { Section } from '../shared/api/sections'
 import type { SkillCategory } from '../shared/api/skills'
-import { openCard } from '../test/openCard'
+import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
@@ -95,8 +95,8 @@ function stub(extra: Record<string, { status: number; body?: unknown }[]> = {}, 
   })
 }
 
-// A section's card, opened. Its heading also holds its tags ("built in"), so match its start.
-const card = (title: string) => openCard(new RegExp(`^${title}`))
+// A section's dialog. Its card's heading also holds its tags ("built in"), so match its start.
+const card = (title: string) => openItem(new RegExp(`^${title}`))
 
 const group = (heading: string) => screen.getByRole('heading', { name: heading }).parentElement as HTMLElement
 
@@ -126,13 +126,34 @@ describe('SectionsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it("doesn't offer renaming or deleting built-in sections", async () => {
+  it("doesn't offer renaming or deleting built-in sections, only a new version", async () => {
     stub()
     render(<SectionsPage />)
+    expect(within(await findCard(/^Skills/)).getByText('built in')).toBeInTheDocument()
     const skills = await card('Skills')
-    expect(within(skills).getByText('built in')).toBeInTheDocument()
-    expect(within(skills).queryByText('Rename')).not.toBeInTheDocument()
-    expect(within(await card('Freelance')).getByText('Rename')).toBeInTheDocument()
+    expect(within(skills).queryByLabelText('Section title')).not.toBeInTheDocument()
+    expect(within(skills).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(skills).getByRole('button', { name: 'New version' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(within(skills).getByRole('button', { name: 'Close' }))
+    const freelance = await card('Freelance')
+    expect(within(freelance).getByLabelText('Section title')).toHaveValue('Freelance')
+    expect(within(freelance).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('adds a new version of a section, built-in ones too', async () => {
+    const version = { ...SKILLS, id: 13, title: 'Technical Skills', built_in: false }
+    const fetchMock = stub({ 'POST /api/sections/2/versions': [{ status: 201, body: version }] })
+    render(<SectionsPage />)
+    fireEvent.click(within(await card('Skills')).getByRole('button', { name: 'New version' }))
+    const field = screen.getByLabelText("New version's title")
+    expect(field).toHaveFocus()
+    fireEvent.change(field, { target: { value: 'Technical Skills' } })
+    fireEvent.click(screen.getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Added "Technical Skills", with the same lists. Resumes and cover letters keep "Skills" until you pick the new one.',
+    )
+    expect(sentBody(fetchMock, 'POST /api/sections/2/versions')).toEqual({ title: 'Technical Skills' })
   })
 
   it('offers categories to list, but never "Other"', async () => {
@@ -149,7 +170,7 @@ describe('SectionsPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/sections/2/skill-categories')).toEqual({ category_ids: [3, 2] })
   })
 
-  it('starts each part of a card open only when it holds something', async () => {
+  it('starts each part of a dialog open only when it holds something', async () => {
     stub()
     render(<SectionsPage />)
     const freelance = await card('Freelance')
@@ -162,7 +183,7 @@ describe('SectionsPage', () => {
     const saved = { ...FREELANCE, id: 12, title: 'Consulting', used_by: [] }
     stub({ 'PUT /api/sections/6': [{ status: 200, body: saved }] })
     render(<SectionsPage />)
-    fireEvent.click(within(await card('Freelance')).getByText('Rename'))
+    await card('Freelance')
     expect(screen.getByText(/saved as a new section/)).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Section title'), { target: { value: 'Consulting' } })
@@ -190,7 +211,7 @@ describe('SectionsPage', () => {
   it('lists what uses a section before deleting it', async () => {
     stub({ 'DELETE /api/sections/6': [{ status: 204 }] })
     render(<SectionsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Freelance"' }))
+    fireEvent.click(within(await card('Freelance')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Freelance"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
@@ -200,19 +221,22 @@ describe('SectionsPage', () => {
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Sections' })).toHaveFocus())
   })
 
-  it('moves focus into a form when it opens and back to its button when it closes', async () => {
+  it('moves focus into the dialog and its confirm, and back to their buttons when they close', async () => {
     stub()
     render(<SectionsPage />)
     expect(document.title).toBe('Sections – Resume Tweaker')
-    fireEvent.click(await screen.findByRole('button', { name: 'Rename "Freelance"' }))
-    expect(screen.getByLabelText('Section title')).toHaveFocus()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Rename "Freelance"' })).toHaveFocus()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete "Freelance"' }))
+    const edit = await screen.findByRole('button', { name: 'Edit "Freelance"' })
+    edit.focus()
+    fireEvent.click(edit)
+    const dialog = screen.getByRole('dialog', { name: 'Freelance' })
+    expect(within(dialog).getByRole('heading', { level: 2 })).toHaveFocus()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     expect(within(screen.getByRole('group', { name: 'Delete "Freelance"?' })).getByText('Cancel')).toHaveFocus()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Delete "Freelance"' })).toHaveFocus()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveFocus()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(edit).toHaveFocus()
   })
 
   it('says it is loading', async () => {
@@ -256,6 +280,7 @@ describe('SectionsPage', () => {
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Ran workshops', section_id: 6 }),
     )
+    await vi.waitFor(() => expect(within(freelance).getByRole('status')).toHaveTextContent('Added the bullet "Ran workshops".'))
   })
 
   it("writes narrative content in a section and saves its education list", async () => {
@@ -272,6 +297,11 @@ describe('SectionsPage', () => {
     fireEvent.click(within(freelance).getByText('Add narrative content'))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/narrative-content')).toEqual({ content: 'I take on short projects.', section_ids: [6] }),
+    )
+    await vi.waitFor(() =>
+      expect(within(freelance).getByRole('status')).toHaveTextContent(
+        'Added "I take on short projects." to the narrative content it lists.',
+      ),
     )
     const picker = within(freelance).getByLabelText('Add to Freelance education')
     expect(within(picker).getByRole('option', { name: 'B.A. in English, State University (May 2015)' })).toBeInTheDocument()

@@ -34,6 +34,8 @@ export const skillCategoriesApi = {
   setSkills: (id: number, skillIds: number[]) =>
     api.put<SkillCategory>(`/skill-categories/${id}/skills`, { skill_ids: skillIds }),
   // Moves its skills and its resume and cover letter selections under "Other" first.
+  addVersion: (id: number, categoryName: string) =>
+    api.post<SkillCategory>(`/skill-categories/${id}/versions`, { category_name: categoryName }),
   delete: (id: number) => api.delete(`/skill-categories/${id}`),
 }
 
@@ -43,5 +45,6 @@ export const skillsApi = {
     api.post<Skill>('/skills', { skill_name: skillName, category_id: categoryId }),
   // When a sent version uses the skill, the new name is saved as a new skill.
   rename: (id: number, skillName: string) => api.put<Skill>(`/skills/${id}`, { skill_name: skillName }),
+  addVersion: (id: number, skillName: string) => api.post<Skill>(`/skills/${id}/versions`, { skill_name: skillName }),
   delete: (id: number) => api.delete(`/skills/${id}`),
 }

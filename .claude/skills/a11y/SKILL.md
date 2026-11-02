@@ -16,7 +16,7 @@ Every component and page is tested for accessibility from the start. Every test 
 1. **Read the whole front end, not just the change.** A change in one place often breaks accessibility somewhere else: a renamed label breaks a test's query, a new route changes which nav link is current, a shared component's focus handling changes every page that uses it, a CSS change lowers contrast on a page nobody touched. So every review covers every file:
    - Start with what changed (`git status --short frontend/`, `git diff HEAD -- frontend/`, untracked files, and any files the Stop hook listed), so you know where to look hardest.
    - Then read every component, page, hook, and test in `frontend/src/`, plus `index.css` and `frontend/a11yChecks.ts`, in full: `find frontend/src -name '*.ts*' -not -path '*/node_modules/*'`.
-   - Look at how the pages fit together, which a single file doesn't show: moving between pages (where focus lands, what's announced), the nav and sub-nav (`aria-current`), heading levels across the shell and each page, landmarks, and the live regions on one page (only one `role="status"`).
+   - Look at how the pages fit together, which a single file doesn't show: moving between pages (where focus lands, what's announced), the nav and sub-nav (`aria-current`), heading levels across the shell and each page, landmarks, and the live regions on one page (only one `role="status"`, apart from an open `Dialog`'s own, since the page's can't be reached behind the modal).
 
 2. **Review all of it against the checklist below.** For each problem, fix it in the component, unless the fix would change the design or how the UI looks or behaves in a way the user would notice. Then describe it and ask first.
 
@@ -34,7 +34,7 @@ Every component and page is tested for accessibility from the start. Every test 
 
 **Names and labels**
 - Every input, select, and textarea has a visible `<label>` (wrapping the control, as `NameForm` does). Placeholder text is not a label.
-- Buttons and links say what they do. When a card repeats the same button ("Rename", "Delete"), give each one an `aria-label` that names its item, starting with the visible text (WCAG 2.5.3, label in name): `aria-label={`Delete "${name}"`}`.
+- Buttons and links say what they do. When a page repeats the same button (each card's "Edit", a list's "Delete"), give each one an `aria-label` that names its item, starting with the visible text (WCAG 2.5.3, label in name): `aria-label={`Delete "${name}"`}`.
 - Icon-only buttons (the ⠿ drag handle) have an `aria-label`.
 - Anything that can be dragged also works by keyboard and by single clicks (WCAG 2.5.7); reuse `OrderedList` for reordering.
 - Required fields carry `aria-required="true"` (the backend still validates).
@@ -43,6 +43,7 @@ Every component and page is tested for accessibility from the start. Every test 
 **Errors and status**
 - An error tied to a field sets `aria-invalid` on it and links the message with `aria-describedby`, so it's read again when the field gets focus.
 - Errors use `role="alert"`. Success and progress notices go in a `role="status"` element that is always rendered (empty when there's nothing to say), since a live region added together with its text often isn't announced.
+- Every change the user makes is announced, including ones that keep a form or dialog open: adding, removing, reordering, writing, and saving. Lists announce through `OrderedList`'s own live region; a change inside a dialog goes in the dialog's `notice`; one that closes it goes in the page's notice after it closes. Nothing is announced when the change failed.
 - Don't rely on color alone: invalid fields also get the message, and "sent" uses a text tag.
 
 **Focus and keyboard**
@@ -63,6 +64,6 @@ Every component and page is tested for accessibility from the start. Every test 
 - Respect `prefers-reduced-motion` for any animation.
 
 **Content**
-- Each item on a library page is a `LibraryCard` (a heading holding its open/close button, with the item's buttons beside it). Parts of a library card that open and close use `Collapsible` (native `<details>`), which keyboards and screen readers already handle. The levels of a resume's or cover letter's tree use `Disclosure` or `OrderedList`'s `details` (a button with `aria-expanded` and `aria-controls`, whose content renders only while open), and "More options" uses `MoreOptions`, built on `Disclosure`.
+- Each item on a library page is a `LibraryCard` (its title as a heading, a summary, and Edit), and Edit opens its `ItemDialog`, where it's changed. Parts of a dialog that open and close use `Collapsible` (native `<details>`), which keyboards and screen readers already handle. The levels of a resume's or cover letter's tree use `Disclosure` or `OrderedList`'s `details` (a button with `aria-expanded` and `aria-controls`, whose content renders only while open), and "More options" uses `MoreOptions`, built on `Disclosure`.
 - A modal uses `Dialog` (native `<dialog>` with `showModal`): named by its heading, which takes focus when it opens or shows another item; Close and Escape close it, and focus returns to what opened it. Never open one dialog inside another.
 - Text a screen reader hears out of context still makes sense ("Used by (2)", not "(2)").

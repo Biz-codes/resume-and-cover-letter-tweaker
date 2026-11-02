@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Header } from '../shared/api/headers'
-import { openCard } from '../test/openCard'
+import { openItem } from '../test/openCard'
 import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
@@ -27,14 +27,15 @@ const SENT: Header = {
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: true }],
 }
 
-// A header's card, opened, by its headline (every header here is Sam Rivera's).
-const cardFor = (headline: string) => openCard(`Sam Rivera, ${headline}`)
+// A header's dialog, by its headline (every header here is Sam Rivera's).
+const dialogFor = (headline: string) => openItem(`Sam Rivera, ${headline}`)
 
 describe('HeadersPage', () => {
   it('lists headers with what uses them', async () => {
     stubApi({ 'GET /api/headers': [{ status: 200, body: [BASE, SENT] }] })
     render(<HeadersPage />)
-    const sent = await cardFor('Front-End Engineer')
+    const sent = await dialogFor('Front-End Engineer')
+    expect(sent).toHaveAccessibleName('Sam Rivera, Front-End Engineer')
     expect(within(sent).getByText(/Acme resume/)).toBeInTheDocument()
     expect(within(sent).getByText('sent')).toBeInTheDocument()
     await expectNoA11yViolations()
@@ -82,9 +83,8 @@ describe('HeadersPage', () => {
       'PUT /api/headers/2': [{ status: 200, body: saved }],
     })
     render(<HeadersPage />)
-    fireEvent.click(within(await cardFor('Front-End Engineer')).getByText('Edit'))
-    // Focus lands on the first field, past the note, so the note describes that field.
-    expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
+    await dialogFor('Front-End Engineer')
+    // The note describes the first field, so it's read when that field gets focus.
     expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription(/so saving adds a new header/)
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
@@ -110,7 +110,7 @@ describe('HeadersPage', () => {
       'DELETE /api/headers/2': [{ status: 204 }],
     })
     render(<HeadersPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Sam Rivera, Front-End Engineer"' }))
+    fireEvent.click(within(await dialogFor('Front-End Engineer')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sam Rivera, Front-End Engineer"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
@@ -125,10 +125,12 @@ describe('HeadersPage', () => {
     stubApi({ 'GET /api/headers': [{ status: 200, body: [BASE] }] })
     render(<HeadersPage />)
     expect(document.title).toBe('Headers – Resume Tweaker')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' }))
-    expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
+    const edit = await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })
+    edit.focus()
+    fireEvent.click(edit)
+    expect(screen.getByRole('heading', { level: 2, name: 'Sam Rivera, Software Engineer' })).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus()
+    expect(edit).toHaveFocus()
 
     fireEvent.click(screen.getByRole('button', { name: 'New header' }))
     expect(screen.getByLabelText('Full name (required)')).toHaveFocus()
@@ -149,6 +151,24 @@ describe('HeadersPage', () => {
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
     )
+  })
+
+  it('adds a new version of a header, or says one with those values exists', async () => {
+    const version = { ...BASE, header_id: 6, headline: 'Engineer', used_by: [] }
+    const fetchMock = stubApi({
+      'GET /api/headers': [{ status: 200, body: [BASE] }, { status: 200, body: [BASE, version] }],
+      'POST /api/headers/1/versions': [{ status: 201, body: version }],
+    })
+    render(<HeadersPage />)
+    fireEvent.click(within(await dialogFor('Software Engineer')).getByRole('button', { name: 'New version' }))
+    const form = screen.getByRole('form', { name: 'New version of the header' })
+    expect(within(form).getByLabelText('Full name (required)')).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.change(within(form).getByLabelText('Headline'), { target: { value: 'Engineer' } })
+    fireEvent.click(within(form).getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Added a new header.')
+    expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).toMatchObject({ headline: 'Engineer' })
+    expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).not.toHaveProperty('created_at')
   })
 
   it('offers Retry when the list fails to load', async () => {

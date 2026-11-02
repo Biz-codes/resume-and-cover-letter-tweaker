@@ -4,7 +4,7 @@ import type { Project } from '../shared/api/projects'
 import type { Section } from '../shared/api/sections'
 import type { Skill } from '../shared/api/skills'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ProjectsPage from './ProjectsPage'
 
@@ -49,27 +49,41 @@ function stub(extra: Record<string, Reply[]> = {}, projects = [TWEAKER]) {
 const LABEL = 'Tweaker (Freelance)'
 
 describe('ProjectsPage', () => {
-  it('shows each project with its skills, bullets, sections, and uses', async () => {
+  it('shows each project as a card, and its skills, bullets, sections, and uses in its dialog', async () => {
     stub()
     render(<ProjectsPage />)
     expect(document.title).toBe('Projects – Resume Tweaker')
-    const card = await openCard('Tweaker')
+    const card = await findCard('Tweaker')
     expect(within(card).getByText('Freelance | Spring 2024')).toBeInTheDocument()
     expect(within(card).getByText('https://example.com/tweaker')).toBeInTheDocument()
-    expect(within(card).getByText('Skills (1)')).toBeInTheDocument()
-    expect(within(card).getByText('Built the API')).toBeInTheDocument()
-    expect(within(card).getByText(/Acme resume/)).toBeInTheDocument()
+    const dialog = await openItem('Tweaker')
+    expect(dialog).toHaveAccessibleName(LABEL)
+    expect(within(dialog).getByText('Skills (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Built the API')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Acme resume/)).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
   it("saves a project's skill list", async () => {
     const fetchMock = stub({ 'PUT /api/projects/4/skills': [{ status: 200, body: TWEAKER }] })
     render(<ProjectsPage />)
-    await openCard('Tweaker')
+    await openItem('Tweaker')
     const picker = await screen.findByLabelText(`Add to ${LABEL} skills`)
     fireEvent.change(picker, { target: { value: '21' } })
     fireEvent.click(within(picker.parentElement as HTMLElement).getByText('Add'))
     await vi.waitFor(() => expect(sentBody(fetchMock, 'PUT /api/projects/4/skills')).toEqual({ skill_ids: [20, 21] }))
+  })
+
+  it('writes a new bullet under a project and says so in its dialog', async () => {
+    const fetchMock = stub({ 'POST /api/bullet-points': [{ status: 201, body: {} }] })
+    render(<ProjectsPage />)
+    const dialog = await openItem('Tweaker')
+    fireEvent.change(within(dialog).getByLabelText(`New bullet for ${LABEL}`), { target: { value: 'Wrote the docs' } })
+    fireEvent.click(within(dialog).getByText('Add bullet'))
+    await vi.waitFor(() =>
+      expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Wrote the docs', project_id: 4 }),
+    )
+    await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Added the bullet "Wrote the docs".'))
   })
 
   it('adds a project under "Projects" by default', async () => {
@@ -94,7 +108,7 @@ describe('ProjectsPage', () => {
     const saved = { ...TWEAKER, project_id: 7, project_title: 'Resume Tweaker', used_by: [] }
     stub({ 'PUT /api/projects/4': [{ status: 200, body: saved }] })
     render(<ProjectsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
+    await openItem('Tweaker')
     const title = screen.getByLabelText('Project title (required)')
     expect(title).toHaveAccessibleDescription(/so saving adds a new version/)
     await expectNoA11yViolations()
@@ -108,7 +122,7 @@ describe('ProjectsPage', () => {
     const inUse = { ...TWEAKER, used_by: [draft] }
     const fetchMock = stub({ 'PUT /api/projects/4': [{ status: 200, body: { ...inUse, dates: '2024' } }] }, [inUse])
     render(<ProjectsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit "${LABEL}"` }))
+    await openItem('Tweaker')
     // Nothing sent uses it, so there's no note on the first field.
     expect(screen.getByLabelText('Project title (required)')).not.toHaveAccessibleDescription()
     const choice = screen.getByRole('group', { name: /Used by: Draft resume\.$/ })
@@ -125,7 +139,7 @@ describe('ProjectsPage', () => {
     const version = { ...TWEAKER, project_id: 8, dates: 'Fall 2024', used_by: [] }
     const fetchMock = stub({ 'POST /api/projects/4/versions': [{ status: 201, body: version }] })
     render(<ProjectsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `New version of "${LABEL}"` }))
+    fireEvent.click(within(await openItem('Tweaker')).getByRole('button', { name: 'New version' }))
     const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
     expect(within(form).getByLabelText(/Affiliation/)).toHaveValue('Freelance')
     fireEvent.change(within(form).getByLabelText(/Dates/), { target: { value: 'Fall 2024' } })
@@ -137,12 +151,13 @@ describe('ProjectsPage', () => {
   it('lists what a delete affects', async () => {
     stub()
     render(<ProjectsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Delete "${LABEL}"` }))
+    const dialog = await openItem('Tweaker')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete "${LABEL}"?` })
     expect(confirm).toHaveTextContent('The skills and bullets stay in the library.')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Cancel'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: `Delete "${LABEL}"` })).toHaveFocus())
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveFocus())
   })
 
   it('says it is loading', async () => {

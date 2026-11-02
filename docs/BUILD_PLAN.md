@@ -109,7 +109,7 @@ Decided with the user:
 Steps:
 1. [x] **`Dialog`** in `frontend/src/shared/components/`: the modal, its focus handling, and its tests. The alert dialogs step below reuses it.
 2. [x] **New version for every kind in the library:** a `POST /api/<items>/{id}/versions` like roles and projects have, for the kinds without one, each listed right after the original and listing the same children. Names and titles must be new (`DUPLICATE`).
-3. [ ] **The item dialog,** one shell with each kind's contents, opened from the library cards, which slim down.
+3. [x] **The item dialog,** one shell with each kind's contents, opened from the library cards, which slim down.
 4. [ ] **Names open the dialog** everywhere they're shown, with Back inside it.
 5. [ ] **Hide:** a `hidden` column on each library table (through `/db-table`), Hide and Unhide in the dialog, hidden items left out of every list that offers items to add and out of the defaults, the "Hidden (n)" group on each page, and deletes refused while a sent application uses the item.
 6. [ ] **The resume and cover letter tree:** Edit on each row, with New version from the dialog taking the item's place in that document.

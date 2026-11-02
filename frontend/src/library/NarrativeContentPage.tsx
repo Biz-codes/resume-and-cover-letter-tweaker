@@ -1,6 +1,6 @@
-// Library page for narrative content: every excerpt (one sentence up to a full paragraph), the
-// sections that list it, and adding, editing, and deleting excerpts. The add and edit forms also
-// choose every section that lists the excerpt. Excerpts no section lists come first, so they can
+// Library page for narrative content: every excerpt (one sentence up to a full paragraph), adding
+// excerpts, and each one's dialog (ItemDialog), where it's edited, given a new version, or
+// deleted. The add and edit forms also choose every section that lists the excerpt. Excerpts no section lists come first, so they can
 // be listed again or deleted (docs/FRONTEND_CHECKS.md, "Unlisted items"). Editing the text of an
 // excerpt a sent version uses saves a new excerpt ("Sent versions are locked").
 import { useCallback, useEffect, useState } from 'react'
@@ -12,8 +12,8 @@ import { anyLocked } from '../shared/api/usage'
 import Checklist from '../shared/components/Checklist'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
-import NameList from './NameList'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
@@ -28,21 +28,19 @@ const FIELDS: Field<ExcerptFields>[] = [
 
 const LOCKED_NOTE = 'A sent version uses this excerpt, so saving adds a new one. The sent version keeps this one.'
 
-// Which form is open: a new excerpt, or editing one.
-type Form = { kind: 'new' } | { kind: 'edit'; id: number }
-
-// Ids of the buttons that open a form, where focus returns when it closes.
+// Ids of the buttons that open a form or dialog, where focus returns when it closes.
 const NEW_EXCERPT_ID = 'new-excerpt'
-const buttonId = (id: number, action: 'edit' | 'delete') => `narrative-${id}-${action}`
+const editId = (id: number) => `narrative-${id}-edit`
 
 export default function NarrativeContentPage() {
   const [excerpts, setExcerpts] = useState<NarrativeContent[] | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [form, setForm] = useState<Form | null>(null)
+  const [adding, setAdding] = useState(false)
+  // The excerpt whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   // The sections checked in the open form.
   const [chosen, setChosen] = useState<number[]>([])
-  const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
@@ -64,23 +62,20 @@ export default function NarrativeContentPage() {
     void load()
   }, [load])
 
-  function open(next: Form, sectionIds: number[]) {
-    setForm(next)
-    setChosen(sectionIds)
+  function openItem(excerpt: NarrativeContent) {
+    setAdding(false)
+    setEditing(excerpt.content_id)
+    setChosen(excerpt.sections.map((section) => section.id))
+    setDeleteError(null)
     setNotice(null)
-    setDeleting(null)
-  }
-
-  function close(returnTo: string) {
-    setForm(null)
-    focusLater(returnTo)
   }
 
   async function saved(excerpt: NarrativeContent, message: string) {
-    setForm(null)
-    setNotice(message)
+    setAdding(false)
+    setEditing(null)
     await load()
-    focusLater(buttonId(excerpt.content_id, 'edit'))
+    setNotice(message)
+    focusLater(editId(excerpt.content_id))
   }
 
   async function create({ content }: ExcerptFields) {
@@ -98,14 +93,24 @@ export default function NarrativeContentPage() {
     )
   }
 
+  async function addVersion(original: NarrativeContent, { content }: ExcerptFields) {
+    const excerpt = await narrativeApi.addVersion(original.content_id, content)
+    await saved(
+      excerpt,
+      excerpt.content_id === original.content_id
+        ? 'Nothing changed, so no new version was added.'
+        : 'Added a new version, listed right after the original. Resumes and cover letters keep the original until you pick the new one.',
+    )
+  }
+
   async function confirmDelete(excerpt: NarrativeContent) {
     setDeleteError(null)
     try {
       await narrativeApi.delete(excerpt.content_id)
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${shortBullet(excerpt.content)}".`)
       await load()
+      setNotice(`Deleted "${shortBullet(excerpt.content)}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -117,80 +122,63 @@ export default function NarrativeContentPage() {
   )
 
   function card(excerpt: NarrativeContent) {
-    const label = `"${shortBullet(excerpt.content)}"`
-    if (form?.kind === 'edit' && form.id === excerpt.content_id) {
-      return (
-        <FieldsForm
-          key={excerpt.content_id}
-          label={`Edit ${label}`}
-          fields={FIELDS}
-          initial={{ content: excerpt.content }}
-          note={anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined}
-          onSave={(fields) => update(excerpt, fields)}
-          onCancel={() => close(buttonId(excerpt.content_id, 'edit'))}
-        >
-          {sectionPicker}
-        </FieldsForm>
-      )
-    }
     return (
       <LibraryCard
         key={excerpt.content_id}
         title={excerpt.content}
         titleClassName="bullet-text"
-        actions={
-          deleting !== excerpt.content_id && (
-            <div className="actions">
-              <button
-                type="button"
-                id={buttonId(excerpt.content_id, 'edit')}
-                aria-label={`Edit ${label}`}
-                onClick={() =>
-                  open(
-                    { kind: 'edit', id: excerpt.content_id },
-                    excerpt.sections.map((section) => section.id),
-                  )
-                }
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                id={buttonId(excerpt.content_id, 'delete')}
-                aria-label={`Delete ${label}`}
-                onClick={() => {
-                  setDeleting(excerpt.content_id)
-                  setDeleteError(null)
-                  setForm(null)
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )
-        }
-        shown={
-          deleting === excerpt.content_id && (
-            <ConfirmDelete
-              what={label}
-              uses={excerpt.used_by}
-              effect="It's removed from them, and from every section."
-              error={deleteError}
-              onConfirm={() => void confirmDelete(excerpt)}
-              onCancel={() => {
-                setDeleting(null)
-                focusLater(buttonId(excerpt.content_id, 'delete'))
-              }}
-            />
-          )
-        }
-      >
-        <NameList title="Sections" names={excerpt.sections.map((section) => section.title)} />
-        <UsedBy uses={excerpt.used_by} />
-      </LibraryCard>
+        editId={editId(excerpt.content_id)}
+        editLabel={`Edit "${shortBullet(excerpt.content)}"`}
+        onEdit={() => openItem(excerpt)}
+      />
     )
   }
 
+  function itemDialog(excerpt: NarrativeContent) {
+    const label = `"${shortBullet(excerpt.content)}"`
+    return (
+      <ItemDialog
+        title={shortBullet(excerpt.content)}
+        onClose={() => setEditing(null)}
+        form={
+          <FieldsForm
+            label={`Edit ${label}`}
+            fields={FIELDS}
+            initial={{ content: excerpt.content }}
+            note={anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined}
+            onSave={(fields) => update(excerpt, fields)}
+            onCancel={() => setEditing(null)}
+          >
+            {sectionPicker}
+          </FieldsForm>
+        }
+        newVersion={(back) => (
+          <FieldsForm
+            label={`New version of ${label}`}
+            fields={FIELDS}
+            initial={{ content: excerpt.content }}
+            submitLabel="Add version"
+            onSave={(fields) => addVersion(excerpt, fields)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={label}
+            uses={excerpt.used_by}
+            effect="It's removed from them, and from every section."
+            error={deleteError}
+            onConfirm={() => void confirmDelete(excerpt)}
+            onCancel={back}
+          />
+        )}
+      >
+        <UsedBy uses={excerpt.used_by} />
+      </ItemDialog>
+    )
+  }
+
+  const editingExcerpt = excerpts?.find((excerpt) => excerpt.content_id === editing)
   const unlisted = excerpts?.filter((excerpt) => excerpt.sections.length === 0) ?? []
   const listed = excerpts?.filter((excerpt) => excerpt.sections.length > 0) ?? []
 
@@ -221,20 +209,31 @@ export default function NarrativeContentPage() {
       )}
       {!excerpts && !loadError && <p>Loading…</p>}
 
-      {form?.kind === 'new' ? (
+      {adding ? (
         <FieldsForm
           label="New excerpt"
           fields={FIELDS}
           initial={{ content: '' }}
           submitLabel="Add excerpt"
           onSave={create}
-          onCancel={() => close(NEW_EXCERPT_ID)}
+          onCancel={() => {
+            setAdding(false)
+            focusLater(NEW_EXCERPT_ID)
+          }}
         >
           {sectionPicker}
         </FieldsForm>
       ) : (
         excerpts && (
-          <button type="button" id={NEW_EXCERPT_ID} onClick={() => open({ kind: 'new' }, [])}>
+          <button
+            type="button"
+            id={NEW_EXCERPT_ID}
+            onClick={() => {
+              setAdding(true)
+              setChosen([])
+              setNotice(null)
+            }}
+          >
             New excerpt
           </button>
         )
@@ -250,6 +249,7 @@ export default function NarrativeContentPage() {
       {excerpts && <h3>Listed narrative content</h3>}
       {excerpts && listed.length === 0 && <p>No narrative content yet.</p>}
       {listed.map(card)}
+      {editingExcerpt && itemDialog(editingExcerpt)}
     </section>
   )
 }

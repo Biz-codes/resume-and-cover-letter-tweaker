@@ -1,10 +1,12 @@
-// Library page for headers: list, add, edit, and delete, with the version rules from
-// "Headers" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md.
+// Library page for headers: list and add them, and open each one's dialog (ItemDialog) to edit it,
+// add a version of it, or delete it, with the version rules from "Headers" and "Sent versions are
+// locked" in docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { headersApi, type Header, type HeaderFields } from '../shared/api/headers'
 import { anyLocked } from '../shared/api/usage'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import UsedBy from './UsedBy'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -34,42 +36,42 @@ const EMPTY: HeaderFields = {
   portfolio_url: null,
 }
 
-type Editing = { headerId: number | null; fields: HeaderFields }
-
-// Ids of the buttons that open a form, where focus returns when it closes.
+// Ids of the buttons that open a form or dialog, where focus returns when it closes.
 const NEW_HEADER_ID = 'new-header'
-const buttonId = (headerId: number, action: 'edit' | 'delete') => `header-${headerId}-${action}`
+const editId = (headerId: number) => `header-${headerId}-edit`
 
 // Names a header in its buttons' labels; several headers can share a name.
 const headerLabel = (header: Header) => (header.headline ? `${header.full_name}, ${header.headline}` : header.full_name)
 
 function fieldsOf(header: Header): HeaderFields {
-  const { header_id: _id, used_by: _usedBy, ...fields } = header
+  const { header_id: _id, created_at: _added, used_by: _usedBy, ...fields } = header
   return fields
 }
 
+// The header's fields, keeping the input on errors and highlighting the field the error names.
+// It opens in place of a button or the item's form, so focus moves to its first field.
 function HeaderForm({
-  editing,
-  locked,
-  error,
-  saving,
-  onChange,
+  label,
+  initial,
+  locked = false,
+  submitLabel = 'Save',
   onSave,
   onCancel,
 }: {
-  editing: Editing
-  locked: boolean
-  error: ApiError | null
-  saving: boolean
-  onChange: (fields: HeaderFields) => void
-  onSave: () => void
+  label: string
+  initial: HeaderFields
+  locked?: boolean
+  submitLabel?: string
+  onSave: (fields: HeaderFields) => Promise<void>
   onCancel: () => void
 }) {
+  const [fields, setFields] = useState(initial)
+  const [error, setError] = useState<ApiError | null>(null)
+  const [saving, setSaving] = useState(false)
   const errorId = useId()
   const noteId = useId()
   const formRef = useRef<HTMLFormElement>(null)
 
-  // The form opens in place of a button or card, so focus moves to its first field.
   useEffect(() => formRef.current?.querySelector('input')?.focus(), [])
 
   // Focus lands on the first field, past the note, so the note describes that field.
@@ -81,35 +83,39 @@ function HeaderForm({
     return ids.length ? ids.join(' ') : undefined
   }
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!saving) onSave()
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(fields)
+    } catch (caught) {
+      setError(toApiError(caught))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <form
-      className="card"
-      ref={formRef}
-      onSubmit={submit}
-      aria-label={editing.headerId ? 'Edit header' : 'New header'}
-    >
+    <form className="card" ref={formRef} onSubmit={submit} aria-label={label}>
       {locked && (
         <p className="note" id={noteId}>
           A sent version uses this header, so saving adds a new header. Everything using this one keeps it.
         </p>
       )}
-      {FIELDS.map(({ name, label, type, autoComplete }) => (
+      {FIELDS.map(({ name, label: fieldLabel, type, autoComplete }) => (
         <label key={name}>
-          {label}
+          {fieldLabel}
           <input
             name={name}
             type={type ?? 'text'}
             autoComplete={autoComplete}
-            value={editing.fields[name] ?? ''}
+            value={fields[name] ?? ''}
             aria-required={name === 'full_name' || undefined}
             aria-invalid={error?.field === name}
             aria-describedby={describedBy(name)}
-            onChange={(event) => onChange({ ...editing.fields, [name]: event.target.value })}
+            onChange={(event) => setFields({ ...fields, [name]: event.target.value })}
           />
         </label>
       ))}
@@ -121,7 +127,7 @@ function HeaderForm({
       <div className="actions">
         {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
         <button type="submit" aria-disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : submitLabel}
         </button>
         <button type="button" onClick={onCancel}>
           Cancel
@@ -134,10 +140,9 @@ function HeaderForm({
 export default function HeadersPage() {
   const [headers, setHeaders] = useState<Header[] | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [editing, setEditing] = useState<Editing | null>(null)
-  const [formError, setFormError] = useState<ApiError | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState<Header | null>(null)
+  const [adding, setAdding] = useState(false)
+  // The header whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
@@ -159,49 +164,49 @@ export default function HeadersPage() {
     void load()
   }, [load])
 
-  function startEditing(next: Editing) {
-    setEditing(next)
-    setFormError(null)
-    setNotice(null)
-    setDeleting(null)
+  async function saved(header: Header, message: string) {
+    setAdding(false)
+    setEditing(null)
+    await load()
+    setNotice(message)
+    focusLater(editId(header.header_id))
   }
 
-  async function save() {
-    if (!editing) return
-    setSaving(true)
-    setFormError(null)
+  async function create(fields: HeaderFields) {
     const known = new Set(headers?.map((header) => header.header_id))
-    try {
-      const saved =
-        editing.headerId === null
-          ? await headersApi.create(editing.fields)
-          : await headersApi.update(editing.headerId, editing.fields)
-      if (editing.headerId === null && known.has(saved.header_id)) {
-        setNotice('An identical header already exists, so no new one was added.')
-      } else if (editing.headerId !== null && saved.header_id !== editing.headerId) {
-        setNotice('Saved as a new header. Everything that used the original still uses it.')
-      } else {
-        setNotice('Saved.')
-      }
-      setEditing(null)
-      await load()
-      focusLater(buttonId(saved.header_id, 'edit'))
-    } catch (error) {
-      setFormError(toApiError(error))
-    } finally {
-      setSaving(false)
-    }
+    const header = await headersApi.create(fields)
+    await saved(header, known.has(header.header_id) ? 'An identical header already exists, so no new one was added.' : 'Saved.')
   }
 
-  async function confirmDelete() {
-    if (!deleting) return
+  async function update(original: Header, fields: HeaderFields) {
+    const header = await headersApi.update(original.header_id, fields)
+    await saved(
+      header,
+      header.header_id === original.header_id
+        ? 'Saved.'
+        : 'Saved as a new header. Everything that used the original still uses it.',
+    )
+  }
+
+  async function addVersion(original: Header, fields: HeaderFields) {
+    const known = new Set(headers?.map((header) => header.header_id))
+    const header = await headersApi.addVersion(original.header_id, fields)
+    await saved(
+      header,
+      known.has(header.header_id)
+        ? 'A header with those values already exists, so no new one was added.'
+        : 'Added a new header. Everything keeps the header it uses until you pick the new one.',
+    )
+  }
+
+  async function confirmDelete(header: Header) {
     setDeleteError(null)
     try {
-      await headersApi.delete(deleting.header_id)
-      setDeleting(null)
+      await headersApi.delete(header.header_id)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice('Header deleted.')
       await load()
+      setNotice('Header deleted.')
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -209,12 +214,48 @@ export default function HeadersPage() {
 
   // Names that tell versions apart (labels.ts), for the cards and their buttons.
   const labelOf = distinctLabels(headers ?? [], headerLabel, (item) => item.created_at)
-  const editedHeader = headers?.find((header) => header.header_id === editing?.headerId)
 
-  function cancelEditing() {
-    focusLater(editing?.headerId ? buttonId(editing.headerId, 'edit') : NEW_HEADER_ID)
-    setEditing(null)
+  function itemDialog(header: Header) {
+    const label = labelOf(header)
+    return (
+      <ItemDialog
+        title={label}
+        onClose={() => setEditing(null)}
+        form={
+          <HeaderForm
+            label="Edit header"
+            initial={fieldsOf(header)}
+            locked={anyLocked(header.used_by)}
+            onSave={(fields) => update(header, fields)}
+            onCancel={() => setEditing(null)}
+          />
+        }
+        newVersion={(back) => (
+          <HeaderForm
+            label="New version of the header"
+            initial={fieldsOf(header)}
+            submitLabel="Add version"
+            onSave={(fields) => addVersion(header, fields)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={`"${label}"`}
+            uses={header.used_by}
+            effect="They keep going with no header until you pick another."
+            error={deleteError}
+            onConfirm={() => void confirmDelete(header)}
+            onCancel={back}
+          />
+        )}
+      >
+        <UsedBy uses={header.used_by} />
+      </ItemDialog>
+    )
   }
+
+  const editingHeader = headers?.find((header) => header.header_id === editing)
 
   return (
     <section>
@@ -225,7 +266,6 @@ export default function HeadersPage() {
         The name, headline, and contact details at the top of a resume or cover letter.
       </p>
       <p role="status">{notice}</p>
-
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>
@@ -236,87 +276,46 @@ export default function HeadersPage() {
       )}
       {!headers && !loadError && <p>Loading…</p>}
 
-      {editing?.headerId === null ? (
+      {adding ? (
         <HeaderForm
-          editing={editing}
-          locked={false}
-          error={formError}
-          saving={saving}
-          onChange={(fields) => setEditing({ ...editing, fields })}
-          onSave={() => void save()}
-          onCancel={cancelEditing}
+          label="New header"
+          initial={EMPTY}
+          onSave={create}
+          onCancel={() => {
+            setAdding(false)
+            focusLater(NEW_HEADER_ID)
+          }}
         />
       ) : (
         headers && (
-          <button type="button" id={NEW_HEADER_ID} onClick={() => startEditing({ headerId: null, fields: EMPTY })}>
+          <button
+            type="button"
+            id={NEW_HEADER_ID}
+            onClick={() => {
+              setAdding(true)
+              setNotice(null)
+            }}
+          >
             New header
           </button>
         )
       )}
 
       {headers?.length === 0 && <p>No headers yet.</p>}
-      {headers?.map((header) =>
-        editing?.headerId === header.header_id ? (
-          <HeaderForm
-            key={header.header_id}
-            editing={editing}
-            locked={anyLocked(editedHeader?.used_by ?? [])}
-            error={formError}
-            saving={saving}
-            onChange={(fields) => setEditing({ ...editing, fields })}
-            onSave={() => void save()}
-            onCancel={cancelEditing}
-          />
-        ) : (
-          <LibraryCard
-            key={header.header_id}
-            title={labelOf(header)}
-            heading={3}
-            actions={
-              deleting?.header_id !== header.header_id && (
-                <div className="actions">
-                  <button
-                    type="button"
-                    id={buttonId(header.header_id, 'edit')}
-                    aria-label={`Edit "${labelOf(header)}"`}
-                    onClick={() => startEditing({ headerId: header.header_id, fields: fieldsOf(header) })}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    id={buttonId(header.header_id, 'delete')}
-                    aria-label={`Delete "${labelOf(header)}"`}
-                    onClick={() => {
-                      setDeleting(header)
-                      setDeleteError(null)
-                      setEditing(null)
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )
-            }
-            shown={
-              deleting?.header_id === header.header_id && (
-                <ConfirmDelete
-                  what={`"${labelOf(header)}"`}
-                  uses={header.used_by}
-                  effect="They keep going with no header until you pick another."
-                  error={deleteError}
-                  onConfirm={() => void confirmDelete()}
-                  onCancel={() => {
-                    setDeleting(null)
-                    focusLater(buttonId(header.header_id, 'delete'))
-                  }}
-                />
-              )
-            }
-          >
-          <p className="muted">
-            {[header.phone, header.email, header.location].filter(Boolean).join(' | ')}
-          </p>
+      {headers?.map((header) => (
+        <LibraryCard
+          key={header.header_id}
+          title={labelOf(header)}
+          heading={3}
+          editId={editId(header.header_id)}
+          editLabel={`Edit "${labelOf(header)}"`}
+          onEdit={() => {
+            setEditing(header.header_id)
+            setDeleteError(null)
+            setNotice(null)
+          }}
+        >
+          <p className="muted">{[header.phone, header.email, header.location].filter(Boolean).join(' | ')}</p>
           {[header.linkedin_url, header.github_url, header.portfolio_url]
             .filter(Boolean)
             .map((url) => (
@@ -324,10 +323,9 @@ export default function HeadersPage() {
                 {url}
               </p>
             ))}
-          <UsedBy uses={header.used_by} />
-          </LibraryCard>
-        ),
-      )}
+        </LibraryCard>
+      ))}
+      {editingHeader && itemDialog(editingHeader)}
     </section>
   )
 }

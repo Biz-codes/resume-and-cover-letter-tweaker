@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { expectNoA11yViolations } from '../../../test/axe'
@@ -34,6 +34,8 @@ describe('Dialog', () => {
     expect(dialog).toHaveAttribute('open')
     expect(dialog).toContainElement(screen.getByText('Used by (2)'))
     expect(screen.getByRole('heading', { level: 2, name: 'Edit "Engineer, Acme"' })).toHaveFocus()
+    // Its own notice area is there from the start, empty, so a later notice is announced.
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement()
     await expectNoA11yViolations()
   })
 

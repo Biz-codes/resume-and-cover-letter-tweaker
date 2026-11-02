@@ -30,5 +30,6 @@ export const educationApi = {
     api.post<Education>('/education', { ...fields, section_id: sectionId }),
   // When a sent version uses the entry, the change is saved as a new entry with a new id.
   update: (id: number, fields: EducationFields) => api.put<Education>(`/education/${id}`, fields),
+  addVersion: (id: number, fields: EducationFields) => api.post<Education>(`/education/${id}/versions`, fields),
   delete: (id: number) => api.delete(`/education/${id}`),
 }

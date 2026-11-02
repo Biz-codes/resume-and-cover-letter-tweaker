@@ -381,7 +381,7 @@ export default function OrderedList<K extends ListKey = number>({
                           void save(
                             items.filter((other) => other.id !== item.id).map((other) => other.id),
                             groupRef.current,
-                          )
+                          ).then((saved) => saved && setAnnouncement(`Removed ${labelOf(item)} from ${label}.`))
                         }
                       >
                         Remove
@@ -450,7 +450,9 @@ export default function OrderedList<K extends ListKey = number>({
             onClick={() => {
               const chosen = available.find((choice) => String(choice.id) === adding)
               if (!chosen) return
-              void save([...items.map((item) => item.id), chosen.id], pickerRef.current)
+              void save([...items.map((item) => item.id), chosen.id], pickerRef.current).then(
+                (saved) => saved && setAnnouncement(`Added ${labelOf(chosen)} to ${label}.`),
+              )
               setAdding('')
             }}
           >

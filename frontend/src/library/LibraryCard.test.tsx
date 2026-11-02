@@ -1,42 +1,30 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
 import LibraryCard from './LibraryCard'
 
 describe('LibraryCard', () => {
-  it('starts closed, with its buttons and what they opened showing either way', async () => {
+  it('shows the title, a summary, and an Edit button that names the item', async () => {
+    const onEdit = vi.fn()
     render(
-      <LibraryCard title="Engineer, Acme" actions={<button type="button">Edit</button>} shown={<p>Delete it?</p>}>
-        <p>Used by (2)</p>
+      <LibraryCard title="Engineer, Acme" editId="role-4-edit" editLabel='Edit "Engineer, Acme"' onEdit={onEdit}>
+        <p>Remote | 2020 – 2022</p>
       </LibraryCard>,
     )
-    const toggle = screen.getByRole('button', { name: 'Engineer, Acme' })
-    expect(screen.getByRole('heading', { level: 4, name: 'Engineer, Acme' })).toContainElement(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
-    expect(screen.getByText('Delete it?')).toBeInTheDocument()
-    expect(screen.queryByText('Used by (2)')).not.toBeInTheDocument()
-    await expectNoA11yViolations()
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).toContainElement(screen.getByText('Used by (2)'))
+    expect(screen.getByRole('heading', { level: 4, name: 'Engineer, Acme' })).toBeInTheDocument()
+    expect(screen.getByText('Remote | 2020 – 2022')).toBeInTheDocument()
+    const edit = screen.getByRole('button', { name: 'Edit "Engineer, Acme"' })
+    expect(edit).toHaveAttribute('id', 'role-4-edit')
+    fireEvent.click(edit)
+    expect(onEdit).toHaveBeenCalled()
     await expectNoA11yViolations()
   })
 
-  it('can sit under the page heading, and lets a form take the title’s place', async () => {
-    const { rerender } = render(
-      <LibraryCard title="Sincerely" heading={3}>
-        <p>Used by (0)</p>
-      </LibraryCard>,
+  it('can sit under the page heading, with tags read in its heading', async () => {
+    render(
+      <LibraryCard title="Skills" heading={3} tags={<span className="tag">built in</span>} editId="s" editLabel='Edit "Skills"' onEdit={() => {}} />,
     )
-    expect(screen.getByRole('heading', { level: 3, name: 'Sincerely' })).toBeInTheDocument()
-    rerender(
-      <LibraryCard title="Sincerely" heading={3} replacesTitle={<label>Sign-off<input /></label>}>
-        <p>Used by (0)</p>
-      </LibraryCard>,
-    )
-    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Sign-off')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: /^Skills/ })).toContainElement(screen.getByText('built in'))
     await expectNoA11yViolations()
   })
 })

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { NarrativeContent } from '../shared/api/narrativeContent'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import NarrativeContentPage from './NarrativeContentPage'
 
@@ -51,17 +51,17 @@ function stub(extra: Record<string, Reply[]> = {}, excerpts = [INTRO, LOOSE]) {
 }
 
 describe('NarrativeContentPage', () => {
-  it('shows the sections that list each excerpt, unlisted excerpts first', async () => {
+  it('shows the sections that list each excerpt in its dialog, unlisted excerpts first', async () => {
     stub()
     render(<NarrativeContentPage />)
     expect(document.title).toBe('Narrative content – Resume Tweaker')
     expect(screen.getByText(/anything from one sentence to a full paragraph, grouped however you choose/)).toBeInTheDocument()
     expect(screen.getByText(/Write new excerpts here OR on the Sections page/)).toBeInTheDocument()
-    const card = await openCard(INTRO.content)
-    expect(within(card).getByText('Sections (2)')).toBeInTheDocument()
-    expect(within(card).getByText('Intro paragraph')).toBeInTheDocument()
-    const unlisted = screen.getByRole('heading', { name: 'Not listed anywhere' })
+    const unlisted = await screen.findByRole('heading', { name: 'Not listed anywhere' })
     expect(unlisted.parentElement).toHaveTextContent('Thank you for reading.')
+    const dialog = await openItem(INTRO.content)
+    expect(within(dialog).getByRole('checkbox', { name: 'Intro paragraph' })).toBeChecked()
+    expect(within(dialog).getByText(/Acme letter/)).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
@@ -71,7 +71,6 @@ describe('NarrativeContentPage', () => {
     render(<NarrativeContentPage />)
     fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
     const field = screen.getByLabelText('Narrative content text (required)')
-    expect(field).toHaveFocus()
     expect(field).toHaveAccessibleDescription(/A sent version uses this excerpt, so saving adds a new one/)
     // It opens with the sections that list it checked.
     expect(screen.getByRole('checkbox', { name: 'Summary' })).toBeChecked()
@@ -141,18 +140,36 @@ describe('NarrativeContentPage', () => {
     )
   })
 
-  it('returns focus to Edit when editing is cancelled', async () => {
+  it('closes the dialog and returns focus to Edit when editing is cancelled', async () => {
     stub()
     render(<NarrativeContentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
-    fireEvent.click(screen.getByText('Cancel'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: `Edit ${LABEL}` })).toHaveFocus())
+    const edit = await screen.findByRole('button', { name: `Edit ${LABEL}` })
+    edit.focus()
+    fireEvent.click(edit)
+    fireEvent.click(within(screen.getByRole('dialog')).getByText('Cancel'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(edit).toHaveFocus()
+  })
+
+  it('adds a new version of an excerpt', async () => {
+    const version = { ...INTRO, content_id: 13, content: 'I build web tools.', used_by: [] }
+    const fetchMock = stub({ 'POST /api/narrative-content/10/versions': [{ status: 201, body: version }] })
+    render(<NarrativeContentPage />)
+    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: 'New version' }))
+    const form = screen.getByRole('form', { name: `New version of ${LABEL}` })
+    fireEvent.change(within(form).getByLabelText('Narrative content text (required)'), {
+      target: { value: 'I build web tools.' },
+    })
+    await expectNoA11yViolations()
+    fireEvent.click(within(form).getByText('Add version'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Added a new version')
+    expect(sentBody(fetchMock, 'POST /api/narrative-content/10/versions')).toEqual({ content: 'I build web tools.' })
   })
 
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/narrative-content/10': [{ status: 204 }] })
     render(<NarrativeContentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Delete ${LABEL}` }))
+    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('Used by: Acme letter')

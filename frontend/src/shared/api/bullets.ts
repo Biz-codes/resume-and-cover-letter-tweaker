@@ -25,5 +25,6 @@ export const bulletsApi = {
   create: (content: string, parent: BulletParent) => api.post<Bullet>('/bullet-points', { content, ...parent }),
   // When a sent version uses the bullet, the new text is saved as a new bullet with a new id.
   update: (id: number, content: string) => api.put<Bullet>(`/bullet-points/${id}`, { content }),
+  addVersion: (id: number, content: string) => api.post<Bullet>(`/bullet-points/${id}/versions`, { content }),
   delete: (id: number) => api.delete(`/bullet-points/${id}`),
 }

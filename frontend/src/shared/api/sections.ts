@@ -37,5 +37,6 @@ export const sectionsApi = {
     api.put<Section>(`/sections/${id}/bullets`, { bullet_ids: bulletIds }),
   setEducation: (id: number, educationIds: number[]) =>
     api.put<Section>(`/sections/${id}/education`, { education_ids: educationIds }),
+  addVersion: (id: number, title: string) => api.post<Section>(`/sections/${id}/versions`, { title }),
   delete: (id: number) => api.delete(`/sections/${id}`),
 }

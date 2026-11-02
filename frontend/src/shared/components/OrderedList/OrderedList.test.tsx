@@ -139,11 +139,12 @@ describe('OrderedList', () => {
     await vi.waitFor(() => expect(names()).toEqual(['Go', 'Python', 'SQL']))
   })
 
-  it('takes an item out and moves focus to the list', async () => {
+  it('takes an item out, says so, and moves focus to the list', async () => {
     const onChange = renderList()
     fireEvent.click(button('Remove Python'))
     expect(onChange).toHaveBeenLastCalledWith([1, 3])
     await vi.waitFor(() => expect(screen.getByRole('group', { name: 'Back End skills' })).toHaveFocus())
+    expect(announced()).toHaveTextContent('Removed Python from Back End skills.')
   })
 
   it('offers only unlisted items, adds one at the end, and returns focus to the picker', async () => {
@@ -158,6 +159,7 @@ describe('OrderedList', () => {
     fireEvent.click(button('Add'))
     expect(onChange).toHaveBeenLastCalledWith([1, 2, 3, 4])
     await vi.waitFor(() => expect(select).toHaveFocus())
+    expect(announced()).toHaveTextContent('Added Rust to Back End skills.')
   })
 
   it('takes string ids and shows choices under their groups', async () => {
@@ -190,6 +192,8 @@ describe('OrderedList', () => {
     renderList(vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'No other category lists Go.', null, 422))))
     fireEvent.click(button('Remove Go'))
     expect(await screen.findByRole('alert')).toHaveTextContent('No other category lists Go.')
+    // Nothing changed, so nothing is announced as done.
+    expect(announced()).toBeEmptyDOMElement()
     await expectNoA11yViolations()
   })
 

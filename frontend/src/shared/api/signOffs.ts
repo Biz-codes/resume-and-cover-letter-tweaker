@@ -13,5 +13,6 @@ export const signOffsApi = {
   create: (text: string) => api.post<SignOff>('/sign-offs', { text }),
   // When a sent cover letter uses it, the new text is saved as a new sign-off with a new id.
   update: (id: number, text: string) => api.put<SignOff>(`/sign-offs/${id}`, { text }),
+  addVersion: (id: number, text: string) => api.post<SignOff>(`/sign-offs/${id}/versions`, { text }),
   delete: (id: number) => api.delete(`/sign-offs/${id}`),
 }

@@ -20,5 +20,7 @@ export const narrativeApi = {
   // is saved as a new excerpt with a new id, and the sections apply to it.
   update: (id: number, content: string, sectionIds: number[]) =>
     api.put<NarrativeContent>(`/narrative-content/${id}`, { content, section_ids: sectionIds }),
+  addVersion: (id: number, content: string) =>
+    api.post<NarrativeContent>(`/narrative-content/${id}/versions`, { content }),
   delete: (id: number) => api.delete(`/narrative-content/${id}`),
 }

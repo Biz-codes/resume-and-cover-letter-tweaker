@@ -257,7 +257,7 @@ describe('DocumentTree', () => {
 
   it('adds a saved item of any kind to a section', async () => {
     const fetchMock = stub({ 'POST /api/resumes/1/sections/100/items': [{ status: 201, body: saved }] })
-    const { onChange } = renderTree()
+    const { onChange, onNotice } = renderTree()
     await expand('Summary')
     fireEvent.click(screen.getByRole('button', { name: 'More options for Items in Summary (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add content to Summary' }))
@@ -265,6 +265,7 @@ describe('DocumentTree', () => {
     fireEvent.change(screen.getByLabelText('Bullet'), { target: { value: '9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add to Summary' }))
     await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
+    await vi.waitFor(() => expect(onNotice).toHaveBeenCalledWith('Added the bullet to Summary.'))
     // Without skills or bullets, so it comes with its defaults.
     expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/100/items')).toEqual({
       items: [{ kind: 'bullet', item_id: 9 }],

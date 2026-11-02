@@ -5,7 +5,7 @@ import type { Experience } from '../shared/api/experience'
 import { addedOn } from '../shared/api/labels'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
-import { openCard } from '../test/openCard'
+import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ExperiencePage from './ExperiencePage'
 
@@ -58,22 +58,35 @@ function stub(extra: Record<string, Reply[]> = {}, roles = [ENGINEER, GIG]) {
   })
 }
 
-const roleCard = openCard
-
 describe('ExperiencePage', () => {
-  it('shows each role with its bullets, sections, and uses, and unlisted roles first', async () => {
+  it('shows each role as a card, and unlisted roles first', async () => {
     stub()
     render(<ExperiencePage />)
     expect(document.title).toBe('Experience – Resume Tweaker')
-    const engineer = await roleCard('Engineer, Acme')
+    const engineer = await findCard('Engineer, Acme')
     expect(within(engineer).getByText('Remote | 2020 – 2022')).toBeInTheDocument()
-    expect(within(engineer).getByText('Bullets (1)')).toBeInTheDocument()
-    expect(within(engineer).getByText('Shipped the checkout flow')).toBeInTheDocument()
-    expect(within(engineer).getByText('Sections that list it (1)')).toBeInTheDocument()
-    expect(within(engineer).getByText(/Acme resume/)).toBeInTheDocument()
+    expect(within(engineer).queryByText('Shipped the checkout flow')).not.toBeInTheDocument()
     const unlisted = screen.getByRole('heading', { name: 'Not listed under any section' })
-    expect(unlisted.parentElement).toContainElement(await roleCard('Consultant, Self'))
+    expect(unlisted.parentElement).toContainElement(await findCard('Consultant, Self'))
     await expectNoA11yViolations()
+  })
+
+  it("opens a role's dialog with its bullets, sections, and uses, and closes it back to Edit", async () => {
+    stub()
+    render(<ExperiencePage />)
+    const edit = await screen.findByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2022)"' })
+    edit.focus()
+    const dialog = await openItem('Engineer, Acme')
+    expect(dialog).toHaveAccessibleName('Engineer, Acme (2020 – 2022)')
+    expect(within(dialog).getByRole('heading', { level: 2 })).toHaveFocus()
+    expect(within(dialog).getByText('Bullets (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Shipped the checkout flow')).toBeInTheDocument()
+    expect(within(dialog).getByText('Sections that list it (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Acme resume/)).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(edit).toHaveFocus()
   })
 
   it('tells versions apart by when they were added, where everything else they show matches', async () => {
@@ -131,20 +144,38 @@ describe('ExperiencePage', () => {
     const saved = { ...ENGINEER, experience_id: 7, role_title: 'Lead Engineer', used_by: [] }
     const fetchMock = stub({ 'PUT /api/experience/4': [{ status: 200, body: saved }] }, [ENGINEER])
     render(<ExperiencePage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2022)"' }))
-    const title = screen.getByLabelText('Title (required)')
-    expect(title).toHaveFocus()
+    const dialog = await openItem('Engineer, Acme')
+    const title = within(dialog).getByLabelText('Title (required)')
     expect(title).toHaveAccessibleDescription(/so saving adds a new version/)
     await expectNoA11yViolations()
     fireEvent.change(title, { target: { value: 'Lead Engineer' } })
-    fireEvent.click(screen.getByText('Save'))
+    fireEvent.click(within(dialog).getByText('Save'))
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Saved as a new version, "Lead Engineer, Acme (2020 – 2022)". Everything that used "Engineer, Acme (2020 – 2022)" still does',
     )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({
       role_title: 'Lead Engineer',
       apply_to_unsent: false,
     })
+  })
+
+  it('closes the dialog before the notice, so the notice is announced once the page is reachable', async () => {
+    const saved = { ...ENGINEER, dates: '2020 – 2023', used_by: [] }
+    stub({
+      'PUT /api/experience/4': [{ status: 200, body: saved }],
+      'GET /api/experience': [
+        { status: 200, body: [ENGINEER] },
+        { status: 200, body: [saved], delayMs: 50 },
+      ],
+    })
+    render(<ExperiencePage />)
+    const dialog = await openItem('Engineer, Acme')
+    fireEvent.change(within(dialog).getByLabelText(/Dates/), { target: { value: '2020 – 2023' } })
+    fireEvent.click(within(dialog).getByText('Save'))
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved.'))
   })
 
   it('asks whether to apply a change to resumes in progress', async () => {
@@ -153,7 +184,7 @@ describe('ExperiencePage', () => {
     const saved = { ...inUse, experience_id: 7, dates: '2020 – 2023', used_by: [draft] }
     const fetchMock = stub({ 'PUT /api/experience/4': [{ status: 200, body: saved }] }, [inUse])
     render(<ExperiencePage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2022)"' }))
+    await openItem('Engineer, Acme')
     const choice = screen.getByRole('group', { name: /Used by: Draft resume\.$/ })
     expect(within(choice).getByRole('radio', { name: /No, save it as a new version/ })).toBeChecked()
     await expectNoA11yViolations()
@@ -167,7 +198,7 @@ describe('ExperiencePage', () => {
   it("doesn't ask when nothing in progress uses the role", async () => {
     stub({}, [{ ...ENGINEER, used_by: [] }])
     render(<ExperiencePage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2022)"' }))
+    await openItem('Engineer, Acme')
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Title (required)')).not.toHaveAccessibleDescription()
   })
@@ -176,12 +207,14 @@ describe('ExperiencePage', () => {
     const version = { ...ENGINEER, experience_id: 8, role_title: 'Senior Engineer', used_by: [] }
     const fetchMock = stub({ 'POST /api/experience/4/versions': [{ status: 201, body: version }] }, [ENGINEER])
     render(<ExperiencePage />)
-    const button = await screen.findByRole('button', { name: 'New version of "Engineer, Acme (2020 – 2022)"' })
-    fireEvent.click(button)
-    fireEvent.click(screen.getByText('Cancel'))
-    await vi.waitFor(() => expect(button).toHaveFocus())
-    fireEvent.click(button)
+    const dialog = await openItem('Engineer, Acme')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'New version' }))
+    expect(within(dialog).queryByRole('form', { name: 'Edit "Engineer, Acme (2020 – 2022)"' })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByText('Cancel'))
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'New version' })).toHaveFocus())
+    fireEvent.click(within(dialog).getByRole('button', { name: 'New version' }))
     const form = screen.getByRole('form', { name: 'New version of "Engineer, Acme (2020 – 2022)"' })
+    expect(within(form).getByLabelText('Title (required)')).toHaveFocus()
     expect(within(form).getByLabelText('Title (required)')).toHaveValue('Engineer')
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText('Title (required)'), { target: { value: 'Senior Engineer' } })
@@ -196,7 +229,7 @@ describe('ExperiencePage', () => {
       'POST /api/bullet-points': [{ status: 201, body: bullet(TESTED) }],
     })
     render(<ExperiencePage />)
-    const engineer = await roleCard('Engineer, Acme')
+    const engineer = await openItem('Engineer, Acme')
     fireEvent.change(within(engineer).getByLabelText('Add to Engineer, Acme (2020 – 2022) bullets'), {
       target: { value: '11' },
     })
@@ -211,12 +244,14 @@ describe('ExperiencePage', () => {
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Led the team', experience_id: 4 }),
     )
+    await vi.waitFor(() => expect(within(engineer).getByRole('status')).toHaveTextContent('Added the bullet "Led the team".'))
   })
 
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/experience/4': [{ status: 204 }] })
     render(<ExperiencePage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete "Engineer, Acme (2020 – 2022)"' }))
+    const dialog = await openItem('Engineer, Acme')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Engineer, Acme (2020 – 2022)"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('Used by: Acme resume.')
@@ -246,7 +281,7 @@ describe('ExperiencePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Retry'))
-    expect(await roleCard('Engineer, Acme')).toBeInTheDocument()
+    expect(await findCard('Engineer, Acme')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

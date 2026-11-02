@@ -1,5 +1,7 @@
-// Library page for sections: add, rename, delete, and edit which narrative content, skill categories,
-// roles, projects, bullets, and education entries each section lists. Built-in sections can't be renamed or deleted (docs/FRONTEND_CHECKS.md).
+// Library page for sections: add sections, and open each one's dialog (ItemDialog) to rename it,
+// add a version of it, delete it, and edit which narrative content, skill categories, roles,
+// projects, bullets, and education entries it lists. Built-in sections can't be renamed or deleted
+// (docs/FRONTEND_CHECKS.md).
 // Sections are grouped by whether their titles print: resume headings do, cover letter
 // section titles are labels only the user sees (docs/DATABASE.md, section notes).
 import { useCallback, useEffect, useState } from 'react'
@@ -16,6 +18,7 @@ import BulletList from './BulletList'
 import Collapsible from './Collapsible/Collapsible'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import NameForm from '../shared/components/NameForm/NameForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
 import UsedBy from './UsedBy'
@@ -44,6 +47,9 @@ function groupOf(section: Section): Group {
   return section.used_by.some((use) => use.kind === 'cover_letter') ? 'letter' : 'unused'
 }
 
+// The Edit button's id, where focus returns when the dialog closes after a save.
+const editId = (id: number) => `section-${id}-edit`
+
 const LOCKED_NOTE = 'A sent version uses this section, so the new title is saved as a new section. The sent version keeps the old one.'
 
 export default function SectionsPage() {
@@ -55,10 +61,12 @@ export default function SectionsPage() {
   const [narrative, setNarrative] = useState<NarrativeContent[]>([])
   const [education, setEducation] = useState<Education[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [renaming, setRenaming] = useState<number | null>(null)
-  const [deleting, setDeleting] = useState<number | null>(null)
+  // The section whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Said in the dialog, for a change that keeps it open (something new written in it).
+  const [dialogNotice, setDialogNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
   usePageTitle('Sections')
 
@@ -123,28 +131,191 @@ export default function SectionsPage() {
 
   async function rename(section: Section, title: string) {
     const saved = await sectionsApi.rename(section.id, title)
-    setRenaming(null)
-    focusLater(`section-${saved.id}-rename`)
+    setEditing(null)
+    await load()
     setNotice(
       saved.id === section.id
         ? 'Saved.'
         : `Saved as a new section, "${saved.title}". Sent versions keep "${section.title}".`,
     )
+    focusLater(editId(saved.id))
+  }
+
+  async function addVersion(section: Section, title: string) {
+    const version = await sectionsApi.addVersion(section.id, title)
+    setEditing(null)
     await load()
+    setNotice(`Added "${version.title}", with the same lists. Resumes and cover letters keep "${section.title}" until you pick the new one.`)
+    focusLater(editId(version.id))
   }
 
   async function confirmDelete(section: Section) {
     setDeleteError(null)
     try {
       await sectionsApi.delete(section.id)
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${section.title}".`)
       await load()
+      setNotice(`Deleted "${section.title}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
   }
+
+  // A built-in section can't be renamed or deleted, so its dialog has only New version and its lists.
+  function itemDialog(section: Section) {
+    return (
+      <ItemDialog
+        notice={dialogNotice}
+        title={section.title}
+        onClose={() => setEditing(null)}
+        form={
+          !section.built_in && (
+            <NameForm
+              label="Section title"
+              field="title"
+              initial={section.title}
+              lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
+              onSave={(title) => rename(section, title)}
+              onCancel={() => setEditing(null)}
+            />
+          )
+        }
+        newVersion={(back) => (
+          <NameForm
+            label="New version's title"
+            field="title"
+            initial={section.title}
+            submitLabel="Add version"
+            onSave={(title) => addVersion(section, title)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={
+          section.built_in
+            ? undefined
+            : (back) => (
+                <ConfirmDelete
+                  what={`"${section.title}"`}
+                  uses={section.used_by}
+                  effect="It and everything placed in it are removed from them. The library items it lists stay in the library."
+                  error={deleteError}
+                  onConfirm={() => void confirmDelete(section)}
+                  onCancel={back}
+                />
+              )
+        }
+      >
+        <Collapsible title="Narrative content it lists" count={section.narrative_content.length}>
+          <OrderedList
+            label={`${section.title} narrative content`}
+            items={section.narrative_content.map(narrativeItem)}
+            choices={narrativeChoices}
+            emptyText="None."
+            onChange={async (ids) => {
+              await sectionsApi.setNarrativeContent(section.id, ids)
+              await load()
+            }}
+          />
+          <NameForm
+            label={`New narrative content for ${section.title}`}
+            field="content"
+            submitLabel="Add narrative content"
+            multiline
+            onSave={async (content) => {
+              await narrativeApi.create(content, [section.id])
+              await load()
+              setDialogNotice(`Added "${shortBullet(content)}" to the narrative content it lists.`)
+            }}
+          />
+        </Collapsible>
+
+        <Collapsible title="Skill categories it lists" count={section.skill_categories.length}>
+          <OrderedList
+            label={`${section.title} skill categories`}
+            items={section.skill_categories.map((category) => ({
+              id: category.category_id,
+              name: category.category_name,
+            }))}
+            choices={categoryChoices}
+            emptyText="None."
+            onChange={async (ids) => {
+              await sectionsApi.setCategories(section.id, ids)
+              await load()
+            }}
+          />
+        </Collapsible>
+
+        <Collapsible title="Roles it lists" count={section.experience.length}>
+          <OrderedList
+            label={`${section.title} roles`}
+            items={section.experience.map((role) => ({
+              id: role.experience_id,
+              name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
+            }))}
+            choices={roleChoices}
+            emptyText="None."
+            onChange={async (ids) => {
+              await sectionsApi.setExperience(section.id, ids)
+              await load()
+            }}
+          />
+        </Collapsible>
+
+        <Collapsible title="Projects it lists" count={section.projects.length}>
+          <OrderedList
+            label={`${section.title} projects`}
+            items={section.projects.map((project) => ({
+              id: project.project_id,
+              name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
+            }))}
+            choices={projectChoices}
+            emptyText="None."
+            onChange={async (ids) => {
+              await sectionsApi.setProjects(section.id, ids)
+              await load()
+            }}
+          />
+        </Collapsible>
+
+        <BulletList
+          owner={section.title}
+          title="Bullets it lists directly"
+          bullets={section.bullets}
+          allBullets={allBullets}
+          onChange={async (ids) => {
+            await sectionsApi.setBullets(section.id, ids)
+            await load()
+          }}
+          onWrite={async (content) => {
+            await bulletsApi.create(content, { section_id: section.id })
+            await load()
+            setDialogNotice(`Added the bullet "${shortBullet(content)}".`)
+          }}
+        />
+
+        <Collapsible title="Education it lists" count={section.education.length}>
+          <OrderedList
+            label={`${section.title} education`}
+            items={section.education.map((entry) => ({
+              id: entry.education_id,
+              name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
+            }))}
+            choices={educationChoices}
+            emptyText="None."
+            onChange={async (ids) => {
+              await sectionsApi.setEducation(section.id, ids)
+              await load()
+            }}
+          />
+        </Collapsible>
+
+        <UsedBy uses={section.used_by} />
+      </ItemDialog>
+    )
+  }
+
+  const editingSection = sections?.find((section) => section.id === editing)
 
   return (
     <section>
@@ -182,176 +353,26 @@ export default function SectionsPage() {
                   title={section.title}
                   tags={
                     <>
-                    {section.built_in && <span className="tag">built in</span>}
-                    {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
-                      <span className="tag">also a cover letter label</span>
-                    )}
+                      {section.built_in && <span className="tag">built in</span>}
+                      {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
+                        <span className="tag">also a cover letter label</span>
+                      )}
                     </>
                   }
-                  replacesTitle={
-                    renaming === section.id && (
-                      <NameForm
-                        label="Section title"
-                        field="title"
-                        initial={section.title}
-                        lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
-                        onSave={(title) => rename(section, title)}
-                        onCancel={() => {
-                          setRenaming(null)
-                          focusLater(`section-${section.id}-rename`)
-                        }}
-                      />
-                    )
-                  }
-                  actions={
-                    !section.built_in && deleting !== section.id && (
-                    <div className="actions">
-                      <button
-                        type="button"
-                        id={`section-${section.id}-rename`}
-                        aria-label={`Rename "${section.title}"`}
-                        onClick={() => setRenaming(section.id)}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        id={`section-${section.id}-delete`}
-                        aria-label={`Delete "${section.title}"`}
-                        onClick={() => {
-                          setDeleting(section.id)
-                          setDeleteError(null)
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                    )
-                  }
-                  shown={
-                    deleting === section.id && (
-                    <ConfirmDelete
-                      what={`"${section.title}"`}
-                      uses={section.used_by}
-                      effect="It and everything placed in it are removed from them. The library items it lists stay in the library."
-                      error={deleteError}
-                      onConfirm={() => void confirmDelete(section)}
-                      onCancel={() => {
-                        setDeleting(null)
-                        focusLater(`section-${section.id}-delete`)
-                      }}
-                    />
-                    )
-                  }
-                >
-                  <Collapsible title="Narrative content it lists" count={section.narrative_content.length}>
-                    <OrderedList
-                      label={`${section.title} narrative content`}
-                      items={section.narrative_content.map(narrativeItem)}
-                      choices={narrativeChoices}
-                      emptyText="None."
-                      onChange={async (ids) => {
-                        await sectionsApi.setNarrativeContent(section.id, ids)
-                        await load()
-                      }}
-                    />
-                    <NameForm
-                      label={`New narrative content for ${section.title}`}
-                      field="content"
-                      submitLabel="Add narrative content"
-                      multiline
-                      onSave={async (content) => {
-                        await narrativeApi.create(content, [section.id])
-                        await load()
-                      }}
-                    />
-                  </Collapsible>
-
-                  <Collapsible title="Skill categories it lists" count={section.skill_categories.length}>
-                    <OrderedList
-                      label={`${section.title} skill categories`}
-                      items={section.skill_categories.map((category) => ({
-                        id: category.category_id,
-                        name: category.category_name,
-                      }))}
-                      choices={categoryChoices}
-                      emptyText="None."
-                      onChange={async (ids) => {
-                        await sectionsApi.setCategories(section.id, ids)
-                        await load()
-                      }}
-                    />
-                  </Collapsible>
-
-                  <Collapsible title="Roles it lists" count={section.experience.length}>
-                    <OrderedList
-                      label={`${section.title} roles`}
-                      items={section.experience.map((role) => ({
-                        id: role.experience_id,
-                        name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
-                      }))}
-                      choices={roleChoices}
-                      emptyText="None."
-                      onChange={async (ids) => {
-                        await sectionsApi.setExperience(section.id, ids)
-                        await load()
-                      }}
-                    />
-                  </Collapsible>
-
-                  <Collapsible title="Projects it lists" count={section.projects.length}>
-                    <OrderedList
-                      label={`${section.title} projects`}
-                      items={section.projects.map((project) => ({
-                        id: project.project_id,
-                        name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
-                      }))}
-                      choices={projectChoices}
-                      emptyText="None."
-                      onChange={async (ids) => {
-                        await sectionsApi.setProjects(section.id, ids)
-                        await load()
-                      }}
-                    />
-                  </Collapsible>
-
-                  <BulletList
-                    owner={section.title}
-                    title="Bullets it lists directly"
-                    bullets={section.bullets}
-                    allBullets={allBullets}
-                    onChange={async (ids) => {
-                      await sectionsApi.setBullets(section.id, ids)
-                      await load()
-                    }}
-                    onWrite={async (content) => {
-                      await bulletsApi.create(content, { section_id: section.id })
-                      await load()
-                    }}
-                  />
-
-                  <Collapsible title="Education it lists" count={section.education.length}>
-                    <OrderedList
-                      label={`${section.title} education`}
-                      items={section.education.map((entry) => ({
-                        id: entry.education_id,
-                        name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
-                      }))}
-                      choices={educationChoices}
-                      emptyText="None."
-                      onChange={async (ids) => {
-                        await sectionsApi.setEducation(section.id, ids)
-                        await load()
-                      }}
-                    />
-                  </Collapsible>
-
-                  <UsedBy uses={section.used_by} />
-                </LibraryCard>
+                  editId={editId(section.id)}
+                  editLabel={`Edit "${section.title}"`}
+                  onEdit={() => {
+                    setEditing(section.id)
+                    setDialogNotice(null)
+                    setDeleteError(null)
+                    setNotice(null)
+                  }}
+                />
               ))}
             </div>
           )
         })}
+      {editingSection && itemDialog(editingSection)}
     </section>
   )
 }

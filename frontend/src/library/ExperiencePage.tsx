@@ -1,9 +1,9 @@
-// Library page for experience (roles): add, edit, add a version of, and delete roles, and
-// edit each role's ordered bullet list. Editing follows "Changing a role or project" in
+// Library page for experience (roles): add roles, and open each one's dialog (ItemDialog) to edit
+// it, add a version of it, delete it, and edit its ordered bullet list. Editing follows "Changing a role or project" in
 // docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters in
 // progress change only if the user says so; otherwise the change is a new version.
 import { useCallback, useEffect, useState } from 'react'
-import { bulletsApi, type Bullet } from '../shared/api/bullets'
+import { bulletsApi, shortBullet, type Bullet } from '../shared/api/bullets'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { experienceLabel, experienceApi, type Experience, type ExperienceFields } from '../shared/api/experience'
 import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../shared/api/sections'
@@ -12,6 +12,7 @@ import ApplyChoice from './ApplyChoice'
 import BulletList from './BulletList'
 import ConfirmDelete from '../shared/components/ConfirmDelete'
 import FieldsForm, { type Field } from '../shared/components/FieldsForm'
+import ItemDialog from './ItemDialog'
 import LibraryCard from './LibraryCard'
 import NameList from './NameList'
 import UsedBy from './UsedBy'
@@ -35,12 +36,9 @@ const EMPTY: ExperienceFields = {
 
 const SENT_NOTE = 'A sent version uses this role, so saving adds a new version. The sent version keeps this one.'
 
-// Which form is open: a new role, or editing a role or adding a version of it.
-type Form = { kind: 'new' } | { kind: 'edit' | 'version'; id: number }
-
-// Ids of the buttons that open a form, where focus returns when it closes.
+// Ids of the buttons that open a form or dialog, where focus returns when it closes.
 const NEW_ROLE_ID = 'new-role'
-const buttonId = (id: number, action: 'edit' | 'version' | 'delete') => `role-${id}-${action}`
+const editId = (id: number) => `role-${id}-edit`
 
 function fieldsOf(role: Experience): ExperienceFields {
   return {
@@ -56,12 +54,15 @@ export default function ExperiencePage() {
   const [bullets, setBullets] = useState<Bullet[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [form, setForm] = useState<Form | null>(null)
+  const [adding, setAdding] = useState(false)
+  // The role whose dialog is open.
+  const [editing, setEditing] = useState<number | null>(null)
   const [applyToUnsent, setApplyToUnsent] = useState(false)
   const [newSection, setNewSection] = useState(String(BUILT_IN_SECTION_IDS.experience))
-  const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Said in the dialog, for a change that keeps it open (something new written in it).
+  const [dialogNotice, setDialogNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
   usePageTitle('Experience')
 
@@ -82,23 +83,20 @@ export default function ExperiencePage() {
     void load()
   }, [load])
 
-  function open(next: Form) {
-    setForm(next)
+  function openItem(id: number) {
+    setEditing(id)
+    setDialogNotice(null)
     setApplyToUnsent(false)
+    setDeleteError(null)
     setNotice(null)
-    setDeleting(null)
-  }
-
-  function close(returnTo: string) {
-    setForm(null)
-    focusLater(returnTo)
   }
 
   async function saved(role: Experience, message: string) {
-    setForm(null)
-    setNotice(message)
+    setAdding(false)
+    setEditing(null)
     await load()
-    focusLater(buttonId(role.experience_id, 'edit'))
+    setNotice(message)
+    focusLater(editId(role.experience_id))
   }
 
   async function create(fields: ExperienceFields) {
@@ -132,10 +130,10 @@ export default function ExperiencePage() {
     setDeleteError(null)
     try {
       await experienceApi.delete(role.experience_id)
-      setDeleting(null)
+      setEditing(null)
       focusLater(PAGE_HEADING_ID)
-      setNotice(`Deleted "${experienceLabel(role)}".`)
       await load()
+      setNotice(`Deleted "${experienceLabel(role)}".`)
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -152,90 +150,60 @@ export default function ExperiencePage() {
   const titleOf = distinctLabels(roles ?? [], (item) => `${item.role_title}, ${item.organization}`, (item) => item.created_at)
 
   function card(role: Experience) {
-    const label = labelOf(role)
-    if (form?.kind === 'edit' && form.id === role.experience_id) {
-      const inProgress = role.used_by.filter((use) => !use.locked)
-      return (
-        <FieldsForm
-          key={role.experience_id}
-          label={`Edit "${label}"`}
-          fields={FIELDS}
-          initial={fieldsOf(role)}
-          note={anyLocked(role.used_by) ? SENT_NOTE : undefined}
-          onSave={(fields) => update(role, fields, inProgress.length > 0)}
-          onCancel={() => close(buttonId(role.experience_id, 'edit'))}
-        >
-          {inProgress.length > 0 && <ApplyChoice uses={inProgress} apply={applyToUnsent} onChange={setApplyToUnsent} />}
-        </FieldsForm>
-      )
-    }
     return (
       <LibraryCard
         key={role.experience_id}
         title={titleOf(role)}
-        actions={
-          deleting !== role.experience_id && (
-            <div className="actions">
-              <button
-                type="button"
-                id={buttonId(role.experience_id, 'edit')}
-                aria-label={`Edit "${label}"`}
-                onClick={() => open({ kind: 'edit', id: role.experience_id })}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                id={buttonId(role.experience_id, 'version')}
-                aria-label={`New version of "${label}"`}
-                onClick={() => open({ kind: 'version', id: role.experience_id })}
-              >
-                New version
-              </button>
-              <button
-                type="button"
-                id={buttonId(role.experience_id, 'delete')}
-                aria-label={`Delete "${label}"`}
-                onClick={() => {
-                  setDeleting(role.experience_id)
-                  setDeleteError(null)
-                  setForm(null)
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )
-        }
-        shown={
-          <>
-            {deleting === role.experience_id && (
-              <ConfirmDelete
-                what={`"${label}"`}
-                uses={role.used_by}
-                effect="It's removed from them, along with its bullets there. The bullets stay in the library."
-                error={deleteError}
-                onConfirm={() => void confirmDelete(role)}
-                onCancel={() => {
-                  setDeleting(null)
-                  focusLater(buttonId(role.experience_id, 'delete'))
-                }}
-              />
-            )}
-            {form?.kind === 'version' && form.id === role.experience_id && (
-              <FieldsForm
-                label={`New version of "${label}"`}
-                fields={FIELDS}
-                initial={fieldsOf(role)}
-                submitLabel="Add version"
-                onSave={(fields) => addVersion(role, fields)}
-                onCancel={() => close(buttonId(role.experience_id, 'version'))}
-              />
-            )}
-          </>
-        }
+        editId={editId(role.experience_id)}
+        editLabel={`Edit "${labelOf(role)}"`}
+        onEdit={() => openItem(role.experience_id)}
       >
         <p className="muted">{[role.location, role.dates].filter(Boolean).join(' | ')}</p>
+      </LibraryCard>
+    )
+  }
+
+  function itemDialog(role: Experience) {
+    const label = labelOf(role)
+    const inProgress = role.used_by.filter((use) => !use.locked)
+    return (
+      <ItemDialog
+        notice={dialogNotice}
+        title={label}
+        onClose={() => setEditing(null)}
+        form={
+          <FieldsForm
+            label={`Edit "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(role)}
+            note={anyLocked(role.used_by) ? SENT_NOTE : undefined}
+            onSave={(fields) => update(role, fields, inProgress.length > 0)}
+            onCancel={() => setEditing(null)}
+          >
+            {inProgress.length > 0 && <ApplyChoice uses={inProgress} apply={applyToUnsent} onChange={setApplyToUnsent} />}
+          </FieldsForm>
+        }
+        newVersion={(back) => (
+          <FieldsForm
+            label={`New version of "${label}"`}
+            fields={FIELDS}
+            initial={fieldsOf(role)}
+            submitLabel="Add version"
+            onSave={(fields) => addVersion(role, fields)}
+            onCancel={back}
+          />
+        )}
+        confirmDelete={(back) => (
+          <ConfirmDelete
+            what={`"${label}"`}
+            uses={role.used_by}
+            effect="It's removed from them, along with its bullets there. The bullets stay in the library."
+            error={deleteError}
+            onConfirm={() => void confirmDelete(role)}
+            onCancel={back}
+          />
+        )}
+      >
         <BulletList
           owner={label}
           bullets={role.bullets}
@@ -249,14 +217,16 @@ export default function ExperiencePage() {
               experience_id: role.experience_id,
             })
             await load()
+            setDialogNotice(`Added the bullet "${shortBullet(content)}".`)
           }}
         />
         <NameList title="Sections that list it" names={role.sections.map((section) => section.title)} />
         <UsedBy uses={role.used_by} />
-      </LibraryCard>
+      </ItemDialog>
     )
   }
 
+  const editingRole = roles?.find((role) => role.experience_id === editing)
   const listed = roles?.filter((role) => role.sections.length > 0) ?? []
   const unlisted = roles?.filter((role) => role.sections.length === 0) ?? []
 
@@ -280,14 +250,17 @@ export default function ExperiencePage() {
       )}
       {!roles && !loadError && <p>Loading…</p>}
 
-      {form?.kind === 'new' ? (
+      {adding ? (
         <FieldsForm
           label="New role"
           fields={FIELDS}
           initial={EMPTY}
           submitLabel="Add role"
           onSave={create}
-          onCancel={() => close(NEW_ROLE_ID)}
+          onCancel={() => {
+            setAdding(false)
+            focusLater(NEW_ROLE_ID)
+          }}
         >
           <label>
             List it under
@@ -303,7 +276,14 @@ export default function ExperiencePage() {
         </FieldsForm>
       ) : (
         roles && (
-          <button type="button" id={NEW_ROLE_ID} onClick={() => open({ kind: 'new' })}>
+          <button
+            type="button"
+            id={NEW_ROLE_ID}
+            onClick={() => {
+              setAdding(true)
+              setNotice(null)
+            }}
+          >
             New role
           </button>
         )
@@ -319,6 +299,7 @@ export default function ExperiencePage() {
       {roles && <h3>Roles</h3>}
       {roles && listed.length === 0 && <p>No roles yet.</p>}
       {listed.map(card)}
+      {editingRole && itemDialog(editingRole)}
     </section>
   )
 }
