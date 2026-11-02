@@ -64,4 +64,5 @@ Every component and page is tested for accessibility from the start. Every test 
 
 **Content**
 - Each item on a library page is a `LibraryCard` (a heading holding its open/close button, with the item's buttons beside it). Parts of a library card that open and close use `Collapsible` (native `<details>`), which keyboards and screen readers already handle. The levels of a resume's or cover letter's tree use `Disclosure` or `OrderedList`'s `details` (a button with `aria-expanded` and `aria-controls`, whose content renders only while open), and "More options" uses `MoreOptions`, built on `Disclosure`.
+- A modal uses `Dialog` (native `<dialog>` with `showModal`): named by its heading, which takes focus when it opens or shows another item; Close and Escape close it, and focus returns to what opened it. Never open one dialog inside another.
 - Text a screen reader hears out of context still makes sense ("Used by (2)", not "(2)").

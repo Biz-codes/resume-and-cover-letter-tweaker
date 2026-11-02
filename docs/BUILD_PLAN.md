@@ -94,7 +94,7 @@ What to do:
 ## After the reorganize: one dialog to edit each item
 Goal: every item is edited the same way wherever it appears. Lists are changed where they're shown (a role's bullets are reordered, added, and removed on the role), and an item itself only in its own dialog, which every place it appears opens with the same Edit button.
 
-- [ ] **Start after the user approves this plan.** Build it in the steps below, each with its tests, and check each off.
+- [x] **Start after the user approves this plan.** Build it in the steps below, each with its tests, and check each off.
 
 Decided with the user:
 - **The dialog holds the item and where it's used:** its fields with Save, New version, Delete, its own lists (a role's bullets, a category's skills, a project's skills and bullets, a section's lists), the sections that list it, and Used by. Library cards slim down to the title, a short summary, and Edit.
@@ -107,7 +107,7 @@ Decided with the user:
 - **Accessibility:** a native modal `<dialog>` named by its heading, with focus moved to the heading when it opens or shows another item, Escape and Close to close it, focus returned to the button that opened it, and nothing behind it reachable while it's open.
 
 Steps:
-1. [ ] **`Dialog`** in `frontend/src/shared/components/`: the modal, its focus handling, and its tests. The alert dialogs step below reuses it.
+1. [x] **`Dialog`** in `frontend/src/shared/components/`: the modal, its focus handling, and its tests. The alert dialogs step below reuses it.
 2. [ ] **New version for every kind in the library:** a `POST /api/<items>/{id}/versions` like roles and projects have, for the kinds without one, each listed right after the original and listing the same children. Names and titles must be new (`DUPLICATE`).
 3. [ ] **The item dialog,** one shell with each kind's contents, opened from the library cards, which slim down.
 4. [ ] **Names open the dialog** everywhere they're shown, with Back inside it.

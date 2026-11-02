@@ -4,10 +4,11 @@
 #   "What type of commit is this?": feat, fix, refactor, docs, or chore (a conventional commit),
 #     suggesting one from which files are staged (suggest_type), which is quick but less informed
 #     than /commit-message's, which reads the diff (see "Commit messages" in docs/TECH_STACK.md).
-#     Enter takes the suggestion, and s (or Enter with no suggestion) skips both questions,
-#     leaving git's usual message.
+#     A number or the type's name chooses it, Enter takes the suggestion, and s (or Enter with
+#     no suggestion) skips both questions, leaving git's usual message. Anything else asks again.
 #   "What type of commit message do you want to add?": 1 succinct, 2 highlights, 3 verbose, or
 #     4 (the default) write your own, which starts the message with the type (e.g. "feat: ").
+#     A number or the first word of the choice ("highlights") chooses it; anything else asks again.
 # For 1 to 3, Claude writes it from the staged changes with the /commit-message skill
 # (.claude/skills/commit-message/SKILL.md). Either way the editor opens next, so you can review
 # and change it; an empty message cancels the commit, as usual.
@@ -62,18 +63,24 @@ DESCRIPTIONS=(
         [ "${TYPES[$i]}" = "$suggested" ] && mark=" (suggested)"
         echo "  $((i + 1))) ${TYPES[$i]}: ${DESCRIPTIONS[$i]}$mark"
     done
-    if [ -n "$suggested" ]; then
-        printf "Choose 1-5 [Enter for %s, s to skip]: " "$suggested"
-    else
-        printf "Choose 1-5 [Enter to skip]: "
-    fi
 } >/dev/tty
-read -r choice </dev/tty
-case "$choice" in
-    [1-5]) type=${TYPES[$((choice - 1))]} ;;
-    "") [ -n "$suggested" ] && type=$suggested || exit 0 ;;
-    *) exit 0 ;;
-esac
+type=""
+while [ -z "$type" ]; do
+    if [ -n "$suggested" ]; then
+        printf "Choose 1-5 [Enter for %s, s to skip]: " "$suggested" >/dev/tty
+    else
+        printf "Choose 1-5 [Enter to skip]: " >/dev/tty
+    fi
+    read -r choice </dev/tty
+    choice=$(tr '[:upper:]' '[:lower:]' <<<"$choice")
+    case "$choice" in
+        [1-5]) type=${TYPES[$((choice - 1))]} ;;
+        feat | fix | refactor | docs | chore) type=$choice ;;
+        "") [ -n "$suggested" ] && type=$suggested || exit 0 ;;
+        s | skip) exit 0 ;;
+        *) echo "Type a number from 1 to 5, a type's name, or s to skip." >/dev/tty ;;
+    esac
+done
 
 {
     echo
@@ -82,19 +89,24 @@ esac
     echo "  2) Highlights: a subject, plus one line per significant change"
     echo "  3) Verbose: a subject, plus every meaningful change"
     echo "  4) Write my own"
-    printf "Choose 1-4 [4]: "
 } >/dev/tty
-read -r choice </dev/tty
-case "$choice" in
-    1) level=succinct ;;
-    2) level=highlights ;;
-    3) level=verbose ;;
-    *)
-        # Yours to write, starting with the type.
-        { printf '%s: \n' "$type"; cat "$MSG_FILE"; } >"$MSG_FILE.tmp" && mv "$MSG_FILE.tmp" "$MSG_FILE"
-        exit 0
-        ;;
-esac
+level=""
+while [ -z "$level" ]; do
+    printf "Choose 1-4 [4]: " >/dev/tty
+    read -r choice </dev/tty
+    choice=$(tr '[:upper:]' '[:lower:]' <<<"$choice")
+    case "$choice" in
+        1 | succinct) level=succinct ;;
+        2 | highlights) level=highlights ;;
+        3 | verbose) level=verbose ;;
+        "" | 4 | write | "write my own")
+            # Yours to write, starting with the type.
+            { printf '%s: \n' "$type"; cat "$MSG_FILE"; } >"$MSG_FILE.tmp" && mv "$MSG_FILE.tmp" "$MSG_FILE"
+            exit 0
+            ;;
+        *) echo "Type a number from 1 to 4." >/dev/tty ;;
+    esac
+done
 
 echo "Claude is writing a $level $type message from the staged changes..." >/dev/tty
 ROOT="$(git rev-parse --show-toplevel)"

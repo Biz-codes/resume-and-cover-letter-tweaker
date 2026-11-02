@@ -7,6 +7,15 @@ import { expectNoA11yViolations } from './axe'
 document.documentElement.lang = 'en'
 document.title = 'Resume Tweaker'
 
+// jsdom has <dialog> but not showModal or close, so tests open and close it by its open attribute.
+// Escape is tested by firing the dialog's cancel event, which is what a browser fires on Escape.
+HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+  this.setAttribute('open', '')
+}
+HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+  this.removeAttribute('open')
+}
+
 // Every test that renders something gets an axe check of where it ends up, so no test can
 // skip accessibility. Tests still call expectNoA11yViolations for states they pass through
 // on the way (loading, a form open before it's saved). Pending fetches and renders settle

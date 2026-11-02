@@ -1,0 +1,33 @@
+/* Centered over the page, as wide as a page's content at most, scrolling inside when it's long. */
+.dialog {
+  width: min(100% - 32px, 720px);
+  max-height: calc(100% - 32px);
+  padding: 16px 24px 24px;
+  border: 1px solid var(--outline);
+  border-radius: 6px;
+  color: inherit;
+}
+
+.dialog::backdrop {
+  background: var(--backdrop);
+}
+
+/* The heading, with Close beside it. */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.top h2 {
+  margin: 0 0 8px;
+}
+
+/* Small screens (index.css has the breakpoints). */
+@media (max-width: 639px) {
+  .dialog {
+    padding: 12px 12px 16px;
+  }
+}

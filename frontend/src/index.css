@@ -7,6 +7,8 @@
   --border: #d8d5dd;
   --highlight: #ece9f0;
   --outline: #5f5b66;
+  /* What a modal dialog dims the page behind it with (Dialog.module.css). */
+  --backdrop: #1f1d2480;
 }
 
 body {
@@ -143,7 +145,8 @@ button[aria-disabled='true'] {
   cursor: not-allowed;
 }
 
-/* Page headings take focus after a delete; they aren't controls, so no focus ring. */
+/* Page headings take focus after a delete, and a dialog's heading when it opens; they aren't
+   controls, so no focus ring. */
 h2[tabindex='-1']:focus {
   outline: none;
 }
