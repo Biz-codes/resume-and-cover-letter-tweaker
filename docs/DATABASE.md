@@ -133,7 +133,7 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 
 Unique: (job_posting_id)
 
-Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. For a tailored version the app suggests a default `name` (e.g. organization and role title). For a base resume the user names it (e.g. "Tech base", "Teaching base").
+Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. A tailored version is named "[role title] at [organization]" when it's started, with no name to type (see "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)). For a base resume the user names it (e.g. "Tech base", "Teaching base").
 
 Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting uses the posting's header, which is changed only on the posting. A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
