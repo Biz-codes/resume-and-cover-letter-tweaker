@@ -245,6 +245,9 @@ export function PostingPage({ id }: { id: number }) {
             <p className="muted">Resumes and cover letters can start once the posting has a header.</p>
           )}
 
+          {/* Hidden, so the links show without a heading, but screen readers moving by heading
+              don't take them for part of the header above. */}
+          <h3 className="visually-hidden">Resume and cover letter</h3>
           {(['resume', 'cover_letter'] as const).map((kind) => {
             // A posting has one of each, edited in place until it's applied to.
             const version = posting.versions.find((use) => use.kind === kind)

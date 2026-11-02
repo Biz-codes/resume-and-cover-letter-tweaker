@@ -130,6 +130,7 @@ describe('PostingPage', () => {
       'href',
       '/cover-letters/12',
     )
+    expect(screen.getByRole('heading', { level: 3, name: 'Resume and cover letter' })).toHaveClass('visually-hidden')
     expect(screen.getByRole('link', { name: /^Resume for/ })).toHaveTextContent(/^Resume$/)
     expect(screen.getByRole('link', { name: /^Cover letter for/ })).toHaveTextContent(/^Cover letter$/)
     // One of each per posting, worked on in place.
@@ -259,6 +260,24 @@ describe('PostingPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("That item doesn't exist.")
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     await expectNoA11yViolations()
+  })
+
+  it('offers Retry when it fails to load', async () => {
+    stub(POSTING, {
+      'GET /api/job-postings/9': [
+        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
+        { status: 200, body: POSTING },
+      ],
+      'GET /api/headers': [{ status: 200, body: [TEACHER, SAM] }, { status: 200, body: [TEACHER, SAM] }],
+      'GET /api/resumes': [{ status: 200, body: [] }, { status: 200, body: [] }],
+      'GET /api/cover-letters': [{ status: 200, body: [] }, { status: 200, body: [] }],
+    })
+    renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('link', { name: 'Resume for English Teacher at Lincoln High' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('says it is loading', async () => {
