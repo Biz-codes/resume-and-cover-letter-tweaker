@@ -1,0 +1,5 @@
+/* A label above its list in a tree level (a project's skills, then its bullets). */
+.list-label {
+  margin: 8px 0 0;
+  font-weight: 600;
+}

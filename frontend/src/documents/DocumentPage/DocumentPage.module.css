@@ -1,0 +1,45 @@
+/* The links back to where the page was reached from, side by side. */
+.back-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+}
+
+.tone select {
+  display: block;
+  padding: 6px;
+  font: inherit;
+}
+
+/* The tree: nested lists whose levels open and close. */
+.tree {
+  list-style: none;
+  padding: 0;
+}
+
+.tree > li {
+  margin: 8px 0;
+}
+
+.tree > li > :global(.disclosure) > :global(.disclosure-toggle) {
+  font-weight: 600;
+}
+
+/* Each part of the plain-text output, with its Copy button. */
+.output-part {
+  margin: 16px 0;
+}
+
+.output-part h4 {
+  margin: 0;
+}
+
+.output-part pre {
+  margin: 4px 0 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

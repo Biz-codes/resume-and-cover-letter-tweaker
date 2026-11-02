@@ -4,7 +4,8 @@
 // - every .tsx file under src has a sibling .test.tsx (src/test/setup.ts runs axe after each
 //   test in it);
 // - oxlint's jsx-a11y rules pass;
-// - the text colors in index.css meet WCAG AA contrast, which axe can't measure in jsdom.
+// - the text colors in index.css meet WCAG AA contrast, which axe can't measure in jsdom, and
+//   components' CSS modules use only the color variables set there, so none goes unchecked.
 // axe itself runs inside the tests: see src/test/axe.ts.
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -16,7 +17,8 @@ const SRC = new URL('./src/', import.meta.url)
 const NO_TEST_NEEDED = new Set(['main.tsx'])
 
 // [foreground selector, background selector, what it is]. Selectors are written as they
-// appear in index.css (comma lists joined with ", "). Add a pair for every new text color or
+// appear in index.css (comma lists joined with ", "), or name a color variable set on :root
+// ("--highlight"), which components' CSS modules use. Add a pair for every new text color or
 // background.
 const CONTRAST_PAIRS: [string, string, string][] = [
   [':root', ':root', 'body text'],
@@ -25,7 +27,7 @@ const CONTRAST_PAIRS: [string, string, string][] = [
   ["[role='alert']", '.note, .confirm', 'error text in a delete confirm'],
   [':root', '.note, .confirm', 'text in a note or delete confirm'],
   [':root', '.tag', 'tag text'],
-  [':root', '.ordered-list li.moving', 'text of an item being moved'],
+  [':root', '--highlight', 'text of an item being moved (OrderedList.module.css)'],
 ]
 
 function missingTests() {
@@ -77,12 +79,20 @@ function luminance(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
+// A selector's color or background, or a variable on :root, with var(--name) looked up there.
+function colorOf(rules: Map<string, Record<string, string>>, selector: string, property: string) {
+  const root = rules.get(':root') ?? {}
+  const value = selector.startsWith('--') ? root[selector] : rules.get(selector)?.[property]
+  const variable = value?.match(/^var\((--[\w-]+)\)$/)
+  return variable ? root[variable[1]] : value
+}
+
 function contrastProblems() {
   const rules = cssRules()
   const problems: string[] = []
   for (const [foreground, background, what] of CONTRAST_PAIRS) {
-    const fg = rules.get(foreground)?.color
-    const bg = rules.get(background)?.background
+    const fg = colorOf(rules, foreground, 'color')
+    const bg = colorOf(rules, background, 'background')
     if (!fg?.match(/^#[0-9a-f]{3,6}$/i) || !bg?.match(/^#[0-9a-f]{3,6}$/i)) {
       problems.push(`index.css needs a hex color on "${foreground}" and a hex background on "${background}" (${what}).`)
       continue
@@ -94,8 +104,17 @@ function contrastProblems() {
   return problems
 }
 
+// A color written in a CSS module, rather than a variable from index.css, which the contrast
+// check can't see.
+function moduleColors() {
+  return readdirSync(SRC, { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.module.css'))
+    .filter((file) => /#[0-9a-f]{3,8}\b|\b(rgb|hsl)a?\(/i.test(readFileSync(new URL(file, SRC), 'utf8')))
+    .map((file) => `src/${file} sets its own color; use a color variable from index.css instead.`)
+}
+
 export function a11yProblems() {
-  return [...missingTests(), ...lintProblems(), ...contrastProblems()]
+  return [...missingTests(), ...lintProblems(), ...contrastProblems(), ...moduleColors()]
 }
 
 function check() {

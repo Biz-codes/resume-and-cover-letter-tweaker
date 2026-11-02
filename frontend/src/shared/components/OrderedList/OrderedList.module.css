@@ -1,0 +1,63 @@
+/* OrderedList: its rows, the grip handle, the item being moved, and what opens under a row. */
+.ordered-list ol {
+  margin: 4px 0;
+  padding-left: 24px;
+}
+
+.ordered-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The grip handle: dragged with a pointer, or a toggle for picking an item up by keyboard. */
+.handle {
+  cursor: grab;
+  touch-action: none;
+  padding: 0 6px;
+  /* At least 24 by 24 CSS pixels (WCAG 2.5.8). */
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* The item being moved. The outline is 3:1 against the page (WCAG 1.4.11). */
+.ordered-list li.moving {
+  background: var(--highlight);
+  outline: 2px solid var(--outline);
+}
+
+.ordered-list li.moving .handle {
+  cursor: grabbing;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.item-body {
+  flex-basis: 100%;
+  padding-left: 24px;
+}
+
+/* Small screens (index.css has the breakpoints). */
+@media (max-width: 639px) {
+  /* Each row's buttons go on their own line, under the item's name. */
+  .ordered-list li .row-actions {
+    flex-basis: 100%;
+  }
+
+  .ordered-list ol,
+  .item-body {
+    padding-left: 12px;
+  }
+}

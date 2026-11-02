@@ -1,0 +1,11 @@
+/* What a level opens to, indented under its button. */
+.body {
+  padding-left: 24px;
+}
+
+/* Small screens (index.css has the breakpoints). */
+@media (max-width: 639px) {
+  .body {
+    padding-left: 12px;
+  }
+}

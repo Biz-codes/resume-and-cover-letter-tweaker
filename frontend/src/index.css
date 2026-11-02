@@ -3,6 +3,10 @@
   line-height: 1.5;
   color: #1f1d24;
   background: #fff;
+  /* Colors the components' own CSS modules use, kept here so a11yChecks.ts checks them. */
+  --border: #d8d5dd;
+  --highlight: #ece9f0;
+  --outline: #5f5b66;
 }
 
 body {
@@ -53,18 +57,6 @@ fieldset {
     padding: 16px 12px;
   }
 
-  /* Each row's buttons go on their own line, under the item's name. */
-  .ordered-list li .row-actions {
-    flex-basis: 100%;
-    flex-wrap: wrap;
-  }
-
-  .ordered-list ol,
-  .disclosure-body,
-  .ordered-list .item-body {
-    padding-left: 12px;
-  }
-
   .details-list {
     grid-template-columns: 1fr;
   }
@@ -89,13 +81,6 @@ nav {
 
 nav a.active {
   font-weight: 600;
-}
-
-/* A mode's own pages (the library's), under the main nav. */
-.subnav {
-  margin-top: -12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #d8d5dd;
 }
 
 /* Home's and the library's lists of where to go. */
@@ -167,13 +152,6 @@ h2[tabindex='-1']:focus {
   color: #b3261e;
 }
 
-/* The links back to where a page was reached from, side by side. */
-.back-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 24px;
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -226,66 +204,16 @@ h2[tabindex='-1']:focus {
   width: auto;
 }
 
-.inline-form {
-  margin: 8px 0;
-}
-
-.inline-form label,
 .card > label {
   display: block;
   margin-bottom: 8px;
 }
 
-.inline-form input,
-.inline-form textarea,
 .card > label select,
 form.card label select {
   display: block;
   padding: 6px;
   font: inherit;
-}
-
-.inline-form textarea {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.ordered-list ol {
-  margin: 4px 0;
-  padding-left: 24px;
-}
-
-.ordered-list li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-.ordered-list .item-name {
-  flex: 1;
-  min-width: 0;
-}
-
-/* The grip handle: dragged with a pointer, or a toggle for picking an item up by keyboard. */
-.ordered-list .handle {
-  cursor: grab;
-  touch-action: none;
-  padding: 0 6px;
-  /* At least 24 by 24 CSS pixels (WCAG 2.5.8). */
-  min-width: 24px;
-  min-height: 24px;
-}
-
-/* The item being moved. The outline is 3:1 against the page (WCAG 1.4.11). */
-.ordered-list li.moving {
-  background: #ece9f0;
-  outline: 2px solid #5f5b66;
-}
-
-.ordered-list li.moving .handle {
-  cursor: grabbing;
 }
 
 /* Read by screen readers but not shown. */
@@ -296,16 +224,6 @@ form.card label select {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-.row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.rules li {
-  margin: 6px 0;
 }
 
 /* Keeps the line breaks typed into a multiline field. */
@@ -327,15 +245,6 @@ form.card label select {
 
 .section-group > h3 {
   margin-bottom: 0;
-}
-
-.sublist {
-  margin: 12px 0 4px;
-}
-
-.sublist > summary {
-  cursor: pointer;
-  font-weight: 600;
 }
 
 /* A library card's title, with its Edit / New version / Delete buttons beside it. */
@@ -378,36 +287,8 @@ form.card label select {
   margin: 0;
 }
 
-/* Each part of the plain-text output, with its Copy button. */
-.output-part {
-  margin: 16px 0;
-}
-
-.output-part h4 {
-  margin: 0;
-}
-
-.output-part pre {
-  margin: 4px 0 0;
-  padding: 8px;
-  border: 1px solid #d8d5dd;
-  border-radius: 4px;
-  font: inherit;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* A resume's or cover letter's tree: nested lists whose levels open and close (Disclosure, and
-   OrderedList rows with `details`). The marker is decoration; aria-expanded says open or closed. */
-.tree {
-  list-style: none;
-  padding: 0;
-}
-
-.tree > li {
-  margin: 8px 0;
-}
-
+/* The button that opens and closes a level (Disclosure, and OrderedList rows with `details`).
+   The marker is decoration; aria-expanded says open or closed. */
 .disclosure-toggle {
   padding: 2px 4px;
   border: none;
@@ -426,23 +307,6 @@ form.card label select {
   content: '▾ ' / '';
 }
 
-.tree > li > .disclosure > .disclosure-toggle {
-  font-weight: 600;
-}
-
-.disclosure-body,
-.ordered-list .item-body {
-  padding-left: 24px;
-}
-
-.ordered-list li {
-  flex-wrap: wrap;
-}
-
-.ordered-list .item-body {
-  flex-basis: 100%;
-}
-
 /* A form of fields stacked one above the next (a header's values, a letter's sign-off). */
 .stacked-form label {
   display: block;
@@ -451,18 +315,6 @@ form.card label select {
 
 .stacked-form select,
 .stacked-form input {
-  display: block;
-  padding: 6px;
-  font: inherit;
-}
-
-/* A label above its list in a tree level (a project's skills, then its bullets). */
-.list-label {
-  margin: 8px 0 0;
-  font-weight: 600;
-}
-
-.tone select {
   display: block;
   padding: 6px;
   font: inherit;

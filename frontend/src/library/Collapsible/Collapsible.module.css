@@ -1,0 +1,8 @@
+.sublist {
+  margin: 12px 0 4px;
+}
+
+.sublist > summary {
+  cursor: pointer;
+  font-weight: 600;
+}

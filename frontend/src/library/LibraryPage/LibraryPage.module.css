@@ -1,0 +1,6 @@
+/* The library's own pages, under the main nav. */
+.subnav {
+  margin-top: -12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}

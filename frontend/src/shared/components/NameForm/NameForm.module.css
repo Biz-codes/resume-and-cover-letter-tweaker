@@ -1,0 +1,20 @@
+.form {
+  margin: 8px 0;
+}
+
+.form label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.form input,
+.form textarea {
+  display: block;
+  padding: 6px;
+  font: inherit;
+}
+
+.form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
