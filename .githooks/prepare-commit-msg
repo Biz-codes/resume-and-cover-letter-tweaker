@@ -12,6 +12,8 @@
 # For 1 to 3, Claude writes it from the staged changes with the /commit-message skill
 # (.claude/skills/commit-message/SKILL.md). Either way the editor opens next, so you can review
 # and change it; an empty message cancels the commit, as usual.
+# When Claude's answer has no message in it, the hook says so, starts the message with the type,
+# and keeps Claude's output and errors in .git/commit-message.log to see why.
 # Skipped, leaving git's usual message, for `git commit -m` or `-F`, merges, squashes, amends,
 # nothing staged, and when there's no terminal to ask in (such as VS Code's commit box), or no
 # `claude` command.
@@ -110,16 +112,24 @@ done
 
 echo "Claude is writing a $level $type message from the staged changes..." >/dev/tty
 ROOT="$(git rev-parse --show-toplevel)"
+LOG="$(git rev-parse --git-dir)/commit-message.log"
 # Only read-only git commands are allowed, so it can't change anything.
-message=$(cd "$ROOT" && claude -p "/commit-message $type $level --raw" \
-    --allowedTools "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Read" 2>/dev/null \
-    | sed -e '/^```/d' -e '/^Co-Authored-By:/d' \
-    | sed -E -n '/^\*{0,2}(feat|fix|refactor|docs|chore):/,$p' \
-    | sed -E '1s/\*\*//g')  # Only the message: no code block, trailer, or narration above it.
+answer=$(cd "$ROOT" && claude -p "/commit-message $type $level --raw" \
+    --allowedTools "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Read" 2>"$LOG.err")
+status=$?
+# Only the message: no code block, trailer, or narration above it. The subject may come wrapped
+# in backticks or bold, or indented.
+message=$(printf '%s\n' "$answer" \
+    | sed -e '/^[[:space:]]*```/d' -e '/^Co-Authored-By:/d' \
+    | sed -E -n '/^[[:space:]`*]*(feat|fix|refactor|docs|chore):/,$p' \
+    | sed -E '1s/^[[:space:]`*]+//; 1s/[`*]+[[:space:]]*$//')
 if [ -z "$message" ]; then
-    echo "Couldn't write one, so it's yours to write." >/dev/tty
+    { echo "claude exited with $status"; echo "--- output"; printf '%s\n' "$answer"
+      echo "--- errors"; cat "$LOG.err"; } >"$LOG"
+    echo "Couldn't write one, so it's yours to write. Claude's answer is in $LOG." >/dev/tty
     message="$type: "
 fi
+rm -f "$LOG.err"
 
 # The message goes above git's own comments (the list of files, and so on).
 { printf '%s\n' "$message"; cat "$MSG_FILE"; } >"$MSG_FILE.tmp" && mv "$MSG_FILE.tmp" "$MSG_FILE"

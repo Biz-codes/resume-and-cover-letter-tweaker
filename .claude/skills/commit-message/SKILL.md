@@ -40,7 +40,7 @@ Messages follow [Conventional Commits](https://www.conventionalcommits.org/): th
      - **Write my own**: don't write a message. Instead, give the subject's start (e.g. `feat: `) and a short plain list of what changed (areas and files), to help the user write it, and stop.
 
 3. **Write the message:**
-   - Subject: `<type>: <description>`, up to 72 characters in all, no period. The description says what the change does, in the imperative ("add", "fix", not "added"), starting lowercase. When it finishes a BUILD_PLAN step, the description starts with that step: `feat: Phase 4 Step 3, job postings by hand`. No scope in parentheses, and no `!`.
+   - Subject: `<type>: <description>`, up to 72 characters in all, no period. The description says what the change does, in the imperative ("add", "fix", not "added"), starting lowercase. When it finishes a BUILD_PLAN step, the description starts with that step, named from the section it's under: a phase's step as `Phase 4 Step 3` (`feat: Phase 4 Step 3, job postings by hand`), and a step in a section that isn't a phase by a short name for the section and the step's number (`feat: item dialog step 2, new versions for every kind`). Never name a phase the step isn't under. No scope in parentheses, and no `!`.
    - Body (highlights and verbose): a blank line after the subject, then `- ` bullets wrapped at 72 characters, with continuation lines indented two spaces, as in the recent commits.
    - Highlights: only the changes a reader of the log would most need, one line each.
    - Verbose: every meaningful change, in this order: backend, front end, docs, tooling. Name new files and endpoints, rules and error codes, and renames the user will see.
@@ -49,5 +49,5 @@ Messages follow [Conventional Commits](https://www.conventionalcommits.org/): th
    - Never mention or quote anything from `db/seed_personal/`, `.env` files, or other personal data, even if it's in the diff.
 
 4. **Output.**
-   - With `--raw`: the message only.
+   - With `--raw`: the message only. Its first line is the subject, starting with the type; nothing comes before it or after the message (no note on what you found, no code block), since every line printed goes into the commit.
    - Otherwise: the message in a code block, then one line naming anything odd you noticed that the user may not want in this commit (an unrelated file, a debug leftover, or changes that fit a different type better). Say nothing else.
