@@ -13,6 +13,7 @@ import { EDUCATION_FIELDS, educationLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 const EMPTY: EducationFields = { degree: '', institution: '', details: null, graduation: null }
 
@@ -67,7 +68,7 @@ export default function EducationPage() {
         key={entry.education_id}
         title={titleOf(entry)}
         editId={editId('education', entry.education_id)}
-        editLabel={`Edit "${label}"`}
+        editLabel={`View and Edit "${label}"`}
         onEdit={() => dialogs.open({ kind: 'education', id: entry.education_id, title: label })}
       >
         {entry.graduation && <p className="muted">{entry.graduation}</p>}
@@ -75,8 +76,9 @@ export default function EducationPage() {
     )
   }
 
-  const listed = entries?.filter((entry) => entry.sections.length > 0) ?? []
-  const unlisted = entries?.filter((entry) => entry.sections.length === 0) ?? []
+  const sorted = sortByName(entries ?? [], titleOf)
+  const listed = sorted.filter((entry) => entry.sections.length > 0)
+  const unlisted = sorted.filter((entry) => entry.sections.length === 0)
 
   return (
     <section>
@@ -87,6 +89,7 @@ export default function EducationPage() {
         Degrees, certificates, and other schooling. Write the degree with its field of study, and the graduation date
         with any honors, the way you want them printed.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">

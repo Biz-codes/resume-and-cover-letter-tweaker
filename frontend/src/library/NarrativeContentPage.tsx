@@ -16,6 +16,7 @@ import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import { EXCERPT_FIELDS, type ExcerptFields } from './items/itemFields'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 // The New excerpt button, where focus returns when its form closes.
 const NEW_EXCERPT_ID = 'new-excerpt'
@@ -74,7 +75,7 @@ export default function NarrativeContentPage() {
         title={excerpt.content}
         titleClassName="bullet-text"
         editId={editId('narrative', excerpt.content_id)}
-        editLabel={`Edit "${title}"`}
+        editLabel={`View and Edit "${title}"`}
         onEdit={() => {
           setAdding(false)
           dialogs.open({ kind: 'narrative', id: excerpt.content_id, title })
@@ -83,8 +84,9 @@ export default function NarrativeContentPage() {
     )
   }
 
-  const unlisted = excerpts?.filter((excerpt) => excerpt.sections.length === 0) ?? []
-  const listed = excerpts?.filter((excerpt) => excerpt.sections.length > 0) ?? []
+  const sorted = sortByName(excerpts ?? [], (excerpt) => excerpt.content)
+  const unlisted = sorted.filter((excerpt) => excerpt.sections.length === 0)
+  const listed = sorted.filter((excerpt) => excerpt.sections.length > 0)
 
   return (
     <section>
@@ -102,6 +104,7 @@ export default function NarrativeContentPage() {
         be listed under any number of sections. Write new excerpts here OR on the Sections page, under a section where
         you plan to use them.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">

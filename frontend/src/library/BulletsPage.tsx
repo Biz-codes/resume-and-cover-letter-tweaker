@@ -10,6 +10,7 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 const isListed = (bullet: Bullet) => bullet.experience.length + bullet.projects.length + bullet.sections.length > 0
 
@@ -45,14 +46,15 @@ export default function BulletsPage() {
         title={bullet.content}
         titleClassName="bullet-text"
         editId={editId('bullet', bullet.bullet_id)}
-        editLabel={`Edit "${title}"`}
+        editLabel={`View and Edit "${title}"`}
         onEdit={() => dialogs.open({ kind: 'bullet', id: bullet.bullet_id, title })}
       />
     )
   }
 
-  const unlisted = bullets?.filter((bullet) => !isListed(bullet)) ?? []
-  const listed = bullets?.filter(isListed) ?? []
+  const sorted = sortByName(bullets ?? [], (bullet) => bullet.content)
+  const unlisted = sorted.filter((bullet) => !isListed(bullet))
+  const listed = sorted.filter(isListed)
 
   return (
     <section>
@@ -63,6 +65,7 @@ export default function BulletsPage() {
         Each bullet is stored once and can be listed under any number of roles, projects, and sections.
         Write new bullets on the Experience, Projects, or Sections page, where they're listed.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">

@@ -13,9 +13,9 @@ export async function loadedDialog() {
   return dialog
 }
 
-// A library item's dialog (ItemDialogs), opened with its card's Edit button, for tests that
+// A library item's dialog (ItemDialogs), opened with its card's View and Edit button, for tests that
 // check what's inside it.
 export async function openItem(name: string | RegExp) {
-  fireEvent.click(within(await findCard(name)).getByRole('button', { name: /^Edit/ }))
+  fireEvent.click(within(await findCard(name)).getByRole('button', { name: /^View and Edit/ }))
   return loadedDialog()
 }

@@ -12,6 +12,7 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 export default function SkillsPage() {
   const [categories, setCategories] = useState<SkillCategory[] | null>(null)
@@ -50,6 +51,7 @@ export default function SkillsPage() {
         Each category lists the skills the app suggests for it, in this order. A skill can be in more
         than one category, and every skill is in at least one ("Other" if nothing else).
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
@@ -88,13 +90,13 @@ export default function SkillsPage() {
       )}
 
       <h3>Categories</h3>
-      {categories?.map((category) => (
+      {categories && sortByName(categories, (category) => category.category_name).map((category) => (
         <LibraryCard
           key={category.category_id}
           title={category.category_name}
           tags={category.built_in && <span className="tag">built in</span>}
           editId={editId('category', category.category_id)}
-          editLabel={`Edit "${category.category_name}"`}
+          editLabel={`View and Edit "${category.category_name}"`}
           onEdit={() => dialogs.open({ kind: 'category', id: category.category_id, title: category.category_name })}
         >
           <p className="muted">{category.skills.map((skill) => skill.skill_name).join(', ') || 'No skills yet.'}</p>
@@ -103,12 +105,12 @@ export default function SkillsPage() {
 
       {categories && <h3>All skills</h3>}
       {categories && skills.length === 0 && <p>No skills yet.</p>}
-      {skills.map((skill) => (
+      {sortByName(skills, (skill) => skill.skill_name).map((skill) => (
         <LibraryCard
           key={skill.skill_id}
           title={skill.skill_name}
           editId={editId('skill', skill.skill_id)}
-          editLabel={`Edit "${skill.skill_name}"`}
+          editLabel={`View and Edit "${skill.skill_name}"`}
           onEdit={() => dialogs.open({ kind: 'skill', id: skill.skill_id, title: skill.skill_name })}
         />
       ))}

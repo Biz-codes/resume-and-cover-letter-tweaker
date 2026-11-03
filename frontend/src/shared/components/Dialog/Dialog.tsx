@@ -10,6 +10,18 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import styles from './Dialog.module.css'
 
+const FOCUSABLE = 'button, [href], input:not([type="hidden"]), select, textarea, summary, [tabindex]:not([tabindex="-1"])'
+
+// The controls Tab can reach inside `root`, in order: not disabled, not hidden, and not inside a
+// closed <details> (apart from its own summary).
+function focusables(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => {
+    if (element.matches(':disabled') || element.closest('[hidden]')) return false
+    const closed = element.closest('details:not([open])')
+    return !closed || (element.matches('summary') && element.parentElement === closed)
+  })
+}
+
 export default function Dialog({
   title,
   headingId,
@@ -38,6 +50,44 @@ export default function Dialog({
     return () => {
       dialog.close()
       opener?.focus()
+    }
+  }, [])
+
+  // Focus stays inside: Tab from the last control goes to the first and Shift+Tab from the first
+  // to the last, instead of out to the browser's own controls, and when the focused element is
+  // removed (a list row, a form that closed) focus goes to the heading, unless the change moved
+  // it somewhere else (useFocusLater runs first).
+  useEffect(() => {
+    const dialog = dialogRef.current!
+    function wrapTab(event: KeyboardEvent) {
+      if (event.key !== 'Tab' || event.defaultPrevented) return
+      const controls = focusables(dialog)
+      if (controls.length === 0) return
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      const active = document.activeElement
+      const outside = !active || !controls.includes(active as HTMLElement)
+      if (event.shiftKey && (active === first || active === headingRef.current || outside)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || (outside && active !== headingRef.current))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const watcher = new MutationObserver(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (dialog.open && !dialog.contains(document.activeElement)) headingRef.current?.focus()
+      })
+    })
+    watcher.observe(dialog, { childList: true, subtree: true })
+    document.addEventListener('keydown', wrapTab)
+    return () => {
+      clearTimeout(timer)
+      watcher.disconnect()
+      document.removeEventListener('keydown', wrapTab)
     }
   }, [])
 

@@ -69,7 +69,7 @@ describe('NarrativeContentPage', () => {
     const saved = { ...INTRO, content_id: 12, content: 'I build tools.', used_by: [] }
     const fetchMock = stub({ 'PUT /api/narrative-content/10': [{ status: 200, body: saved }] })
     render(<NarrativeContentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
+    fireEvent.click(await screen.findByRole('button', { name: `View and Edit ${LABEL}` }))
     await loadedDialog()
     const field = screen.getByLabelText('Narrative content text (required)')
     expect(field).toHaveAccessibleDescription(/A sent version uses this excerpt, so saving adds a new one/)
@@ -125,7 +125,7 @@ describe('NarrativeContentPage', () => {
   it('edits which sections list an excerpt', async () => {
     const fetchMock = stub({ 'PUT /api/narrative-content/11': [{ status: 200, body: LOOSE }] })
     render(<NarrativeContentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Thank you for reading."' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit "Thank you for reading."' }))
     await loadedDialog()
     const form = screen.getByRole('form', { name: 'Edit "Thank you for reading."' })
     // No sent version uses it, so there's no note.
@@ -138,14 +138,14 @@ describe('NarrativeContentPage', () => {
       section_ids: [9],
     })
     await vi.waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit "Thank you for reading."' })).toHaveFocus(),
+      expect(screen.getByRole('button', { name: 'View and Edit "Thank you for reading."' })).toHaveFocus(),
     )
   })
 
   it('closes the dialog and returns focus to Edit when editing is cancelled', async () => {
     stub()
     render(<NarrativeContentPage />)
-    const edit = await screen.findByRole('button', { name: `Edit ${LABEL}` })
+    const edit = await screen.findByRole('button', { name: `View and Edit ${LABEL}` })
     edit.focus()
     fireEvent.click(edit)
     fireEvent.click(within(await loadedDialog()).getByText('Cancel'))

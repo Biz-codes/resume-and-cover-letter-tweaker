@@ -103,7 +103,7 @@ describe('EducationPage', () => {
   it('closes the dialog and returns focus to Edit when the form is cancelled', async () => {
     stub()
     render(<EducationPage />)
-    const edit = await screen.findByRole('button', { name: `Edit "${LABEL}"` })
+    const edit = await screen.findByRole('button', { name: `View and Edit "${LABEL}"` })
     edit.focus()
     fireEvent.click(edit)
     fireEvent.click(within(await loadedDialog()).getByText('Cancel'))

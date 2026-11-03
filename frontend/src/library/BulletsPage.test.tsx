@@ -51,7 +51,7 @@ describe('BulletsPage', () => {
     const saved = { ...SHIPPED, bullet_id: 12, content: 'Shipped it', used_by: [] }
     const fetchMock = stub({ 'PUT /api/bullet-points/10': [{ status: 200, body: saved }] })
     render(<BulletsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
+    fireEvent.click(await screen.findByRole('button', { name: `View and Edit ${LABEL}` }))
     await loadedDialog()
     const field = screen.getByLabelText('Bullet text')
     expect(field).toHaveAccessibleDescription(/A sent version uses this bullet, so saving adds a new one/)

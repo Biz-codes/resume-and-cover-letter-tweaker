@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { expectNoA11yViolations } from '../../../test/axe'
@@ -69,6 +69,51 @@ describe('Dialog', () => {
     usedBy.addEventListener('keydown', (event) => event.preventDefault())
     fireEvent.keyDown(usedBy, { key: 'Escape' })
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('keeps Tab and Shift+Tab inside it', () => {
+    render(<Page titles={['Edit "Engineer, Acme"', 'Edit "Led a team of four"']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const close = screen.getByRole('button', { name: 'Close' })
+    const next = screen.getByRole('button', { name: 'Next item' })
+    next.focus()
+    fireEvent.keyDown(next, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(next).toHaveFocus()
+    // From the heading, Shift+Tab goes to the last control too.
+    screen.getByRole('heading', { level: 2 }).focus()
+    fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true })
+    expect(next).toHaveFocus()
+  })
+
+  it('wraps Tab past controls that can’t take focus: hidden inputs, hidden parts, closed details', () => {
+    render(
+      <Dialog title="Engineer, Acme" onClose={() => {}}>
+        <button type="button">Save</button>
+        <details>
+          <summary>Used by (2)</summary>
+          <button type="button">Inside closed details</button>
+        </details>
+        <div hidden>
+          <button type="button">Inside hidden part</button>
+        </div>
+        <input type="hidden" name="id" value="4" />
+      </Dialog>,
+    )
+    const summary = screen.getByText('Used by (2)')
+    summary.focus()
+    fireEvent.keyDown(summary, { key: 'Tab' })
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+  })
+
+  it('moves focus to its heading when the focused control is removed', async () => {
+    render(<Page titles={['Edit "Engineer, Acme"', 'Edit "Led a team of four"']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const next = screen.getByRole('button', { name: 'Next item' })
+    next.focus()
+    next.remove()
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveFocus())
   })
 
   it('stays open on Escape while typing with an input method', () => {

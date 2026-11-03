@@ -127,7 +127,7 @@ describe('HeadersPage', () => {
     stubApi({ 'GET /api/headers': [{ status: 200, body: [BASE] }] })
     render(<HeadersPage />)
     expect(document.title).toBe('Headers – Resume Tweaker')
-    const edit = await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })
+    const edit = await screen.findByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' })
     edit.focus()
     fireEvent.click(edit)
     expect(screen.getByRole('heading', { level: 2, name: 'Sam Rivera, Software Engineer' })).toHaveFocus()
@@ -151,11 +151,11 @@ describe('HeadersPage', () => {
       'PUT /api/headers/1': [{ status: 200, body: saved }],
     })
     render(<HeadersPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' }))
     await loadedDialog()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await vi.waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
+      expect(screen.getByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
     )
   })
 

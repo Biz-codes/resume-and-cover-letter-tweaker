@@ -175,8 +175,32 @@ describe('SectionsPage', () => {
     render(<SectionsPage />)
     const freelance = await card('Freelance')
     const part = (title: string) => within(freelance).getByText(title).closest('details') as HTMLDetailsElement
-    expect(part('Skill categories it lists (0)').open).toBe(false)
+    expect(part('Skill categories (0)').open).toBe(false)
     expect(part('Used by (1)').open).toBe(true)
+  })
+
+  it('shows a built-in section’s own kind and what it lists, with the other kinds under More options', async () => {
+    const skills = { ...SKILLS, bullets: [{ bullet_id: 4, content: 'Ran workshops' }] }
+    stub({}, [skills, FREELANCE])
+    render(<SectionsPage />)
+    const dialog = await card('Skills')
+    const more = within(dialog).getByRole('button', { name: 'More options for Skills' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(within(dialog).getByText('Skill categories (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Bullets (1)')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Roles (0)')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Narrative content (0)')).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(more)
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    expect(within(dialog).getAllByText(/^(Narrative content|Roles|Projects|Education) \(0\)$/)).toHaveLength(4)
+  })
+
+  it('opens More options from the start for a section that lists nothing', async () => {
+    stub()
+    render(<SectionsPage />)
+    const dialog = await card('Freelance')
+    expect(within(dialog).getByRole('button', { name: 'More options for Freelance' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('warns that renaming a section a sent version uses saves a new one', async () => {
@@ -225,7 +249,7 @@ describe('SectionsPage', () => {
     stub()
     render(<SectionsPage />)
     expect(document.title).toBe('Sections – Resume Tweaker')
-    const edit = await screen.findByRole('button', { name: 'Edit "Freelance"' })
+    const edit = await screen.findByRole('button', { name: 'View and Edit "Freelance"' })
     edit.focus()
     fireEvent.click(edit)
     const dialog = screen.getByRole('dialog', { name: 'Freelance' })
@@ -270,7 +294,7 @@ describe('SectionsPage', () => {
     })
     render(<SectionsPage />)
     const freelance = await card('Freelance')
-    expect(within(freelance).getByText('Roles it lists (0)')).toBeInTheDocument()
+    expect(within(freelance).getByText('Roles (0)')).toBeInTheDocument()
     const picker = within(freelance).getByLabelText('Add to Freelance roles')
     fireEvent.change(picker, { target: { value: '9' } })
     fireEvent.click(within(picker.parentElement as HTMLElement).getByText('Add'))
@@ -292,7 +316,7 @@ describe('SectionsPage', () => {
     })
     render(<SectionsPage />)
     const freelance = await card('Freelance')
-    expect(within(freelance).getByText('Narrative content it lists (0)')).toBeInTheDocument()
+    expect(within(freelance).getByText('Narrative content (0)')).toBeInTheDocument()
     fireEvent.change(within(freelance).getByLabelText('New narrative content for Freelance'), {
       target: { value: 'I take on short projects.' },
     })
@@ -302,7 +326,7 @@ describe('SectionsPage', () => {
     )
     await vi.waitFor(() =>
       expect(within(freelance).getByRole('status')).toHaveTextContent(
-        'Added "I take on short projects." to the narrative content it lists.',
+        'Added the narrative content "I take on short projects.".',
       ),
     )
     const picker = within(freelance).getByLabelText('Add to Freelance education')

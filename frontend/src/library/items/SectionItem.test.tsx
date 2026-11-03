@@ -33,7 +33,7 @@ function stub() {
 }
 
 describe('SectionItem', () => {
-  it('offers only a new version of a built-in section, and opens what it lists', async () => {
+  it('offers only a new version of a built-in section, and opens its lists', async () => {
     stub()
     const host = await renderItem(<SectionItem id={2} />)
     expect(screen.queryByLabelText('Section title')).not.toBeInTheDocument()

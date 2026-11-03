@@ -37,6 +37,14 @@ describe('SignOffsPage', () => {
     await expectNoA11yViolations()
   })
 
+  it('lists sign-offs A to Z, and says so', async () => {
+    stub()
+    render(<SignOffsPage />)
+    await screen.findByRole('heading', { name: 'Sincerely' })
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Best regards', 'Sincerely'])
+    expect(screen.getByText('Sorted A to Z.')).toBeInTheDocument()
+  })
+
   it('adds a sign-off', async () => {
     const fetchMock = stub({ 'POST /api/sign-offs': [{ status: 201, body: { ...BEST, sign_off_id: 5, text: 'Thanks' } }] })
     render(<SignOffsPage />)
@@ -50,7 +58,7 @@ describe('SignOffsPage', () => {
     const saved = { ...SINCERELY, sign_off_id: 6, text: 'Sincerely yours', used_by: [] }
     const fetchMock = stub({ 'PUT /api/sign-offs/1': [{ status: 200, body: saved }] })
     render(<SignOffsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sincerely"' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit "Sincerely"' }))
     await loadedDialog()
     const field = screen.getByLabelText('Sign-off')
     expect(field).toHaveAccessibleDescription(/A sent version uses this sign-off, so saving adds a new one/)
@@ -66,7 +74,7 @@ describe('SignOffsPage', () => {
   it('shows a validation error on the field, keeping the input', async () => {
     stub({ 'PUT /api/sign-offs/4': [{ status: 422, body: errorBody('VALIDATION_FAILED', 'Text is required.', 'text') }] })
     render(<SignOffsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit "Best regards"' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit "Best regards"' }))
     await loadedDialog()
     const field = screen.getByLabelText('Sign-off')
     fireEvent.change(field, { target: { value: ' ' } })
@@ -79,7 +87,7 @@ describe('SignOffsPage', () => {
   it('closes the dialog and returns focus to Edit when editing is cancelled', async () => {
     stub()
     render(<SignOffsPage />)
-    const edit = await screen.findByRole('button', { name: 'Edit "Best regards"' })
+    const edit = await screen.findByRole('button', { name: 'View and Edit "Best regards"' })
     edit.focus()
     fireEvent.click(edit)
     fireEvent.click(within(await loadedDialog()).getByText('Cancel'))

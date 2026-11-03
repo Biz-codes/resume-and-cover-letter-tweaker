@@ -11,6 +11,7 @@ import { EMPTY_HEADER, headerLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 // The New header button, where focus returns when its form closes.
 const NEW_HEADER_ID = 'new-header'
@@ -62,6 +63,7 @@ export default function HeadersPage() {
       <p className="muted">
         The name, headline, and contact details at the top of a resume or cover letter.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
@@ -99,13 +101,13 @@ export default function HeadersPage() {
       )}
 
       {headers?.length === 0 && <p>No headers yet.</p>}
-      {headers?.map((header) => (
+      {headers && sortByName(headers, labelOf).map((header) => (
         <LibraryCard
           key={header.header_id}
           title={labelOf(header)}
           heading={3}
           editId={editId('header', header.header_id)}
-          editLabel={`Edit "${labelOf(header)}"`}
+          editLabel={`View and Edit "${labelOf(header)}"`}
           onEdit={() => dialogs.open({ kind: 'header', id: header.header_id, title: labelOf(header) })}
         >
           <p className="muted">{[header.phone, header.email, header.location].filter(Boolean).join(' | ')}</p>

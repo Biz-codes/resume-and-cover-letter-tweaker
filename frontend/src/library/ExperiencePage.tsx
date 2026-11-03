@@ -12,6 +12,7 @@ import { ROLE_FIELDS, roleLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 const EMPTY: ExperienceFields = {
   role_title: '',
@@ -71,7 +72,7 @@ export default function ExperiencePage() {
         key={role.experience_id}
         title={titleOf(role)}
         editId={editId('experience', role.experience_id)}
-        editLabel={`Edit "${label}"`}
+        editLabel={`View and Edit "${label}"`}
         onEdit={() => dialogs.open({ kind: 'experience', id: role.experience_id, title: label })}
       >
         <p className="muted">{[role.location, role.dates].filter(Boolean).join(' | ')}</p>
@@ -79,8 +80,9 @@ export default function ExperiencePage() {
     )
   }
 
-  const listed = roles?.filter((role) => role.sections.length > 0) ?? []
-  const unlisted = roles?.filter((role) => role.sections.length === 0) ?? []
+  const sorted = sortByName(roles ?? [], titleOf)
+  const listed = sorted.filter((role) => role.sections.length > 0)
+  const unlisted = sorted.filter((role) => role.sections.length === 0)
 
   return (
     <section>
@@ -91,6 +93,7 @@ export default function ExperiencePage() {
         Roles (paid jobs, volunteer work, or anything else) and the bullets that can go under each one. Each version of
         a role (a new title, or dates written differently) is its own entry, and versions share bullets.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">

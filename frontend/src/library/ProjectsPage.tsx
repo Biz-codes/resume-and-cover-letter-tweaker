@@ -12,6 +12,7 @@ import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import { PROJECT_FIELDS, projectLabels } from './items/itemFields'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 const EMPTY: ProjectFields = {
   project_title: '',
@@ -71,7 +72,7 @@ export default function ProjectsPage() {
         key={project.project_id}
         title={titleOf(project)}
         editId={editId('project', project.project_id)}
-        editLabel={`Edit "${label}"`}
+        editLabel={`View and Edit "${label}"`}
         onEdit={() => dialogs.open({ kind: 'project', id: project.project_id, title: label })}
       >
         <p className="muted">{[project.done_for, project.dates].filter(Boolean).join(' | ')}</p>
@@ -80,8 +81,9 @@ export default function ProjectsPage() {
     )
   }
 
-  const listed = projects?.filter((project) => project.sections.length > 0) ?? []
-  const unlisted = projects?.filter((project) => project.sections.length === 0) ?? []
+  const sorted = sortByName(projects ?? [], titleOf)
+  const listed = sorted.filter((project) => project.sections.length > 0)
+  const unlisted = sorted.filter((project) => project.sections.length === 0)
 
   return (
     <section>
@@ -92,6 +94,7 @@ export default function ProjectsPage() {
         Projects, with the skills and bullets that can go under each one. Each version of a project (a new title, or
         dates written differently) is its own entry, and versions share skills and bullets.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">

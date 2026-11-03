@@ -12,6 +12,7 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 type Group = 'resume' | 'letter' | 'unused'
 
@@ -73,6 +74,7 @@ export default function SectionsPage() {
         Resume headings and cover letter topics. Any content can go in any section; the lists here
         are only what the app suggests first.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
@@ -88,7 +90,10 @@ export default function SectionsPage() {
 
       {sections &&
         GROUPS.map(({ group, heading, note }) => {
-          const members = sections.filter((section) => groupOf(section) === group)
+          const members = sortByName(
+            sections.filter((section) => groupOf(section) === group),
+            (section) => section.title,
+          )
           if (members.length === 0) return null
           return (
             <div key={group} className="section-group">
@@ -107,7 +112,7 @@ export default function SectionsPage() {
                     </>
                   }
                   editId={editId('section', section.id)}
-                  editLabel={`Edit "${section.title}"`}
+                  editLabel={`View and Edit "${section.title}"`}
                   onEdit={() => dialogs.open({ kind: 'section', id: section.id, title: section.title })}
                 />
               ))}

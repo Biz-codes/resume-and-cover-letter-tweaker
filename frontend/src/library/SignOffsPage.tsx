@@ -9,6 +9,7 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 export default function SignOffsPage() {
   const [signOffs, setSignOffs] = useState<SignOff[] | null>(null)
@@ -47,7 +48,7 @@ export default function SignOffsPage() {
         title={signOff.text}
         heading={3}
         editId={editId('signOff', signOff.sign_off_id)}
-        editLabel={`Edit "${signOff.text}"`}
+        editLabel={`View and Edit "${signOff.text}"`}
         onEdit={() => dialogs.open({ kind: 'signOff', id: signOff.sign_off_id, title: signOff.text })}
       />
     )
@@ -62,6 +63,7 @@ export default function SignOffsPage() {
         The closing at the end of a cover letter, printed with a comma and your name on the next line. New cover letters
         start with "Sincerely".
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
@@ -75,7 +77,7 @@ export default function SignOffsPage() {
 
       {signOffs && <NameForm label="New sign-off" field="text" submitLabel="Add sign-off" onSave={create} />}
       {signOffs && signOffs.length === 0 && <p>No sign-offs yet.</p>}
-      {signOffs?.map(card)}
+      {signOffs && sortByName(signOffs, (signOff) => signOff.text).map(card)}
       {dialogs.dialog}
     </section>
   )

@@ -1,19 +1,21 @@
 // A section's dialog: rename it (a sent version keeps the old title; docs/FRONTEND_CHECKS.md, "Sent
 // versions are locked"), add a version of it, delete it, and edit which narrative content, skill
 // categories, roles, projects, bullets, and education entries it lists. Each of those opens in the
-// same dialog. A built-in section can't be renamed or deleted, so its dialog has only New version
-// and its lists.
-import { useState } from 'react'
+// same dialog. Only its default kind and the kinds it already lists show; the rest are under More
+// options. A built-in section can't be renamed or deleted, so its dialog has only New version and
+// its lists.
+import { Fragment, useState, type ReactNode } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { educationApi, educationLabel } from '../../shared/api/education'
 import { experienceApi, experienceLabel } from '../../shared/api/experience'
 import { narrativeApi } from '../../shared/api/narrativeContent'
 import { projectLabel, projectsApi } from '../../shared/api/projects'
-import { sectionsApi, type Section } from '../../shared/api/sections'
+import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../../shared/api/sections'
 import { skillCategoriesApi } from '../../shared/api/skills'
 import { anyLocked } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
+import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
 import BulletList from '../BulletList'
@@ -34,6 +36,33 @@ const narrativeItem = (excerpt: { content_id: number; content: string }) => ({
   label: `"${shortBullet(excerpt.content)}"`,
 })
 
+type ContentKind = 'narrative' | 'category' | 'experience' | 'project' | 'bullet' | 'education'
+const KINDS: ContentKind[] = ['narrative', 'category', 'experience', 'project', 'bullet', 'education']
+
+// The kind each built-in section holds by default, by id (never by title).
+const BUILT_IN_KINDS: Record<number, ContentKind> = {
+  [BUILT_IN_SECTION_IDS.summary]: 'narrative',
+  [BUILT_IN_SECTION_IDS.skills]: 'category',
+  [BUILT_IN_SECTION_IDS.experience]: 'experience',
+  [BUILT_IN_SECTION_IDS.projects]: 'project',
+  [BUILT_IN_SECTION_IDS.education]: 'education',
+}
+
+const counts = (section: Section): Record<ContentKind, number> => ({
+  narrative: section.narrative_content.length,
+  category: section.skill_categories.length,
+  experience: section.experience.length,
+  project: section.projects.length,
+  bullet: section.bullets.length,
+  education: section.education.length,
+})
+
+// The kinds shown outright: a built-in section's own kind, and every kind the section lists.
+function shownKindsOf(section: Section): ContentKind[] {
+  const count = counts(section)
+  return KINDS.filter((kind) => kind === BUILT_IN_KINDS[section.id] || count[kind] > 0)
+}
+
 export default function SectionItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() =>
@@ -48,8 +77,12 @@ export default function SectionItem({ id }: { id: number }) {
     ]),
   )
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
+  // Decided once when it loads, so a kind added to from More options stays where the user is
+  // working until the dialog opens again.
+  const [shown, setShown] = useState<ContentKind[] | null>(null)
 
   const section = data?.[0].find((item) => item.id === id)
+  if (section && !shown) setShown(shownKindsOf(section))
   if (!data || !section) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const [, categories, roles, projects, bullets, narrative, education] = data
 
@@ -97,6 +130,123 @@ export default function SectionItem({ id }: { id: number }) {
     }
   }
 
+  // Each kind of content it can list, in this order.
+  const lists: Record<ContentKind, ReactNode> = {
+    narrative: (
+      <Collapsible title="Narrative content" count={section.narrative_content.length}>
+        <OrderedList
+          label={`${section.title} narrative content`}
+          items={section.narrative_content.map(narrativeItem)}
+          choices={narrative.map(narrativeItem)}
+          emptyText="None."
+          onOpen={(item) => host.open({ kind: 'narrative', id: item.id, title: shortBullet(item.name) })}
+          onChange={async (ids) => {
+            await sectionsApi.setNarrativeContent(section.id, ids)
+            await refresh()
+          }}
+        />
+        <NameForm
+          label={`New narrative content for ${section.title}`}
+          field="content"
+          submitLabel="Add narrative content"
+          multiline
+          onSave={async (content) => {
+            await narrativeApi.create(content, [section.id])
+            await refresh()
+            host.say(`Added the narrative content "${shortBullet(content)}".`)
+          }}
+        />
+      </Collapsible>
+    ),
+    category: (
+      <Collapsible title="Skill categories" count={section.skill_categories.length}>
+        <OrderedList
+          label={`${section.title} skill categories`}
+          items={section.skill_categories.map((category) => ({ id: category.category_id, name: category.category_name }))}
+          choices={categoryChoices}
+          emptyText="None."
+          onOpen={(item) => host.open({ kind: 'category', id: item.id, title: item.name })}
+          onChange={async (ids) => {
+            await sectionsApi.setCategories(section.id, ids)
+            await refresh()
+          }}
+        />
+      </Collapsible>
+    ),
+    experience: (
+      <Collapsible title="Roles" count={section.experience.length}>
+        <OrderedList
+          label={`${section.title} roles`}
+          items={section.experience.map((role) => ({
+            id: role.experience_id,
+            name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
+          }))}
+          choices={roles.map((role) => ({ id: role.experience_id, name: roleLabel(role) }))}
+          emptyText="None."
+          onOpen={(item) => host.open({ kind: 'experience', id: item.id, title: item.name })}
+          onChange={async (ids) => {
+            await sectionsApi.setExperience(section.id, ids)
+            await refresh()
+          }}
+        />
+      </Collapsible>
+    ),
+    project: (
+      <Collapsible title="Projects" count={section.projects.length}>
+        <OrderedList
+          label={`${section.title} projects`}
+          items={section.projects.map((project) => ({
+            id: project.project_id,
+            name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
+          }))}
+          choices={projects.map((project) => ({ id: project.project_id, name: projectLabelOf(project) }))}
+          emptyText="None."
+          onOpen={(item) => host.open({ kind: 'project', id: item.id, title: item.name })}
+          onChange={async (ids) => {
+            await sectionsApi.setProjects(section.id, ids)
+            await refresh()
+          }}
+        />
+      </Collapsible>
+    ),
+    bullet: (
+      <BulletList
+        owner={section.title}
+        bullets={section.bullets}
+        allBullets={bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
+        onChange={async (ids) => {
+          await sectionsApi.setBullets(section.id, ids)
+          await refresh()
+        }}
+        onWrite={async (content) => {
+          await bulletsApi.create(content, { section_id: section.id })
+          await refresh()
+          host.say(`Added the bullet "${shortBullet(content)}".`)
+        }}
+      />
+    ),
+    education: (
+      <Collapsible title="Education" count={section.education.length}>
+        <OrderedList
+          label={`${section.title} education`}
+          items={section.education.map((entry) => ({
+            id: entry.education_id,
+            name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
+          }))}
+          choices={education.map((entry) => ({ id: entry.education_id, name: educationLabelOf(entry) }))}
+          emptyText="None."
+          onOpen={(item) => host.open({ kind: 'education', id: item.id, title: item.name })}
+          onChange={async (ids) => {
+            await sectionsApi.setEducation(section.id, ids)
+            await refresh()
+          }}
+        />
+      </Collapsible>
+    ),
+  }
+  const shownKinds = shown ?? []
+  const moreKinds = KINDS.filter((kind) => !shownKinds.includes(kind))
+
   return (
     <ItemParts
       form={
@@ -137,111 +287,23 @@ export default function SectionItem({ id }: { id: number }) {
             )
       }
     >
-      <Collapsible title="Narrative content it lists" count={section.narrative_content.length}>
-        <OrderedList
-          label={`${section.title} narrative content`}
-          items={section.narrative_content.map(narrativeItem)}
-          choices={narrative.map(narrativeItem)}
-          emptyText="None."
-          onOpen={(item) => host.open({ kind: 'narrative', id: item.id, title: shortBullet(item.name) })}
-          onChange={async (ids) => {
-            await sectionsApi.setNarrativeContent(section.id, ids)
-            await refresh()
-          }}
-        />
-        <NameForm
-          label={`New narrative content for ${section.title}`}
-          field="content"
-          submitLabel="Add narrative content"
-          multiline
-          onSave={async (content) => {
-            await narrativeApi.create(content, [section.id])
-            await refresh()
-            host.say(`Added "${shortBullet(content)}" to the narrative content it lists.`)
-          }}
-        />
-      </Collapsible>
-
-      <Collapsible title="Skill categories it lists" count={section.skill_categories.length}>
-        <OrderedList
-          label={`${section.title} skill categories`}
-          items={section.skill_categories.map((category) => ({ id: category.category_id, name: category.category_name }))}
-          choices={categoryChoices}
-          emptyText="None."
-          onOpen={(item) => host.open({ kind: 'category', id: item.id, title: item.name })}
-          onChange={async (ids) => {
-            await sectionsApi.setCategories(section.id, ids)
-            await refresh()
-          }}
-        />
-      </Collapsible>
-
-      <Collapsible title="Roles it lists" count={section.experience.length}>
-        <OrderedList
-          label={`${section.title} roles`}
-          items={section.experience.map((role) => ({
-            id: role.experience_id,
-            name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
-          }))}
-          choices={roles.map((role) => ({ id: role.experience_id, name: roleLabel(role) }))}
-          emptyText="None."
-          onOpen={(item) => host.open({ kind: 'experience', id: item.id, title: item.name })}
-          onChange={async (ids) => {
-            await sectionsApi.setExperience(section.id, ids)
-            await refresh()
-          }}
-        />
-      </Collapsible>
-
-      <Collapsible title="Projects it lists" count={section.projects.length}>
-        <OrderedList
-          label={`${section.title} projects`}
-          items={section.projects.map((project) => ({
-            id: project.project_id,
-            name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
-          }))}
-          choices={projects.map((project) => ({ id: project.project_id, name: projectLabelOf(project) }))}
-          emptyText="None."
-          onOpen={(item) => host.open({ kind: 'project', id: item.id, title: item.name })}
-          onChange={async (ids) => {
-            await sectionsApi.setProjects(section.id, ids)
-            await refresh()
-          }}
-        />
-      </Collapsible>
-
-      <BulletList
-        owner={section.title}
-        title="Bullets it lists directly"
-        bullets={section.bullets}
-        allBullets={bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
-        onChange={async (ids) => {
-          await sectionsApi.setBullets(section.id, ids)
-          await refresh()
-        }}
-        onWrite={async (content) => {
-          await bulletsApi.create(content, { section_id: section.id })
-          await refresh()
-          host.say(`Added the bullet "${shortBullet(content)}".`)
-        }}
-      />
-
-      <Collapsible title="Education it lists" count={section.education.length}>
-        <OrderedList
-          label={`${section.title} education`}
-          items={section.education.map((entry) => ({
-            id: entry.education_id,
-            name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
-          }))}
-          choices={education.map((entry) => ({ id: entry.education_id, name: educationLabelOf(entry) }))}
-          emptyText="None."
-          onOpen={(item) => host.open({ kind: 'education', id: item.id, title: item.name })}
-          onChange={async (ids) => {
-            await sectionsApi.setEducation(section.id, ids)
-            await refresh()
-          }}
-        />
-      </Collapsible>
+      {shownKinds.map((kind) => (
+        <Fragment key={kind}>{lists[kind]}</Fragment>
+      ))}
+      {moreKinds.length > 0 && (
+        <Disclosure
+          title={
+            <>
+              More options <span className="visually-hidden">for {section.title}</span>
+            </>
+          }
+          initiallyOpen={shownKinds.length === 0}
+        >
+          {moreKinds.map((kind) => (
+            <Fragment key={kind}>{lists[kind]}</Fragment>
+          ))}
+        </Disclosure>
+      )}
 
       <UsedBy uses={section.used_by} />
     </ItemParts>

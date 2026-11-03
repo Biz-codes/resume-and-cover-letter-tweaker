@@ -103,7 +103,7 @@ Decided with the user:
 - **One dialog at a time, never one inside another:** a name of another item inside the dialog (a bullet under a role, a role that lists a bullet) opens that item in the same dialog, with "Back to [the item before]" at the top; Close returns focus to where the dialog was first opened. Names shown on the pages open the dialog the same way. Names of resumes and cover letters (in Used by) stay links to their pages.
 - **Hide instead of deleting what a sent application uses:** a sent application always keeps its record, so an item one uses can't be deleted (`VERSION_LOCKED`, with a message pointing to Hide), and its dialog offers Hide in place of Delete. Deleting the sent application itself, or its posting, still works after its warning. This replaces "Deleting is still allowed" in "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - **Any item can be hidden,** used or not, to set it aside without losing it. A hidden item isn't offered anywhere new (pickers, More options, defaults, the library's lists), but every resume and cover letter that already shows it keeps it, sent or not. Built-in sections and "Other" can't be hidden, since every account shares them.
-- **Each library page ends with "Hidden (n)",** closed to start, listing its hidden items with Unhide and Edit.
+- **Each library page ends with "Hidden (n)",** closed to start, listing its hidden items with Unhide and View and Edit.
 - **Accessibility:** a native modal `<dialog>` named by its heading, with focus moved to the heading when it opens or shows another item, Escape and Close to close it, focus returned to the button that opened it, and nothing behind it reachable while it's open.
 
 Steps:

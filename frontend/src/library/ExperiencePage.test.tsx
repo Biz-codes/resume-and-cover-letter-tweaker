@@ -74,7 +74,7 @@ describe('ExperiencePage', () => {
   it("opens a role's dialog with its bullets, sections, and uses, and closes it back to Edit", async () => {
     stub()
     render(<ExperiencePage />)
-    const edit = await screen.findByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2022)"' })
+    const edit = await screen.findByRole('button', { name: 'View and Edit "Engineer, Acme (2020 – 2022)"' })
     edit.focus()
     const dialog = await openItem('Engineer, Acme')
     expect(dialog).toHaveAccessibleName('Engineer, Acme (2020 – 2022)')
@@ -99,7 +99,7 @@ describe('ExperiencePage', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: `Engineer, Acme, added ${addedOn(later.created_at)}` })).toBeInTheDocument()
     // Their buttons already differ by their dates, so nothing is added there.
-    expect(screen.getByRole('button', { name: 'Edit "Engineer, Acme (2020 – 2023)"' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View and Edit "Engineer, Acme (2020 – 2023)"' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
@@ -122,7 +122,7 @@ describe('ExperiencePage', () => {
       dates: null,
       section_id: 6,
     })
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit "Consultant, Self"' })).toHaveFocus())
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'View and Edit "Consultant, Self"' })).toHaveFocus())
   })
 
   it('keeps the input and highlights the field when saving fails', async () => {

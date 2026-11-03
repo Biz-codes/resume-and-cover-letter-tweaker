@@ -11,6 +11,7 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import LibraryCard from './LibraryCard'
+import { SORT_NOTE, sortByName } from '../shared/sortByName'
 
 export default function ToneSetsPage() {
   const [sets, setSets] = useState<ToneSet[] | null>(null)
@@ -52,6 +53,7 @@ export default function ToneSetsPage() {
         teaching one with students and outcomes. Each resume or cover letter can use one tone, and its rules guide every
         suggestion for it.
       </p>
+      <p className="muted">{SORT_NOTE}</p>
       <p role="status">{notice}</p>
       {loadError && (
         <div role="alert">
@@ -65,13 +67,13 @@ export default function ToneSetsPage() {
 
       {sets && <NameForm label="New tone name" field="name" submitLabel="Add tone" onSave={create} />}
       {sets && sets.length === 0 && <p>No tones yet.</p>}
-      {sets?.map((toneSet) => (
+      {sets && sortByName(sets, (toneSet) => toneSet.name).map((toneSet) => (
         <LibraryCard
           key={toneSet.tone_set_id}
           title={toneSet.name}
           heading={3}
           editId={editId('tone', toneSet.tone_set_id)}
-          editLabel={`Edit "${toneSet.name}"`}
+          editLabel={`View and Edit "${toneSet.name}"`}
           onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title: toneSet.name })}
         >
           <p className="muted">{toneSet.rules.length === 1 ? '1 rule' : `${toneSet.rules.length} rules`}</p>
