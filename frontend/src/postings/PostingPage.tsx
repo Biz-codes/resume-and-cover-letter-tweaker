@@ -33,6 +33,7 @@ import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import type { ListState } from '../documents/DocumentsPage'
 import { offered } from '../shared/offered'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 // The buttons that open each form, where focus returns when it closes.
 const BUTTON_IDS = { edit: 'posting-edit', delete: 'posting-delete' }
@@ -77,8 +78,8 @@ export function PostingPage({ id }: { id: number }) {
     void load()
   }, [load])
 
-  // A notice sent with the move here (a new posting) goes into the live region after it's
-  // rendered, so screen readers announce it.
+  // A notice sent with the move here (a new posting) opens once the page has rendered and App has
+  // moved focus to its heading, so OK returns focus there.
   const sentNotice = (location.state as ListState | null)?.notice ?? null
   useEffect(() => {
     const timer = setTimeout(() => setNotice(sentNotice))
@@ -151,7 +152,7 @@ export function PostingPage({ id }: { id: number }) {
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
         {title}
       </h2>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

@@ -6,6 +6,7 @@ import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const BASE: Header = {
   hidden: false,
@@ -57,7 +58,7 @@ describe('HeadersPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Sam Rivera' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    await expectNotice('Saved.')
     expect(sentBody(fetchMock, 'POST /api/headers')).toMatchObject({ full_name: 'Sam Rivera', headline: null })
   })
 
@@ -91,7 +92,7 @@ describe('HeadersPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved as a new header.')
+    await expectNotice('Saved as a new header.')
   })
 
   it('says when an identical header already existed', async () => {
@@ -103,7 +104,7 @@ describe('HeadersPage', () => {
     fireEvent.click(await screen.findByText('New header'))
     fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Sam Rivera' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('An identical header already exists')
+    await expectNotice('An identical header already exists')
   })
 
   it('lists what uses a header before deleting it', async () => {
@@ -120,7 +121,7 @@ describe('HeadersPage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Header deleted.')
+    await expectNotice('Header deleted.')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Headers' })).toHaveFocus())
   })
 
@@ -155,6 +156,8 @@ describe('HeadersPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' }))
     await loadedDialog()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // Focus waits behind the notice, then goes to the header's card.
+    await expectNotice('Saved.')
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
     )
@@ -173,7 +176,7 @@ describe('HeadersPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText('Headline'), { target: { value: 'Engineer' } })
     fireEvent.click(within(form).getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added a new header.')
+    await expectNotice('Added a new header.')
     expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).toMatchObject({ headline: 'Engineer' })
     expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).not.toHaveProperty('created_at')
   })

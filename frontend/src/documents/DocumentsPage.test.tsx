@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import DocumentsPage from './DocumentsPage'
+import { expectNotice } from '../test/notice'
 
 const INFO = { header_id: 1, tone_set_id: null, based_on: null, copies: [], updated_at: null }
 const TECH = { ...INFO, resume_id: 1, name: 'Tech base', job_posting: null, locked: false }
@@ -113,7 +114,7 @@ describe('DocumentsPage', () => {
     stub({}, [])
     renderPage({ notice: 'Deleted "Old".' })
     expect(await screen.findByText('No base resumes yet.')).toBeInTheDocument()
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Deleted "Old".'))
+    await expectNotice('Deleted "Old".')
     expect(screen.getByText('No resumes for job postings yet.')).toBeInTheDocument()
   })
 

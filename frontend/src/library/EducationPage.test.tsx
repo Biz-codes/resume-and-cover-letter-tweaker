@@ -7,6 +7,7 @@ import { findCard, loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import EducationPage from './EducationPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const DEGREE: Education = {
@@ -81,7 +82,7 @@ describe('EducationPage', () => {
     })
     fireEvent.change(within(form).getByLabelText('List it under'), { target: { value: '9' } })
     fireEvent.click(within(form).getByText('Add entry'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "M.A. in English, State University".')
+    await expectNotice('Added "M.A. in English, State University".')
     expect(sentBody(fetchMock, 'POST /api/education')).toMatchObject({ degree: 'M.A. in English', section_id: 9 })
   })
 
@@ -96,9 +97,7 @@ describe('EducationPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
     fireEvent.click(within(form).getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved as a new entry, "B.A. in English, State University (2015)"',
-    )
+    await expectNotice('Saved as a new entry, "B.A. in English, State University (2015)"',)
     expect(sentBody(fetchMock, 'PUT /api/education/7')).toMatchObject({ graduation: '2015' })
   })
 
@@ -122,7 +121,7 @@ describe('EducationPage', () => {
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
     await expectNoA11yViolations()
     fireEvent.click(within(form).getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`keep "${LABEL}" until you pick the new one`)
+    await expectNotice(`keep "${LABEL}" until you pick the new one`)
     expect(sentBody(fetchMock, 'POST /api/education/7/versions')).toMatchObject({ graduation: '2015' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -135,7 +134,7 @@ describe('EducationPage', () => {
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`Deleted "${LABEL}".`)
+    await expectNotice(`Deleted "${LABEL}".`)
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Education' })).toHaveFocus())
   })
 

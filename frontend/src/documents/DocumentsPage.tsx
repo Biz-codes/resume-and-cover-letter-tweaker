@@ -9,6 +9,7 @@ import { toApiError, type ApiError } from '../shared/api/client'
 import { docsApi, KINDS, type Doc, type DocKind } from '../shared/api/documents'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const DESCRIPTIONS: Record<DocKind, string> = {
   resume:
@@ -153,8 +154,8 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
     void load()
   }, [load])
 
-  // A notice sent from another page goes into the live region after it's rendered, so screen
-  // readers announce it.
+  // A notice sent from another page opens once the page has rendered and App has moved focus to its
+  // heading, so OK returns focus there.
   const sentNotice = (location.state as ListState | null)?.notice ?? null
   useEffect(() => {
     const timer = setTimeout(() => setNotice(sentNotice))
@@ -177,7 +178,7 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
         {plural}
       </h2>
       <p className="muted">{DESCRIPTIONS[kind]}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

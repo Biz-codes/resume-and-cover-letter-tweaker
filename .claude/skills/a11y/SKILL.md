@@ -16,7 +16,7 @@ Every component and page is tested for accessibility from the start. Every test 
 1. **Read the whole front end, not just the change.** A change in one place often breaks accessibility somewhere else: a renamed label breaks a test's query, a new route changes which nav link is current, a shared component's focus handling changes every page that uses it, a CSS change lowers contrast on a page nobody touched. So every review covers every file:
    - Start with what changed (`git status --short frontend/`, `git diff HEAD -- frontend/`, untracked files, and any files the Stop hook listed), so you know where to look hardest.
    - Then read every component, page, hook, and test in `frontend/src/`, plus `index.css` and `frontend/a11yChecks.ts`, in full: `find frontend/src -name '*.ts*' -not -path '*/node_modules/*'`.
-   - Look at how the pages fit together, which a single file doesn't show: moving between pages (where focus lands, what's announced), the nav and sub-nav (`aria-current`), heading levels across the shell and each page, landmarks, and the live regions on one page (only one `role="status"`, apart from an open `Dialog`'s own, since the page's can't be reached behind the modal).
+   - Look at how the pages fit together, which a single file doesn't show: moving between pages (where focus lands, what's announced), the nav and sub-nav (`aria-current`), heading levels across the shell and each page, landmarks, and the live regions on one page (no page-level `role="status"`: a page's notices show in `AlertDialog`; an open `Dialog` has its own `role="status"`, and each `OrderedList` its own plain live region).
 
 2. **Review all of it against the checklist below.** For each problem, fix it in the component, unless the fix would change the design or how the UI looks or behaves in a way the user would notice. Then describe it and ask first.
 
@@ -42,8 +42,8 @@ Every component and page is tested for accessibility from the start. Every test 
 
 **Errors and status**
 - An error tied to a field sets `aria-invalid` on it and links the message with `aria-describedby`, so it's read again when the field gets focus.
-- Errors use `role="alert"`. Success and progress notices go in a `role="status"` element that is always rendered (empty when there's nothing to say), since a live region added together with its text often isn't announced.
-- Every change the user makes is announced, including ones that keep a form or dialog open: adding, removing, reordering, writing, and saving. Lists announce through `OrderedList`'s own live region; a change inside a dialog goes in the dialog's `notice`; one that closes it goes in the page's notice after it closes. Nothing is announced when the change failed.
+- Errors use `role="alert"`, next to what failed. A page's success notices show in `AlertDialog` (named by its message, focus on OK, closed with OK or Escape; focus moves asked for while it's open wait until it closes). Inside a `Dialog`, notices go in its `role="status"` element, which is always rendered (empty when there's nothing to say), since a live region added together with its text often isn't announced.
+- Every change the user makes is announced, including ones that keep a form or dialog open: adding, removing, reordering, writing, and saving. Lists announce through `OrderedList`'s own live region; a change inside a dialog goes in the dialog's `notice`; one that closes it goes in the page's `AlertDialog` after it closes. Nothing is announced when the change failed.
 - Don't rely on color alone: invalid fields also get the message, and "sent" uses a text tag.
 
 **Focus and keyboard**

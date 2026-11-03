@@ -6,6 +6,7 @@ import { expectNoA11yViolations } from '../../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../../test/stubApi'
 import DocumentRoute from './DocumentPage'
 import DocumentsPage from '../DocumentsPage'
+import { expectNotice } from '../../test/notice'
 
 const SAM: Header = {
   hidden: false,
@@ -120,7 +121,7 @@ describe('DocumentPage', () => {
     renderAt('/resumes/2')
     await openPreview()
     fireEvent.click(await screen.findByRole('button', { name: 'Copy the whole resume' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Copied the whole resume.')
+    await expectNotice('Copied the whole resume.')
     expect(writeText).toHaveBeenCalledWith(OUTPUT.text)
     fireEvent.click(screen.getByRole('button', { name: 'Copy Experience' }))
     expect(await screen.findByText('Copied Experience.')).toBeInTheDocument()
@@ -150,7 +151,7 @@ describe('DocumentPage', () => {
     await vi.waitFor(() => expect(tone).toHaveFocus())
     expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
     fireEvent.change(tone, { target: { value: '2' } })
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Tone saved.'))
+    await expectNotice('Tone saved.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/4')).toEqual({ name: 'Tech base', header_id: 1, tone_set_id: 2 })
     await expectNoA11yViolations()
   })
@@ -165,7 +166,7 @@ describe('DocumentPage', () => {
     // Read-only again, with the choice to edit or copy, and focus on "Edit this one".
     expect(screen.queryByLabelText('Tone')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Done editing. Your changes to this resume are saved.')
+    await expectNotice('Done editing. Your changes to this resume are saved.')
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit this one' })).toHaveFocus())
     await expectNoA11yViolations()
   })
@@ -188,18 +189,19 @@ describe('DocumentPage', () => {
     expect(undo).toHaveAttribute('aria-disabled', 'true')
     expect(redo).toHaveAttribute('aria-disabled', 'true')
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
-    await vi.waitFor(() => expect(undo).toHaveAttribute('aria-disabled', 'false'))
+    await expectNotice('Tone saved.')
+    expect(undo).toHaveAttribute('aria-disabled', 'false')
     await expectNoA11yViolations()
     undo.focus()
     fireEvent.click(undo)
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Undid a change. Nothing more to undo.'))
+    await expectNotice('Undid a change. Nothing more to undo.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/24', 1)).toMatchObject({ tone_set_id: null })
     expect(screen.getByLabelText('Tone')).toHaveValue('')
     // Focus stays on Undo, now with nothing left to undo, and Redo can bring it back.
     expect(undo).toHaveFocus()
     expect(undo).toHaveAttribute('aria-disabled', 'true')
     fireEvent.click(redo)
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Redid a change. Nothing more to redo.'))
+    await expectNotice('Redid a change. Nothing more to redo.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/24', 2)).toMatchObject({ tone_set_id: 2 })
     expect(screen.getByLabelText('Tone')).toHaveValue('2')
     expect(redo).toHaveAttribute('aria-disabled', 'true')
@@ -304,7 +306,7 @@ describe('DocumentPage', () => {
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: '\u0000new' } })
     fireEvent.change(screen.getByLabelText('New headline'), { target: { value: 'English Teacher' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save header' }))
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Header saved.'))
+    await expectNotice('Header saved.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/19/header')).toMatchObject({
       full_name: 'Sam Rivera',
       headline: 'English Teacher',
@@ -407,9 +409,7 @@ describe('DocumentPage', () => {
     fireEvent.change(name, { target: { value: 'Tech copy' } })
     fireEvent.click(screen.getByRole('button', { name: 'Make copy' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy Resume' })).toBeInTheDocument()
-    await vi.waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('Copied to a new base resume, "Tech copy".'),
-    )
+    await expectNotice('Copied to a new base resume, "Tech copy".')
     expect(sentBody(fetchMock, 'POST /api/resumes/8/copies')).toEqual({ name: 'Tech copy' })
   })
 
@@ -427,7 +427,7 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Resumes' })).toBeInTheDocument()
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Deleted "Acme resume".'))
+    await expectNotice('Deleted "Acme resume".')
   })
 
   it('keeps the confirm open when a delete fails', async () => {
@@ -476,7 +476,7 @@ describe('DocumentPage', () => {
     // Changed right away, before the greeting's save comes back.
     fireEvent.click(screen.getByRole('button', { name: 'Sign-off' }))
     fireEvent.change(screen.getByRole('combobox', { name: 'Sign-off' }), { target: { value: '' } })
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sign-off saved.'))
+    await expectNotice('Sign-off saved.')
     await expectNoA11yViolations()
     const saved = { name: 'General letter', header_id: 1, tone_set_id: null, signature_name: null }
     expect(sentBody(fetchMock, 'PUT /api/cover-letters/13')).toEqual({ ...saved, addressee: 'Ms. Lee', sign_off_id: 3 })
@@ -517,7 +517,7 @@ describe('DocumentPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New sign-off' }))
     fireEvent.change(screen.getByLabelText('New sign-off'), { target: { value: 'Warm regards' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add sign-off' }))
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added the new sign-off.'))
+    await expectNotice('Added the new sign-off.')
     expect(sentBody(fetchMock, 'POST /api/cover-letters/14/sign-off/written')).toEqual({ text: 'Warm regards' })
     await vi.waitFor(() => expect(screen.getByRole('combobox', { name: 'Sign-off' })).toHaveValue('9'))
     await expectNoA11yViolations()

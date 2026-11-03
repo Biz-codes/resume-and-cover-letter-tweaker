@@ -14,6 +14,7 @@ import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 export default function ToneSetsPage() {
   const [sets, setSets] = useState<ToneSet[] | null>(null)
@@ -85,7 +86,7 @@ export default function ToneSetsPage() {
         suggestion for it.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

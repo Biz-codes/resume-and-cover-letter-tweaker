@@ -16,6 +16,7 @@ import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import { offered } from '../shared/offered'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const EMPTY: ProjectFields = {
   project_title: '',
@@ -103,7 +104,7 @@ export default function ProjectsPage() {
         dates written differently) is its own entry, and versions share skills and bullets.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

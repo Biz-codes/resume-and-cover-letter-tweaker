@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import PostingRoute from './PostingPage'
+import { expectNotice } from '../test/notice'
 
 const blank = { location: null, linkedin_url: null, github_url: null, portfolio_url: null }
 const SAM = { header_id: 1, full_name: 'Sam Rivera', headline: 'Engineer', email: 'sam@example.com', phone: null, ...blank, used_by: [] }
@@ -85,7 +86,7 @@ describe('PostingPage', () => {
     renderPage({ notice: 'Saved the posting. Next, create a header.' })
     expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High Application' })).toBeInTheDocument()
     await vi.waitFor(() => expect(document.title).toBe('English Teacher at Lincoln High Application – Resume Tweaker'))
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Next, create a header.'))
+    await expectNotice('Next, create a header.')
     // The suggestion: the latest header, with the role title typed in as a new headline.
     expect(screen.getByLabelText('Name (required)')).toHaveValue('Sam Rivera')
     expect(screen.getByLabelText('New headline')).toHaveValue('English Teacher')
@@ -96,9 +97,7 @@ describe('PostingPage', () => {
     expect(screen.getByText('Resumes and cover letters can start once the posting has a header.')).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Use this header' }))
-    await vi.waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent("Saved the header. This posting's resumes and cover letters use it."),
-    )
+    await expectNotice("Saved the header. This posting's resumes and cover letters use it.")
     expect(sentBody(fetchMock, 'PUT /api/job-postings/9/header')).toEqual({
       full_name: 'Sam Rivera',
       headline: 'English Teacher',
@@ -200,7 +199,7 @@ describe('PostingPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Lead English Teacher at Lincoln High Application' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/job-postings/9')).toMatchObject({ role_title: 'Lead English Teacher' })
-    expect(screen.getByRole('status')).toHaveTextContent('Saved the posting.')
+    await expectNotice('Saved the posting.')
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit details' })).toHaveFocus())
   })
 
@@ -300,12 +299,12 @@ describe('PostingPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit tracking' }))
     fireEvent.change(screen.getByLabelText('Applied on'), { target: { value: '2026-10-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved the tracking details.'))
+    await expectNotice('Saved the tracking details.')
     expect(await screen.findByText('You applied to this posting, so its resumes and cover letters are a record of what you sent.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add interview' }))
     fireEvent.change(screen.getByLabelText('Date (required)'), { target: { value: '2026-10-05' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added the interview.'))
+    await expectNotice('Added the interview.')
     expect(screen.getByRole('button', { name: 'Edit interview on October 5, 2026' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })

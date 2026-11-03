@@ -7,6 +7,7 @@ import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import NarrativeContentPage from './NarrativeContentPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SENT = { kind: 'cover_letter' as const, id: 2, name: 'Acme letter', locked: true }
 const INTRO: NarrativeContent = {
@@ -83,7 +84,7 @@ describe('NarrativeContentPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'I build tools.' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved as a new excerpt')
+    await expectNotice('Saved as a new excerpt')
     expect(sentBody(fetchMock, 'PUT /api/narrative-content/10')).toEqual({
       content: 'I build tools.',
       section_ids: [1, 8],
@@ -105,7 +106,7 @@ describe('NarrativeContentPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'I teach.' } })
     fireEvent.click(within(form).getByText('Add excerpt'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "I teach.".')
+    await expectNotice('Added "I teach.".')
     expect(sentBody(fetchMock, 'POST /api/narrative-content')).toEqual({ content: 'I teach.', section_ids: [1, 9] })
   })
 
@@ -135,7 +136,7 @@ describe('NarrativeContentPage', () => {
     expect(within(form).queryByText(/sent version/)).not.toBeInTheDocument()
     fireEvent.click(within(form).getByRole('checkbox', { name: 'Outro' }))
     fireEvent.click(within(form).getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    await expectNotice('Saved.')
     expect(sentBody(fetchMock, 'PUT /api/narrative-content/11')).toEqual({
       content: 'Thank you for reading.',
       section_ids: [9],
@@ -167,7 +168,7 @@ describe('NarrativeContentPage', () => {
     })
     await expectNoA11yViolations()
     fireEvent.click(within(form).getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added a new version')
+    await expectNotice('Added a new version')
     expect(sentBody(fetchMock, 'POST /api/narrative-content/10/versions')).toEqual({ content: 'I build web tools.' })
   })
 
@@ -180,7 +181,7 @@ describe('NarrativeContentPage', () => {
     expect(confirm).toHaveTextContent('Used by: Acme letter')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`Deleted ${LABEL}.`)
+    await expectNotice(`Deleted ${LABEL}.`)
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Narrative content' })).toHaveFocus())
   })
 

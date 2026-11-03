@@ -8,6 +8,7 @@ import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ProjectsPage from './ProjectsPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const TWEAKER: Project = {
@@ -98,7 +99,7 @@ describe('ProjectsPage', () => {
     expect(within(form).getByLabelText('Project title (required)')).toHaveFocus()
     fireEvent.change(within(form).getByLabelText('Project title (required)'), { target: { value: 'Tweaker' } })
     fireEvent.click(within(form).getByText('Add project'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`Added "${LABEL}".`)
+    await expectNotice(`Added "${LABEL}".`)
     expect(sentBody(fetchMock, 'POST /api/projects')).toEqual({
       project_title: 'Tweaker',
       done_for: null,
@@ -118,7 +119,7 @@ describe('ProjectsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(title, { target: { value: 'Resume Tweaker' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`Everything that used "${LABEL}" still does`)
+    await expectNotice(`Everything that used "${LABEL}" still does`)
   })
 
   it('asks whether to apply a change to resumes in progress, as roles do', async () => {
@@ -135,7 +136,7 @@ describe('ProjectsPage', () => {
     fireEvent.click(within(choice).getByRole('radio', { name: 'Yes, change it for them too.' }))
     fireEvent.change(screen.getByLabelText(/Dates/), { target: { value: '2024' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    await expectNotice('Saved.')
     expect(sentBody(fetchMock, 'PUT /api/projects/4')).toMatchObject({ dates: '2024', apply_to_unsent: true })
   })
 
@@ -148,7 +149,7 @@ describe('ProjectsPage', () => {
     expect(within(form).getByLabelText(/Affiliation/)).toHaveValue('Freelance')
     fireEvent.change(within(form).getByLabelText(/Dates/), { target: { value: 'Fall 2024' } })
     fireEvent.click(within(form).getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`keep "${LABEL}" until you pick the new one`)
+    await expectNotice(`keep "${LABEL}" until you pick the new one`)
     expect(sentBody(fetchMock, 'POST /api/projects/4/versions')).toMatchObject({ dates: 'Fall 2024' })
   })
 

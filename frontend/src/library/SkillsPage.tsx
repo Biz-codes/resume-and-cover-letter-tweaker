@@ -16,6 +16,7 @@ import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import { offered } from '../shared/offered'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 export default function SkillsPage() {
   const [categories, setCategories] = useState<SkillCategory[] | null>(null)
@@ -111,7 +112,7 @@ export default function SkillsPage() {
         than one category, and every skill is in at least one ("Other" if nothing else).
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

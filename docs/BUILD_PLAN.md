@@ -118,9 +118,19 @@ Steps:
 ## After the item dialogs: status notices as alert dialogs
 Goal: the success notices that now show as text on the page (the `role="status"` line under each page's heading, such as "Saved the posting." or "Header saved.") show as alert dialogs instead, so they don't stay on the page.
 
-- [ ] **Start after the item dialogs above are done**, reusing their `Dialog`. Design the details with the user first: which notices become dialogs (every one, or only some), whether they close on their own or with an OK button, and whether errors change too.
+Decided with the user:
+- **Every page notice** becomes an alert dialog: the message and OK. The page's `role="status"` line goes away.
+- **It stays until closed,** with OK or Escape. It never closes on its own.
+- **Errors stay where they are,** next to the field or form that failed, which stays open to fix.
+- **Notices inside an item dialog stay there,** as its own notice line, since one dialog never opens inside another. A change that closes the item dialog shows its notice in an alert dialog once it's closed, as now.
+- **Lists keep their own announcements** (`OrderedList`'s live region): they aren't page notices.
 
-Accessibility to keep in mind (WCAG 2.2 AA): a modal `<dialog>` (or `role="alertdialog"`) with a name, focus moved into it when it opens and back to where it was (or to the next step, as the notices do now) when it closes, Escape to close, and nothing announced twice. Update "Messages" under "Accessibility" in [TECH_STACK.md](TECH_STACK.md), and the tests that check the status text.
+Accessibility (WCAG 2.2 AA): a modal `<dialog role="alertdialog">` named by its message, with focus on OK when it opens, so the message is read once (nothing else announces it). Tab stays on OK. When it closes, focus goes where the change would have sent it (the page heading after a delete, the row's View and Edit after a change from the tree), or back to where it was. A new notice while one is open replaces it and is read again.
+
+Steps:
+1. [x] **`AlertDialog`** in `frontend/src/shared/components/`, with its tests, and `useFocusLater` holding a focus move made while an alert dialog is open until it closes.
+2. [x] **Every page** shows its notice in `AlertDialog` instead of the status line, and the tests that checked the status text check the alert dialog and close it.
+3. [x] **Docs:** "Messages" under "Accessibility" in [TECH_STACK.md](TECH_STACK.md), the `/a11y` checklist, and anything else that mentions the page's status line, then `/a11y` over the whole front end.
 
 ## Phase 5: Job postings and AI
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.

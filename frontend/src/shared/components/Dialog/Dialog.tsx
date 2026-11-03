@@ -4,9 +4,9 @@
 // it opens and again when it shows another item (`showing`, or else its title, changes). When it closes,
 // focus goes back to what had it before it opened; a page that wants focus somewhere else (after
 // a delete, the page heading) moves it with useFocusLater, which runs after this. `headingId`
-// lets a page move focus back to the heading after removing something inside the dialog. The page's
-// own notices can't be reached behind the modal, so the dialog has its own (`notice`), always
-// rendered so it's announced when its text changes.
+// lets a page move focus back to the heading after removing something inside the dialog. A change that
+// keeps it open is said in its own notice (`notice`), not the page's AlertDialog, since one dialog
+// never opens inside another; it's always rendered so it's announced when its text changes.
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import styles from './Dialog.module.css'
 

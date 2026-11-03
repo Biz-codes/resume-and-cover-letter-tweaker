@@ -13,6 +13,7 @@ import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const isListed = (bullet: Bullet) => bullet.experience.length + bullet.projects.length + bullet.sections.length > 0
 
@@ -73,7 +74,7 @@ export default function BulletsPage() {
         Write new bullets on the Experience, Projects, or Sections page, where they're listed.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

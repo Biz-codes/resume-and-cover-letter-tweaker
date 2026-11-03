@@ -15,6 +15,7 @@ import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 type Group = 'resume' | 'letter' | 'unused'
 
@@ -110,7 +111,7 @@ export default function SectionsPage() {
         are only what the app suggests first.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

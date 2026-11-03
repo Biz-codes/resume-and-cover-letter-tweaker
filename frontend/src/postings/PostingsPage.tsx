@@ -9,6 +9,7 @@ import FieldsForm from '../shared/components/FieldsForm'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import type { ListState } from '../documents/DocumentsPage'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const NEW_POSTING_ID = 'new-posting'
 
@@ -49,8 +50,8 @@ export default function PostingsPage() {
     void load()
   }, [load])
 
-  // A notice sent from another page (a delete) goes into the live region after it's rendered,
-  // so screen readers announce it.
+  // A notice sent from another page (a delete) opens once the page has rendered and App has moved
+  // focus to its heading, so OK returns focus there.
   const sentNotice = (location.state as ListState | null)?.notice ?? null
   useEffect(() => {
     const timer = setTimeout(() => setNotice(sentNotice))
@@ -73,7 +74,7 @@ export default function PostingsPage() {
         Each application starts with its posting. Its resumes and cover letters use the posting&apos;s
         header, and are locked once you apply.
       </p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

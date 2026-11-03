@@ -9,6 +9,7 @@ import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ExperiencePage from './ExperiencePage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const SHIPPED = { bullet_id: 10, content: 'Shipped the checkout flow' }
@@ -117,7 +118,7 @@ describe('ExperiencePage', () => {
     fireEvent.change(within(form).getByLabelText('Organization (required)'), { target: { value: 'Self' } })
     await expectNoA11yViolations()
     fireEvent.click(within(form).getByText('Add role'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "Consultant, Self".')
+    await expectNotice('Added "Consultant, Self".')
     expect(sentBody(fetchMock, 'POST /api/experience')).toEqual({
       role_title: 'Consultant',
       organization: 'Self',
@@ -153,9 +154,7 @@ describe('ExperiencePage', () => {
     await expectNoA11yViolations()
     fireEvent.change(title, { target: { value: 'Lead Engineer' } })
     fireEvent.click(within(dialog).getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved as a new version, "Lead Engineer, Acme (2020 – 2022)". Everything that used "Engineer, Acme (2020 – 2022)" still does',
-    )
+    await expectNotice('Saved as a new version, "Lead Engineer, Acme (2020 – 2022)". Everything that used "Engineer, Acme (2020 – 2022)" still does',)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({
       role_title: 'Lead Engineer',
@@ -177,8 +176,8 @@ describe('ExperiencePage', () => {
     fireEvent.change(within(dialog).getByLabelText(/Dates/), { target: { value: '2020 – 2023' } })
     fireEvent.click(within(dialog).getByText('Save'))
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved.'))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await expectNotice('Saved.')
   })
 
   it('asks whether to apply a change to resumes in progress', async () => {
@@ -194,7 +193,7 @@ describe('ExperiencePage', () => {
     fireEvent.click(within(choice).getByRole('radio', { name: 'Yes, change it for them too.' }))
     fireEvent.change(screen.getByLabelText(/Dates/), { target: { value: '2020 – 2023' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Resumes and cover letters in progress use it now')
+    await expectNotice('Resumes and cover letters in progress use it now')
     expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({ dates: '2020 – 2023', apply_to_unsent: true })
   })
 
@@ -222,7 +221,7 @@ describe('ExperiencePage', () => {
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText('Title (required)'), { target: { value: 'Senior Engineer' } })
     fireEvent.click(within(form).getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent('keep "Engineer, Acme (2020 – 2022)" until you pick the new one')
+    await expectNotice('keep "Engineer, Acme (2020 – 2022)" until you pick the new one')
     expect(sentBody(fetchMock, 'POST /api/experience/4/versions')).toMatchObject({ role_title: 'Senior Engineer' })
   })
 
@@ -261,7 +260,7 @@ describe('ExperiencePage', () => {
     expect(confirm).toHaveTextContent('The bullets stay in the library.')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Engineer, Acme (2020 – 2022)".')
+    await expectNotice('Deleted "Engineer, Acme (2020 – 2022)".')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Experience' })).toHaveFocus())
   })
 

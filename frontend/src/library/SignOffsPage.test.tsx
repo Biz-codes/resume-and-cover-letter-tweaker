@@ -6,6 +6,7 @@ import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import SignOffsPage from './SignOffsPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SINCERELY: SignOff = {
   hidden: false,
@@ -52,7 +53,7 @@ describe('SignOffsPage', () => {
     render(<SignOffsPage />)
     fireEvent.change(await screen.findByLabelText('New sign-off'), { target: { value: 'Thanks' } })
     fireEvent.click(screen.getByText('Add sign-off'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "Thanks".')
+    await expectNotice('Added "Thanks".')
     expect(sentBody(fetchMock, 'POST /api/sign-offs')).toEqual({ text: 'Thanks' })
   })
 
@@ -67,9 +68,7 @@ describe('SignOffsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Sincerely yours' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved as a new sign-off, "Sincerely yours". Sent cover letters keep "Sincerely".',
-    )
+    await expectNotice('Saved as a new sign-off, "Sincerely yours". Sent cover letters keep "Sincerely".',)
     expect(sentBody(fetchMock, 'PUT /api/sign-offs/1')).toEqual({ text: 'Sincerely yours' })
   })
 
@@ -107,9 +106,7 @@ describe('SignOffsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Sincerely yours' } })
     fireEvent.click(screen.getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Added "Sincerely yours". Cover letters keep "Sincerely" until you pick the new one.',
-    )
+    await expectNotice('Added "Sincerely yours". Cover letters keep "Sincerely" until you pick the new one.',)
     expect(sentBody(fetchMock, 'POST /api/sign-offs/1/versions')).toEqual({ text: 'Sincerely yours' })
   })
 
@@ -122,7 +119,7 @@ describe('SignOffsPage', () => {
     expect(confirm).toHaveTextContent('They keep going with no closing')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Sincerely".')
+    await expectNotice('Deleted "Sincerely".')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Sign-offs' })).toHaveFocus())
   })
 
@@ -173,7 +170,7 @@ describe('SignOffsPage', () => {
     expect(screen.getByRole('heading', { level: 4, name: 'Best regards' })).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Unhide "Best regards"' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Unhid "Best regards".')
+    await expectNotice('Unhid "Best regards".')
     expect(sentBody(fetchMock, 'PUT /api/sign-offs/4/hidden')).toEqual({ hidden: false })
     expect(screen.queryByRole('button', { name: 'Hidden (1)' })).not.toBeInTheDocument()
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'View and Edit "Best regards"' })).toHaveFocus())

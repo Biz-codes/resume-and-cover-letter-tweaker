@@ -35,6 +35,7 @@ import { usePageTitle } from '../../shared/hooks/usePageTitle'
 import type { ListState } from '../DocumentsPage'
 import styles from './DocumentPage.module.css'
 import { offered } from '../../shared/offered'
+import AlertDialog from '../../shared/components/Dialog/AlertDialog'
 
 // Base versions the user chose to edit in place since the app was opened, so the warning
 // isn't repeated ("Warn before editing a base resume / cover letter").
@@ -111,8 +112,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     void load()
   }, [load])
 
-  // A notice sent with the move here (a new or copied version) goes into the live region after
-  // it's rendered, so screen readers announce it.
+  // A notice sent with the move here (a new or copied version) opens once the page has rendered and
+  // App has moved focus to its heading, so OK returns focus there.
   const sentNotice = (location.state as ListState | null)?.notice ?? null
   useEffect(() => {
     const timer = setTimeout(() => setNotice(sentNotice))
@@ -314,7 +315,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
         {title}
       </h2>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

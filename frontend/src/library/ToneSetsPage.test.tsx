@@ -5,6 +5,7 @@ import { expectNoA11yViolations } from '../test/axe'
 import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ToneSetsPage from './ToneSetsPage'
+import { expectNotice } from '../test/notice'
 
 const TECH: ToneSet = {
   hidden: false,
@@ -59,7 +60,7 @@ describe('ToneSetsPage', () => {
     render(<ToneSetsPage />)
     fireEvent.change(await screen.findByLabelText('New tone name'), { target: { value: 'Writing' } })
     fireEvent.click(screen.getByText('Add tone'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "Writing".')
+    await expectNotice('Added "Writing".')
     const teaching = await openItem('Teaching')
     fireEvent.change(within(teaching).getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
     fireEvent.click(within(teaching).getByText('Add rule'))
@@ -126,7 +127,7 @@ describe('ToneSetsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Engineering' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    await expectNotice('Saved.')
     expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toEqual({ name: 'Engineering' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -141,7 +142,7 @@ describe('ToneSetsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Tech, short' } })
     fireEvent.click(screen.getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "Tech, short", with a copy of each rule.')
+    await expectNotice('Added "Tech, short", with a copy of each rule.')
     expect(sentBody(fetchMock, 'POST /api/tone-sets/3/versions')).toEqual({ name: 'Tech, short' })
   })
 
@@ -161,7 +162,7 @@ describe('ToneSetsPage', () => {
     expect(await within(confirm).findByRole('alert')).toHaveTextContent('Nothing was changed.')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Tech" and its rules.')
+    await expectNotice('Deleted "Tech" and its rules.')
   })
 
   it('says it is loading', async () => {

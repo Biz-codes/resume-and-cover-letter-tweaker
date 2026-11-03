@@ -6,6 +6,7 @@ import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const SHIPPED: Bullet = {
@@ -60,7 +61,7 @@ describe('BulletsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Shipped it' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved as a new bullet')
+    await expectNotice('Saved as a new bullet')
     expect(sentBody(fetchMock, 'PUT /api/bullet-points/10')).toEqual({ content: 'Shipped it' })
   })
 
@@ -75,7 +76,7 @@ describe('BulletsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Shipped the checkout flow' } })
     fireEvent.click(screen.getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added a new version, listed right after the original.')
+    await expectNotice('Added a new version, listed right after the original.')
     expect(sentBody(fetchMock, 'POST /api/bullet-points/10/versions')).toEqual({ content: 'Shipped the checkout flow' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -89,7 +90,7 @@ describe('BulletsPage', () => {
     expect(confirm).toHaveTextContent('from every role, project, and section')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent(`Deleted ${LABEL}.`)
+    await expectNotice(`Deleted ${LABEL}.`)
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Bullet points' })).toHaveFocus())
   })
 

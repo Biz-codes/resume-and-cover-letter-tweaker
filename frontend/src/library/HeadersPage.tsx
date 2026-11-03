@@ -14,6 +14,7 @@ import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 // The New header button, where focus returns when its form closes.
 const NEW_HEADER_ID = 'new-header'
@@ -104,7 +105,7 @@ export default function HeadersPage() {
         The name, headline, and contact details at the top of a resume or cover letter.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

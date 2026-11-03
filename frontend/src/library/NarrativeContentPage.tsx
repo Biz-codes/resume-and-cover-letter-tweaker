@@ -20,6 +20,7 @@ import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import { offered } from '../shared/offered'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 // The New excerpt button, where focus returns when its form closes.
 const NEW_EXCERPT_ID = 'new-excerpt'
@@ -113,7 +114,7 @@ export default function NarrativeContentPage() {
         you plan to use them.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

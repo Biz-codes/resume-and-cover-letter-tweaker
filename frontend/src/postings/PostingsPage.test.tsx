@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import PostingsPage from './PostingsPage'
+import { expectNotice } from '../test/notice'
 
 const posting = (id: number, organization: string, extra = {}) => ({
   job_posting_id: id,
@@ -100,7 +101,7 @@ describe('PostingsPage', () => {
     stub({}, [])
     renderPage({ notice: 'Deleted "Engineer at Acme".' })
     expect(await screen.findByText('No job postings yet.')).toBeInTheDocument()
-    await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Deleted "Engineer at Acme".'))
+    await expectNotice('Deleted "Engineer at Acme".')
     await expectNoA11yViolations()
   })
 

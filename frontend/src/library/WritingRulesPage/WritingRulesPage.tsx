@@ -9,6 +9,7 @@ import NameForm from '../../shared/components/NameForm/NameForm'
 import { PAGE_HEADING_ID, useFocusLater } from '../../shared/hooks/useFocusLater'
 import { usePageTitle } from '../../shared/hooks/usePageTitle'
 import styles from './WritingRulesPage.module.css'
+import AlertDialog from '../../shared/components/Dialog/AlertDialog'
 
 const GROUPS: { kind: RuleKind; heading: string; note: string; newLabel: string; submitLabel: string }[] = [
   {
@@ -184,7 +185,7 @@ export default function WritingRulesPage() {
         Filler and AI-sounding phrasing the app keeps out of every suggestion. Turn a rule off to keep it without applying
         it.
       </p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

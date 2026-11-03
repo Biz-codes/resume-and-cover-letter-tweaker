@@ -16,6 +16,7 @@ import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import { offered } from '../shared/offered'
+import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const EMPTY: ExperienceFields = {
   role_title: '',
@@ -102,7 +103,7 @@ export default function ExperiencePage() {
         a role (a new title, or dates written differently) is its own entry, and versions share bullets.
       </p>
       <p className="muted">{SORT_NOTE}</p>
-      <p role="status">{notice}</p>
+      <AlertDialog message={notice} onClose={() => setNotice(null)} />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

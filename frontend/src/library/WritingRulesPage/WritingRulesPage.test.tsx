@@ -4,6 +4,7 @@ import type { WritingRule } from '../writingRules'
 import { expectNoA11yViolations } from '../../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../../test/stubApi'
 import WritingRulesPage from './WritingRulesPage'
+import { expectNotice } from '../../test/notice'
 
 const LEVERAGE: WritingRule = { writing_rule_id: 1, kind: 'term', rule_text: 'leverage', active: true }
 const SYNERGY: WritingRule = { writing_rule_id: 2, kind: 'term', rule_text: 'synergy', active: false }
@@ -42,7 +43,7 @@ describe('WritingRulesPage', () => {
     render(<WritingRulesPage />)
     fireEvent.change(await screen.findByLabelText('New word or phrase'), { target: { value: 'utilize' } })
     fireEvent.click(screen.getByText('Add word or phrase'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Added "utilize".')
+    await expectNotice('Added "utilize".')
     expect(sentBody(fetchMock, 'POST /api/writing-rules')).toEqual({ kind: 'term', rule_text: 'utilize', active: true })
   })
 
@@ -52,7 +53,7 @@ describe('WritingRulesPage', () => {
     const button = await screen.findByRole('button', { name: 'Turn off "leverage"' })
     button.focus()
     fireEvent.click(button)
-    expect(await screen.findByRole('status')).toHaveTextContent('Turned off "leverage".')
+    await expectNotice('Turned off "leverage".')
     expect(sentBody(fetchMock, 'PUT /api/writing-rules/1')).toMatchObject({ active: false })
     expect(button).toHaveFocus()
   })
@@ -78,7 +79,7 @@ describe('WritingRulesPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'lists of three used for rhythm' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
+    await expectNotice('Saved.')
     expect(sentBody(fetchMock, 'PUT /api/writing-rules/3')).toMatchObject({ rule_text: 'lists of three used for rhythm' })
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit "lists of three for rhythm"' })).toHaveFocus(),
@@ -93,7 +94,7 @@ describe('WritingRulesPage', () => {
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Deleted "leverage".')
+    await expectNotice('Deleted "leverage".')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Writing rules' })).toHaveFocus())
   })
 

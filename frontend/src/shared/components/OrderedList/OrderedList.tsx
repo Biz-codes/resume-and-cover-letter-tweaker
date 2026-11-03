@@ -470,7 +470,7 @@ export default function OrderedList<K extends ListKey = number>({
           </button>
         </div>
       )}
-      {/* A plain live region rather than role="status", so the page's notice stays its only status. */}
+      {/* A plain live region rather than role="status", so a dialog's notice stays its only status. */}
       <p aria-live="polite" className="visually-hidden">
         {announcement}
       </p>

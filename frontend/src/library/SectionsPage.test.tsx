@@ -9,6 +9,7 @@ import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
 import { unsent } from '../test/unsent'
+import { expectNotice } from '../test/notice'
 
 const SKILLS: Section = {
   hidden: false,
@@ -157,9 +158,7 @@ describe('SectionsPage', () => {
     expect(field).toHaveFocus()
     fireEvent.change(field, { target: { value: 'Technical Skills' } })
     fireEvent.click(screen.getByText('Add version'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Added "Technical Skills", with the same lists. Resumes and cover letters keep "Skills" until you pick the new one.',
-    )
+    await expectNotice('Added "Technical Skills", with the same lists. Resumes and cover letters keep "Skills" until you pick the new one.',)
     expect(sentBody(fetchMock, 'POST /api/sections/2/versions')).toEqual({ title: 'Technical Skills' })
   })
 
@@ -219,9 +218,7 @@ describe('SectionsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Section title'), { target: { value: 'Consulting' } })
     fireEvent.click(screen.getByText('Save'))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved as a new section, "Consulting". Sent versions keep "Freelance".',
-    )
+    await expectNotice('Saved as a new section, "Consulting". Sent versions keep "Freelance".',)
   })
 
   it('highlights the title when it duplicates another section', async () => {
@@ -247,7 +244,7 @@ describe('SectionsPage', () => {
     expect(confirm).toHaveTextContent('Acme resume')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Freelance".')
+    await expectNotice('Deleted "Freelance".')
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Sections' })).toHaveFocus())
   })
 

@@ -31,3 +31,12 @@
     padding: 12px 12px 16px;
   }
 }
+
+/* AlertDialog: a short message and OK. */
+.alert {
+  width: min(100% - 32px, 480px);
+}
+
+.alert p {
+  margin: 0;
+}
