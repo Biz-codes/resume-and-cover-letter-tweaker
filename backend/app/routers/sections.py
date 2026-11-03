@@ -16,6 +16,7 @@ from app.db import DbSession
 from app.defaults import SECTION_LISTS
 from app.documents import LIBRARY
 from app.errors import AppError, ErrorCode
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, check_unique_name, copy_children, set_children
 from app.models import (
     OTHER_CATEGORY_ID,
@@ -61,6 +62,7 @@ class CategoryRef(BaseModel):
 
 class SectionOut(BaseModel):
     id: int
+    hidden: bool
     title: str
     built_in: bool
     narrative_content: list[NarrativeRef]
@@ -155,7 +157,9 @@ def to_out(db: Session, sections: list[Section], account_id: int) -> list[Sectio
     bullets = bullet_refs(db, SectionBulletPoint, "section_id", ids, account_id)
     education = education_refs(db, SectionEducation, "section_id", ids, account_id)
     used_by = uses(db, SECTION_LINKS, ids)
-    return [SectionOut(id=section.id, title=section.title, built_in=section.account_id is None,
+    return [SectionOut(id=section.id,
+                       hidden=section.hidden, title=section.title,
+                       built_in=section.account_id is None,
                        narrative_content=narrative[section.id],
                        skill_categories=categories[section.id],
                        experience=experience[section.id], projects=projects[section.id],
@@ -297,9 +301,20 @@ def set_section_education(section_id: int, body: EducationList, db: DbSession,
                      body.education_ids, "education_ids")
 
 
+@router.put("/{section_id}/hidden")
+def set_section_hidden(section_id: int, body: HiddenIn, db: DbSession,
+                       account_id: AccountId) -> SectionOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_section(db, section_id, account_id)
+    protect_built_in(item, "hidden")
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item, account_id)
+
+
 @router.delete("/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_section(section_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it from every resume and cover letter; the items it listed stay."""
     section = get_section(db, section_id, account_id)
     protect_built_in(section, "deleted")
+    refuse_delete_if_sent(uses(db, SECTION_LINKS, [section_id])[section_id], "section")
     db.delete(section)

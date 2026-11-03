@@ -7,21 +7,24 @@ import { expectNoA11yViolations } from '../test/axe'
 import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ProjectsPage from './ProjectsPage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const TWEAKER: Project = {
+  hidden: false,
   project_id: 4,
   created_at: '2026-10-01T09:00:00',
   project_title: 'Tweaker',
   done_for: 'Freelance',
   url: 'https://example.com/tweaker',
   dates: 'Spring 2024',
-  skills: [{ skill_id: 20, skill_name: 'Python' }],
+  skills: [{ hidden: false, skill_id: 20, skill_name: 'Python' }],
   bullets: [{ bullet_id: 10, content: 'Built the API' }],
   sections: [{ id: 4, title: 'Projects' }],
   used_by: [SENT],
 }
 const skill = (id: number, name: string): Skill => ({
+  hidden: false,
   skill_id: id,
   skill_name: name,
   categories: [],
@@ -29,7 +32,7 @@ const skill = (id: number, name: string): Skill => ({
   used_by: [],
 })
 const SECTIONS: Section[] = [
-  { id: 4, title: 'Projects', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 4, title: 'Projects', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}, projects = [TWEAKER]) {
@@ -149,7 +152,7 @@ describe('ProjectsPage', () => {
   })
 
   it('lists what a delete affects', async () => {
-    stub()
+    stub({}, [unsent(TWEAKER)])
     render(<ProjectsPage />)
     const dialog = await openItem('Tweaker')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))

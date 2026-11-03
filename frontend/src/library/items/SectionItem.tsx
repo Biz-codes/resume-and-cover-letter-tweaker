@@ -26,6 +26,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { educationLabels, projectLabels, roleLabels } from './itemFields'
 import { useItemData } from './useItemData'
+import { offered } from '../../shared/offered'
 
 const LOCKED_NOTE = 'A sent version uses this section, so the new title is saved as a new section. The sent version keeps the old one.'
 
@@ -97,7 +98,7 @@ export default function SectionItem({ id }: { id: number }) {
   }
   // "Other" isn't listed under sections; it's offered wherever skills are added.
   const categoryChoices = categories
-    .filter((category) => !category.built_in)
+    .filter((category) => !category.built_in && !category.hidden)
     .map((category) => ({ id: category.category_id, name: category.category_name }))
 
   async function refresh() {
@@ -137,7 +138,7 @@ export default function SectionItem({ id }: { id: number }) {
         <OrderedList
           label={`${section.title} narrative content`}
           items={section.narrative_content.map(narrativeItem)}
-          choices={narrative.map(narrativeItem)}
+          choices={offered(narrative).map(narrativeItem)}
           emptyText="None."
           onOpen={(item) => host.open({ kind: 'narrative', id: item.id, title: shortBullet(item.name) })}
           onChange={async (ids) => {
@@ -181,7 +182,7 @@ export default function SectionItem({ id }: { id: number }) {
             id: role.experience_id,
             name: named(roles, (item) => item.experience_id, roleLabel, role, role.experience_id, experienceLabel),
           }))}
-          choices={roles.map((role) => ({ id: role.experience_id, name: roleLabel(role) }))}
+          choices={offered(roles).map((role) => ({ id: role.experience_id, name: roleLabel(role) }))}
           emptyText="None."
           onOpen={(item) => host.open({ kind: 'experience', id: item.id, title: item.name })}
           onChange={async (ids) => {
@@ -199,7 +200,7 @@ export default function SectionItem({ id }: { id: number }) {
             id: project.project_id,
             name: named(projects, (item) => item.project_id, projectLabelOf, project, project.project_id, projectLabel),
           }))}
-          choices={projects.map((project) => ({ id: project.project_id, name: projectLabelOf(project) }))}
+          choices={offered(projects).map((project) => ({ id: project.project_id, name: projectLabelOf(project) }))}
           emptyText="None."
           onOpen={(item) => host.open({ kind: 'project', id: item.id, title: item.name })}
           onChange={async (ids) => {
@@ -213,7 +214,7 @@ export default function SectionItem({ id }: { id: number }) {
       <BulletList
         owner={section.title}
         bullets={section.bullets}
-        allBullets={bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
+        allBullets={offered(bullets).map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
         onChange={async (ids) => {
           await sectionsApi.setBullets(section.id, ids)
           await refresh()
@@ -233,7 +234,7 @@ export default function SectionItem({ id }: { id: number }) {
             id: entry.education_id,
             name: named(education, (item) => item.education_id, educationLabelOf, entry, entry.education_id, educationLabel),
           }))}
-          choices={education.map((entry) => ({ id: entry.education_id, name: educationLabelOf(entry) }))}
+          choices={offered(education).map((entry) => ({ id: entry.education_id, name: educationLabelOf(entry) }))}
           emptyText="None."
           onOpen={(item) => host.open({ kind: 'education', id: item.id, title: item.name })}
           onChange={async (ids) => {
@@ -249,6 +250,12 @@ export default function SectionItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={section.hidden}
+      usedBySent={anyLocked(section.used_by)}
+      onSetHidden={section.built_in ? undefined : async (next) => {
+        await sectionsApi.setHidden(section.id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         !section.built_in && (
           <NameForm

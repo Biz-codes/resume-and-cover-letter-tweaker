@@ -10,6 +10,8 @@ export interface EducationFields {
 }
 
 export interface Education extends EducationFields {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   education_id: number
   // When it was added, which tells versions apart in lists (labels.ts).
   created_at: string
@@ -31,5 +33,6 @@ export const educationApi = {
   // When a sent version uses the entry, the change is saved as a new entry with a new id.
   update: (id: number, fields: EducationFields) => api.put<Education>(`/education/${id}`, fields),
   addVersion: (id: number, fields: EducationFields) => api.post<Education>(`/education/${id}/versions`, fields),
+  setHidden: (id: number, hidden: boolean) => api.put<Education>(`/education/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/education/${id}`),
 }

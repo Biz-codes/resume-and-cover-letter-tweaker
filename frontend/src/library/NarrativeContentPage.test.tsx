@@ -6,9 +6,11 @@ import { expectNoA11yViolations } from '../test/axe'
 import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import NarrativeContentPage from './NarrativeContentPage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'cover_letter' as const, id: 2, name: 'Acme letter', locked: true }
 const INTRO: NarrativeContent = {
+  hidden: false,
   content_id: 10,
   content: 'I build tools that help teachers spend more time with students.',
   sections: [
@@ -22,6 +24,7 @@ const LABEL = '"I build tools that help teachers…"'
 
 function section(id: number, title: string): Section {
   return {
+    hidden: false,
     id,
     title,
     built_in: id === 1,
@@ -169,7 +172,7 @@ describe('NarrativeContentPage', () => {
   })
 
   it('lists what a delete affects, then deletes', async () => {
-    stub({ 'DELETE /api/narrative-content/10': [{ status: 204 }] })
+    stub({ 'DELETE /api/narrative-content/10': [{ status: 204 }] }, [unsent(INTRO), LOOSE])
     render(<NarrativeContentPage />)
     fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })

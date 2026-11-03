@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, check_ids, copy_children, list_beside, set_children
 from app.models import (
     EXPERIENCE_SECTION_ID,
@@ -58,6 +59,7 @@ class ExperienceChange(ExperienceIn):
 
 class ExperienceOut(ExperienceIn):
     experience_id: int
+    hidden: bool
     # When it was added, which tells versions apart in lists when all else they show matches.
     created_at: datetime
     bullets: list[BulletRef]
@@ -77,7 +79,7 @@ def to_out(db: Session, roles: list[Experience], account_id: int) -> list[Experi
     bullets = bullet_refs(db, ExperienceBulletPoint, "experience_id", ids, account_id)
     sections = section_refs(db, SectionExperience, "experience_id", ids)
     used_by = uses(db, EXPERIENCE_LINKS, ids)
-    return [ExperienceOut(experience_id=experience.experience_id,
+    return [ExperienceOut(experience_id=experience.experience_id, hidden=experience.hidden,
                           created_at=experience.created_at,
                           bullets=bullets[experience.experience_id],
                           sections=sections[experience.experience_id],
@@ -189,8 +191,19 @@ def set_bullets(experience_id: int, body: BulletList, db: DbSession,
     return one_out(db, experience, account_id)
 
 
+@router.put("/{experience_id}/hidden")
+def set_experience_hidden(experience_id: int, body: HiddenIn, db: DbSession,
+                          account_id: AccountId) -> ExperienceOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, Experience, experience_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item, account_id)
+
+
 @router.delete("/{experience_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_experience(experience_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it, and the bullets under it, from every resume and cover letter. The
     bullets stay in the library."""
-    db.delete(get_owned(db, Experience, experience_id, account_id))
+    item = get_owned(db, Experience, experience_id, account_id)
+    refuse_delete_if_sent(uses(db, EXPERIENCE_LINKS, [experience_id])[experience_id], "role")
+    db.delete(item)

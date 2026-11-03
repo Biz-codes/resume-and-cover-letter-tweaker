@@ -53,6 +53,11 @@ def created_at() -> Mapped[datetime | None]:
     return mapped_column(TIMESTAMP, server_default=func.now())
 
 
+def hidden() -> Mapped[bool]:
+    # Set aside: kept off every new choice, but kept wherever it's already used.
+    return mapped_column(Boolean, server_default=text("FALSE"))
+
+
 def updated_at() -> Mapped[datetime | None]:
     # Kept current by a database trigger on every update.
     return mapped_column(TIMESTAMP, server_default=func.now())
@@ -87,6 +92,7 @@ class Header(Base):
     linkedin_url: Mapped[str | None] = mapped_column(Text)
     github_url: Mapped[str | None] = mapped_column(Text)
     portfolio_url: Mapped[str | None] = mapped_column(Text)
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -175,6 +181,7 @@ class Section(Base):
     # Empty for the built-in sections.
     account_id: Mapped[int | None] = mapped_column(fk("account.account_id"))
     title: Mapped[str] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -185,6 +192,7 @@ class NarrativeContent(Base):
     content_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     content: Mapped[str] = mapped_column(Text)
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -196,6 +204,7 @@ class SkillCategory(Base):
     # Empty for the built-in "Other" category.
     account_id: Mapped[int | None] = mapped_column(fk("account.account_id"))
     category_name: Mapped[str] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -206,6 +215,7 @@ class Skill(Base):
     skill_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     skill_name: Mapped[str] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -219,6 +229,7 @@ class Experience(Base):
     organization: Mapped[str] = mapped_column(String(100))
     location: Mapped[str | None] = mapped_column(String(100))
     dates: Mapped[str | None] = mapped_column(String(50))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -232,6 +243,7 @@ class Project(Base):
     done_for: Mapped[str | None] = mapped_column(String(100))
     url: Mapped[str | None] = mapped_column(Text)
     dates: Mapped[str | None] = mapped_column(String(50))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -242,6 +254,7 @@ class BulletPoint(Base):
     bullet_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     content: Mapped[str] = mapped_column(Text)
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -255,6 +268,7 @@ class Education(Base):
     institution: Mapped[str] = mapped_column(String(100))
     details: Mapped[str | None] = mapped_column(Text)
     graduation: Mapped[str | None] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -277,6 +291,7 @@ class ToneSet(Base):
     tone_set_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     name: Mapped[str] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -298,6 +313,7 @@ class SignOff(Base):
     sign_off_id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     text: Mapped[str] = mapped_column(String(100))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

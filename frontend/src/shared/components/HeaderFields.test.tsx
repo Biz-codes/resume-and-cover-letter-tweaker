@@ -7,6 +7,7 @@ import HeaderFields from './HeaderFields'
 
 const blank = { location: null, linkedin_url: null, github_url: null, portfolio_url: null, used_by: [] }
 const TECH: Header = {
+  hidden: false,
   header_id: 1,
   created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',

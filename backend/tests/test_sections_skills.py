@@ -322,7 +322,7 @@ def test_delete_category_moves_skills_and_selections_to_other(client: TestClient
 def test_delete_category_creates_other_at_its_position(client: TestClient, db: Session,
                                                        account_id: int):
     doomed = category(db, account_id, "Back End", ["Go"])
-    doc = resume(db, account_id, "Sent", sent=True)
+    doc = resume(db, account_id, "Draft", sent=False)
     show_skills(db, doc, doomed, ["Go"], position=3)
     client.delete(f"/api/skill-categories/{doomed.category_id}")
     moved = db.scalars(select(ResumeSkillCategory)).one()

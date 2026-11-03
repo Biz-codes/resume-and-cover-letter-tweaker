@@ -7,6 +7,7 @@ import { stubApi } from '../../test/stubApi'
 import ExperienceItem from './ExperienceItem'
 
 const ROLE: Experience = {
+  hidden: false,
   experience_id: 4,
   created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',

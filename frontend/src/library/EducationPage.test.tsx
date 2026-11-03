@@ -6,9 +6,11 @@ import { expectNoA11yViolations } from '../test/axe'
 import { findCard, loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import EducationPage from './EducationPage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const DEGREE: Education = {
+  hidden: false,
   education_id: 7,
   created_at: '2026-10-01T09:00:00',
   degree: 'B.A. in English',
@@ -29,8 +31,8 @@ const LOOSE: Education = {
 }
 const LABEL = 'B.A. in English, State University (May 2015)'
 const SECTIONS: Section[] = [
-  { id: 5, title: 'Education', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
-  { id: 9, title: 'Training', built_in: false, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 5, title: 'Education', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 9, title: 'Training', built_in: false, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}, entries = [DEGREE, LOOSE]) {
@@ -126,12 +128,11 @@ describe('EducationPage', () => {
   })
 
   it('lists what a delete affects, then deletes', async () => {
-    stub({ 'DELETE /api/education/7': [{ status: 204 }] })
+    stub({ 'DELETE /api/education/7': [{ status: 204 }] }, [unsent(DEGREE), LOOSE])
     render(<EducationPage />)
     fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete "${LABEL}"?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
-    expect(confirm).toHaveTextContent('A sent version uses it')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent(`Deleted "${LABEL}".`)

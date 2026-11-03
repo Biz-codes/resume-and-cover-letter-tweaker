@@ -11,8 +11,10 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
 
 type Group = 'resume' | 'letter' | 'unused'
 
@@ -58,12 +60,45 @@ export default function SectionsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(title: string) {
     await sectionsApi.create(title)
     await load()
     setNotice(`Added "${title.trim()}".`)
   }
+
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(section: Section, group: Group, hidden = false) {
+    return (
+      <LibraryCard
+        key={section.id}
+        title={section.title}
+        tags={
+          <>
+            {section.built_in && <span className="tag">built in</span>}
+            {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
+              <span className="tag">also a cover letter label</span>
+            )}
+          </>
+        }
+        editId={editId('section', section.id)}
+        editLabel={`View and Edit "${section.title}"`}
+        onEdit={() => dialogs.open({ kind: 'section', id: section.id, title: section.title })}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={section.title}
+              onUnhide={() => unhide('section', section.id, section.title, () => sectionsApi.setHidden(section.id, false))}
+            />
+          )
+        }
+      />
+    )
+  }
+
+  const all = sortByName(sections ?? [], (section) => section.title)
+  const hiddenOnes = all.filter((section) => section.hidden)
 
   return (
     <section>
@@ -90,35 +125,17 @@ export default function SectionsPage() {
 
       {sections &&
         GROUPS.map(({ group, heading, note }) => {
-          const members = sortByName(
-            sections.filter((section) => groupOf(section) === group),
-            (section) => section.title,
-          )
+          const members = all.filter((section) => !section.hidden && groupOf(section) === group)
           if (members.length === 0) return null
           return (
             <div key={group} className="section-group">
               <h3>{heading}</h3>
               <p className="muted">{note}</p>
-              {members.map((section) => (
-                <LibraryCard
-                  key={section.id}
-                  title={section.title}
-                  tags={
-                    <>
-                      {section.built_in && <span className="tag">built in</span>}
-                      {group === 'resume' && section.used_by.some((use) => use.kind === 'cover_letter') && (
-                        <span className="tag">also a cover letter label</span>
-                      )}
-                    </>
-                  }
-                  editId={editId('section', section.id)}
-                  editLabel={`View and Edit "${section.title}"`}
-                  onEdit={() => dialogs.open({ kind: 'section', id: section.id, title: section.title })}
-                />
-              ))}
+              {members.map((section) => card(section, group))}
             </div>
           )
         })}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((section) => card(section, groupOf(section), true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

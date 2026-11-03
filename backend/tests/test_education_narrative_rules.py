@@ -384,11 +384,11 @@ def test_delete_tone_set_deletes_its_rules_and_keeps_resumes(client: TestClient,
     tone_set = add(db, ToneSet(account_id=account_id, name="Tech"))
     rule_id = add(db, ToneRule(tone_set_id=tone_set.tone_set_id, rule_text="Lead with tools.",
                                position=1)).tone_rule_id
-    doc = resume(db, account_id, "Sent", sent=True)
+    doc = resume(db, account_id, "Draft", sent=False)
     doc.tone_set_id = tone_set.tone_set_id
     db.flush()
     used_by = client.get(f"/api/tone-sets/{tone_set.tone_set_id}").json()["used_by"]
-    assert used_by == [{"kind": "resume", "id": doc.resume_id, "name": "Sent", "locked": True}]
+    assert used_by == [{"kind": "resume", "id": doc.resume_id, "name": "Draft", "locked": False}]
     assert client.delete(f"/api/tone-sets/{tone_set.tone_set_id}").status_code == 204
     db.expire_all()
     assert db.scalar(select(ToneRule).where(ToneRule.tone_rule_id == rule_id)) is None

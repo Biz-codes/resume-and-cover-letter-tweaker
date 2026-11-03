@@ -15,8 +15,11 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import { EXCERPT_FIELDS, type ExcerptFields } from './items/itemFields'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
+import { offered } from '../shared/offered'
 
 // The New excerpt button, where focus returns when its form closes.
 const NEW_EXCERPT_ID = 'new-excerpt'
@@ -49,6 +52,7 @@ export default function NarrativeContentPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create({ content }: ExcerptFields) {
     const excerpt = await narrativeApi.create(content, chosen)
@@ -61,13 +65,14 @@ export default function NarrativeContentPage() {
   const sectionPicker = (
     <Checklist
       legend="Sections that list it"
-      options={sections.map((section) => ({ id: section.id, name: section.title }))}
+      options={offered(sections).map((section) => ({ id: section.id, name: section.title }))}
       selected={chosen}
       onChange={setChosen}
     />
   )
 
-  function card(excerpt: NarrativeContent) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(excerpt: NarrativeContent, hidden = false) {
     const title = shortBullet(excerpt.content)
     return (
       <LibraryCard
@@ -76,6 +81,7 @@ export default function NarrativeContentPage() {
         titleClassName="bullet-text"
         editId={editId('narrative', excerpt.content_id)}
         editLabel={`View and Edit "${title}"`}
+        actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('narrative', excerpt.content_id, title, () => narrativeApi.setHidden(excerpt.content_id, false))} />}
         onEdit={() => {
           setAdding(false)
           dialogs.open({ kind: 'narrative', id: excerpt.content_id, title })
@@ -84,7 +90,9 @@ export default function NarrativeContentPage() {
     )
   }
 
-  const sorted = sortByName(excerpts ?? [], (excerpt) => excerpt.content)
+  const all = sortByName(excerpts ?? [], (excerpt) => excerpt.content)
+  const hiddenOnes = all.filter((excerpt) => excerpt.hidden)
+  const sorted = all.filter((excerpt) => !excerpt.hidden)
   const unlisted = sorted.filter((excerpt) => excerpt.sections.length === 0)
   const listed = sorted.filter((excerpt) => excerpt.sections.length > 0)
 
@@ -150,12 +158,13 @@ export default function NarrativeContentPage() {
         <div className="section-group">
           <h3>Not listed anywhere</h3>
           <p className="muted">No section lists these. Edit them to choose sections, or delete them.</p>
-          {unlisted.map(card)}
+          {unlisted.map((item) => card(item))}
         </div>
       )}
       {excerpts && <h3>Listed narrative content</h3>}
       {excerpts && listed.length === 0 && <p>No narrative content yet.</p>}
-      {listed.map(card)}
+      {listed.map((item) => card(item))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((excerpt) => card(excerpt, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

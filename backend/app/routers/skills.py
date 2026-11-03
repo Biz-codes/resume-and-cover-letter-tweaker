@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, check_unique_name, list_beside
 from app.models import (
     OTHER_CATEGORY_ID,
@@ -45,6 +46,7 @@ class CategoryRef(BaseModel):
 
 class SkillOut(BaseModel):
     skill_id: int
+    hidden: bool
     skill_name: str
     categories: list[CategoryRef]
     projects: list[ProjectRef]
@@ -71,7 +73,7 @@ def to_out(db: Session, skills: list[Skill]) -> list[SkillOut]:
         projects[skill_id].append(ProjectRef(project_id=project_id, project_title=title,
                                              done_for=done_for))
     used_by = uses(db, SKILL_LINKS, ids)
-    return [SkillOut(skill_id=skill.skill_id, skill_name=skill.skill_name,
+    return [SkillOut(skill_id=skill.skill_id, hidden=skill.hidden, skill_name=skill.skill_name,
                      categories=categories[skill.skill_id], projects=projects[skill.skill_id],
                      used_by=used_by[skill.skill_id])
             for skill in skills]
@@ -149,7 +151,18 @@ def add_version(skill_id: int, body: SkillIn, db: DbSession, account_id: Account
     return one_out(db, new_version(db, original, body, account_id))
 
 
+@router.put("/{skill_id}/hidden")
+def set_skill_hidden(skill_id: int, body: HiddenIn, db: DbSession,
+                     account_id: AccountId) -> SkillOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, Skill, skill_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_skill(skill_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it from every category, project, resume, and cover letter."""
-    db.delete(get_owned(db, Skill, skill_id, account_id))
+    item = get_owned(db, Skill, skill_id, account_id)
+    refuse_delete_if_sent(uses(db, SKILL_LINKS, [skill_id])[skill_id], "skill")
+    db.delete(item)

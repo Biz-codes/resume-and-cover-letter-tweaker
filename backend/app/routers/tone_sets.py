@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.account import AccountId, get_owned
 from app.db import DbSession
 from app.errors import AppError, ErrorCode
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_unique_name
 from app.models import CoverLetter, Resume, ToneRule, ToneSet
 from app.schemas import RequiredText
@@ -39,6 +40,7 @@ class ToneRuleOut(ToneRuleIn):
 
 class ToneSetOut(ToneSetIn):
     tone_set_id: int
+    hidden: bool
     rules: list[ToneRuleOut]
     used_by: list[Use]
 
@@ -54,7 +56,7 @@ def rules_of(db: Session, tone_set_id: int) -> list[ToneRule]:
 
 def to_out(db: Session, sets: list[ToneSet]) -> list[ToneSetOut]:
     used_by = column_uses(db, USED_BY, [tone_set.tone_set_id for tone_set in sets])
-    return [ToneSetOut(tone_set_id=tone_set.tone_set_id, name=tone_set.name,
+    return [ToneSetOut(tone_set_id=tone_set.tone_set_id, hidden=tone_set.hidden, name=tone_set.name,
                        rules=[ToneRuleOut(tone_rule_id=rule.tone_rule_id,
                                           rule_text=rule.rule_text)
                               for rule in rules_of(db, tone_set.tone_set_id)],
@@ -107,10 +109,21 @@ def rename_set(tone_set_id: int, body: ToneSetIn, db: DbSession,
     return one_out(db, tone_set)
 
 
+@router.put("/{tone_set_id}/hidden")
+def set_tone_hidden(tone_set_id: int, body: HiddenIn, db: DbSession,
+                    account_id: AccountId) -> ToneSetOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, ToneSet, tone_set_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{tone_set_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_set(tone_set_id: int, db: DbSession, account_id: AccountId) -> None:
     """Deletes its rules too. Resumes and cover letters that used it keep going without one."""
-    db.delete(get_owned(db, ToneSet, tone_set_id, account_id))
+    item = get_owned(db, ToneSet, tone_set_id, account_id)
+    refuse_delete_if_sent(column_uses(db, USED_BY, [tone_set_id])[tone_set_id], "tone")
+    db.delete(item)
 
 
 @router.post("/{tone_set_id}/versions", status_code=status.HTTP_201_CREATED)

@@ -7,6 +7,7 @@ import { sentBody, stubApi } from '../../test/stubApi'
 import EducationItem from './EducationItem'
 
 const DEGREE: Education = {
+  hidden: false,
   education_id: 7,
   created_at: '2026-10-01T09:00:00',
   degree: 'B.A.',

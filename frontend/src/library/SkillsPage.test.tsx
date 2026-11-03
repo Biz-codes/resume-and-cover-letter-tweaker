@@ -6,9 +6,11 @@ import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SkillsPage from './SkillsPage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const OTHER: SkillCategory = {
+  hidden: false,
   category_id: 1,
   category_name: 'Other',
   built_in: true,
@@ -17,17 +19,19 @@ const OTHER: SkillCategory = {
   used_by: [],
 }
 const AI: SkillCategory = {
+  hidden: false,
   category_id: 6,
   category_name: 'AI',
   built_in: false,
   skills: [
-    { skill_id: 10, skill_name: 'Claude' },
-    { skill_id: 11, skill_name: 'Gemini' },
+    { hidden: false, skill_id: 10, skill_name: 'Claude' },
+    { hidden: false, skill_id: 11, skill_name: 'Gemini' },
   ],
   sections: [{ id: 2, title: 'Skills' }],
   used_by: [SENT],
 }
 const CLAUDE: Skill = {
+  hidden: false,
   skill_id: 10,
   skill_name: 'Claude',
   categories: [{ category_id: 6, category_name: 'AI' }],
@@ -36,17 +40,17 @@ const CLAUDE: Skill = {
 }
 const GEMINI: Skill = { ...CLAUDE, skill_id: 11, skill_name: 'Gemini', projects: [], used_by: [] }
 const SECTIONS: Section[] = [
-  { id: 2, title: 'Skills', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 2, title: 'Skills', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
-function stub(extra: Record<string, Reply[]> = {}) {
+function stub(extra: Record<string, Reply[]> = {}, categories = [OTHER, AI], skills = [CLAUDE, GEMINI]) {
   const twice = (body: unknown) => [
     { status: 200, body },
     { status: 200, body },
   ]
   return stubApi({
-    'GET /api/skill-categories': twice([OTHER, AI]),
-    'GET /api/skills': twice([CLAUDE, GEMINI]),
+    'GET /api/skill-categories': twice(categories),
+    'GET /api/skills': twice(skills),
     'GET /api/sections': twice(SECTIONS),
     ...extra,
   })
@@ -121,7 +125,7 @@ describe('SkillsPage', () => {
   })
 
   it('explains that deleting a category keeps its skills under "Other"', async () => {
-    stub({ 'DELETE /api/skill-categories/6': [{ status: 204 }] })
+    stub({ 'DELETE /api/skill-categories/6': [{ status: 204 }] }, [OTHER, unsent(AI)])
     render(<SkillsPage />)
     fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "AI"?' })
@@ -163,7 +167,7 @@ describe('SkillsPage', () => {
   })
 
   it('lists what uses a skill before deleting it, and returns focus on cancel', async () => {
-    stub()
+    stub({}, undefined, [unsent(CLAUDE), GEMINI])
     render(<SkillsPage />)
     const dialog = await openItem('Claude')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, check_ids, copy_children, list_beside, set_children
 from app.models import (
     PROJECTS_SECTION_ID,
@@ -56,6 +57,8 @@ class NewProject(ProjectIn):
 class SkillRef(BaseModel):
     skill_id: int
     skill_name: str
+    # So a resume's or cover letter's More options can leave it out (app/hiding.py).
+    hidden: bool
 
 
 class ProjectChange(ProjectIn):
@@ -65,6 +68,7 @@ class ProjectChange(ProjectIn):
 
 class ProjectOut(ProjectIn):
     project_id: int
+    hidden: bool
     # When it was added, which tells versions apart in lists when all else they show matches.
     created_at: datetime
     skills: list[SkillRef]
@@ -87,16 +91,17 @@ FIELDS = list(ProjectIn.model_fields)
 def to_out(db: Session, projects: list[Project], account_id: int) -> list[ProjectOut]:
     ids = [project.project_id for project in projects]
     skills: dict[int, list[SkillRef]] = {project_id: [] for project_id in ids}
-    for project_id, skill_id, name in db.execute(
-            select(ProjectSkill.project_id, Skill.skill_id, Skill.skill_name)
+    for project_id, skill_id, name, hidden in db.execute(
+            select(ProjectSkill.project_id, Skill.skill_id, Skill.skill_name, Skill.hidden)
             .join(Skill, Skill.skill_id == ProjectSkill.skill_id)
             .where(ProjectSkill.project_id.in_(ids))
             .order_by(ProjectSkill.position)):
-        skills[project_id].append(SkillRef(skill_id=skill_id, skill_name=name))
+        skills[project_id].append(SkillRef(skill_id=skill_id, skill_name=name, hidden=hidden))
     bullets = bullet_refs(db, ProjectBulletPoint, "project_id", ids, account_id)
     sections = section_refs(db, SectionProject, "project_id", ids)
     used_by = uses(db, PROJECT_LINKS, ids)
-    return [ProjectOut(project_id=project.project_id, created_at=project.created_at,
+    return [ProjectOut(project_id=project.project_id,
+                       hidden=project.hidden, created_at=project.created_at,
                        skills=skills[project.project_id],
                        bullets=bullets[project.project_id],
                        sections=sections[project.project_id],
@@ -216,8 +221,19 @@ def set_bullets(project_id: int, body: BulletList, db: DbSession,
     return one_out(db, project, account_id)
 
 
+@router.put("/{project_id}/hidden")
+def set_project_hidden(project_id: int, body: HiddenIn, db: DbSession,
+                       account_id: AccountId) -> ProjectOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, Project, project_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item, account_id)
+
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it, and the bullets and skills under it, from every resume and cover letter.
     The bullets and skills stay in the library."""
-    db.delete(get_owned(db, Project, project_id, account_id))
+    item = get_owned(db, Project, project_id, account_id)
+    refuse_delete_if_sent(uses(db, PROJECT_LINKS, [project_id])[project_id], "project")
+    db.delete(item)

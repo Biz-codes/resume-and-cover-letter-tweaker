@@ -11,8 +11,11 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
+import { offered } from '../shared/offered'
 
 export default function SkillsPage() {
   const [categories, setCategories] = useState<SkillCategory[] | null>(null)
@@ -41,6 +44,62 @@ export default function SkillsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
+
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function categoryCard(category: SkillCategory, hidden = false) {
+    return (
+      <LibraryCard
+        key={category.category_id}
+        title={category.category_name}
+        tags={category.built_in && <span className="tag">built in</span>}
+        editId={editId('category', category.category_id)}
+        editLabel={`View and Edit "${category.category_name}"`}
+        onEdit={() => dialogs.open({ kind: 'category', id: category.category_id, title: category.category_name })}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={category.category_name}
+              onUnhide={() =>
+                unhide('category', category.category_id, category.category_name, () =>
+                  skillCategoriesApi.setHidden(category.category_id, false),
+                )
+              }
+            />
+          )
+        }
+      >
+        <p className="muted">{category.skills.map((skill) => skill.skill_name).join(', ') || 'No skills yet.'}</p>
+      </LibraryCard>
+    )
+  }
+
+  function skillCard(skill: Skill, hidden = false) {
+    return (
+      <LibraryCard
+        key={skill.skill_id}
+        title={skill.skill_name}
+        editId={editId('skill', skill.skill_id)}
+        editLabel={`View and Edit "${skill.skill_name}"`}
+        onEdit={() => dialogs.open({ kind: 'skill', id: skill.skill_id, title: skill.skill_name })}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={skill.skill_name}
+              onUnhide={() => unhide('skill', skill.skill_id, skill.skill_name, () => skillsApi.setHidden(skill.skill_id, false))}
+            />
+          )
+        }
+      />
+    )
+  }
+
+  const allCategories = sortByName(categories ?? [], (category) => category.category_name)
+  const shownCategories = allCategories.filter((category) => !category.hidden)
+  const hiddenCategories = allCategories.filter((category) => category.hidden)
+  const allSkills = sortByName(skills, (skill) => skill.skill_name)
+  const shownSkills = allSkills.filter((skill) => !skill.hidden)
+  const hiddenSkills = allSkills.filter((skill) => skill.hidden)
 
   return (
     <section>
@@ -68,7 +127,7 @@ export default function SkillsPage() {
           <label>
             List the new category under
             <select value={newCategorySection} onChange={(event) => setNewCategorySection(event.target.value)}>
-              {sections.map((section) => (
+              {offered(sections).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>
@@ -90,30 +149,15 @@ export default function SkillsPage() {
       )}
 
       <h3>Categories</h3>
-      {categories && sortByName(categories, (category) => category.category_name).map((category) => (
-        <LibraryCard
-          key={category.category_id}
-          title={category.category_name}
-          tags={category.built_in && <span className="tag">built in</span>}
-          editId={editId('category', category.category_id)}
-          editLabel={`View and Edit "${category.category_name}"`}
-          onEdit={() => dialogs.open({ kind: 'category', id: category.category_id, title: category.category_name })}
-        >
-          <p className="muted">{category.skills.map((skill) => skill.skill_name).join(', ') || 'No skills yet.'}</p>
-        </LibraryCard>
-      ))}
+      {shownCategories.map((category) => categoryCard(category))}
 
       {categories && <h3>All skills</h3>}
       {categories && skills.length === 0 && <p>No skills yet.</p>}
-      {sortByName(skills, (skill) => skill.skill_name).map((skill) => (
-        <LibraryCard
-          key={skill.skill_id}
-          title={skill.skill_name}
-          editId={editId('skill', skill.skill_id)}
-          editLabel={`View and Edit "${skill.skill_name}"`}
-          onEdit={() => dialogs.open({ kind: 'skill', id: skill.skill_id, title: skill.skill_name })}
-        />
-      ))}
+      {shownSkills.map((skill) => skillCard(skill))}
+      <HiddenItems count={hiddenCategories.length + hiddenSkills.length}>
+        {hiddenCategories.map((category) => categoryCard(category, true))}
+        {hiddenSkills.map((skill) => skillCard(skill, true))}
+      </HiddenItems>
       {dialogs.dialog}
     </section>
   )

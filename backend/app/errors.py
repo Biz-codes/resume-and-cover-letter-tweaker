@@ -46,7 +46,7 @@ STATUS = {
 }
 
 DEFAULT_MESSAGES = {
-    ErrorCode.BUILT_IN_PROTECTED: "Built-in items can't be deleted or renamed.",
+    ErrorCode.BUILT_IN_PROTECTED: "Built-in items can't be deleted, renamed, or hidden.",
     ErrorCode.NOT_FOUND: "That item doesn't exist.",
     ErrorCode.VALIDATION_FAILED: "Some of the input isn't valid.",
     ErrorCode.DUPLICATE: "That already exists.",

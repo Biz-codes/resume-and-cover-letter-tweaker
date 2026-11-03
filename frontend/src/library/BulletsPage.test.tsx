@@ -5,9 +5,11 @@ import { expectNoA11yViolations } from '../test/axe'
 import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const SHIPPED: Bullet = {
+  hidden: false,
   bullet_id: 10,
   content: 'Shipped the new checkout flow to every customer',
   experience: [
@@ -79,7 +81,7 @@ describe('BulletsPage', () => {
   })
 
   it('lists what a delete affects, then deletes', async () => {
-    stub({ 'DELETE /api/bullet-points/10': [{ status: 204 }] })
+    stub({ 'DELETE /api/bullet-points/10': [{ status: 204 }] }, [unsent(SHIPPED), LOOSE])
     render(<BulletsPage />)
     fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })

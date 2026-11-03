@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.account import AccountId
 from app.db import DbSession
 from app.errors import AppError, ErrorCode
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import (
     append,
     check_ids,
@@ -61,10 +62,13 @@ class NewCategory(CategoryIn):
 class SkillRef(BaseModel):
     skill_id: int
     skill_name: str
+    # So a resume's or cover letter's More options can leave it out (app/hiding.py).
+    hidden: bool
 
 
 class CategoryOut(BaseModel):
     category_id: int
+    hidden: bool
     category_name: str
     built_in: bool
     skills: list[SkillRef]
@@ -95,12 +99,13 @@ def protect_other(category: SkillCategory, action: str) -> None:
 def to_out(db: Session, categories: list[SkillCategory], account_id: int) -> list[CategoryOut]:
     ids = [category.category_id for category in categories]
     skills: dict[int, list[SkillRef]] = {category_id: [] for category_id in ids}
-    for category_id, skill_id, name in db.execute(
-            select(SkillCategorySkill.category_id, Skill.skill_id, Skill.skill_name)
+    for category_id, skill_id, name, hidden in db.execute(
+            select(SkillCategorySkill.category_id, Skill.skill_id, Skill.skill_name, Skill.hidden)
             .join(Skill, Skill.skill_id == SkillCategorySkill.skill_id)
             .where(SkillCategorySkill.category_id.in_(ids), Skill.account_id == account_id)
             .order_by(SkillCategorySkill.position)):
-        skills[category_id].append(SkillRef(skill_id=skill_id, skill_name=name))
+        skills[category_id].append(SkillRef(skill_id=skill_id, skill_name=name,
+                                            hidden=hidden))
     sections: dict[int, list[SectionRef]] = {category_id: [] for category_id in ids}
     for category_id, section_id, title in db.execute(
             select(SectionSkillCategory.category_id, Section.id, Section.title)
@@ -109,7 +114,8 @@ def to_out(db: Session, categories: list[SkillCategory], account_id: int) -> lis
             .order_by(Section.id)):
         sections[category_id].append(SectionRef(id=section_id, title=title))
     used_by = uses(db, CATEGORY_LINKS, ids)
-    return [CategoryOut(category_id=category.category_id, category_name=category.category_name,
+    return [CategoryOut(category_id=category.category_id,
+                        hidden=category.hidden, category_name=category.category_name,
                         built_in=category.account_id is None, skills=skills[category.category_id],
                         sections=sections[category.category_id],
                         used_by=used_by[category.category_id])
@@ -277,11 +283,22 @@ def move_selections_to_other(db: Session, category_id: int, category_model, skil
         touch(db, doc, set(db.scalars(docs)))
 
 
+@router.put("/{category_id}/hidden")
+def set_category_hidden(category_id: int, body: HiddenIn, db: DbSession,
+                        account_id: AccountId) -> CategoryOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_category(db, category_id, account_id)
+    protect_other(item, "hidden")
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item, account_id)
+
+
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(category_id: int, db: DbSession, account_id: AccountId) -> None:
     """Moves its skills and selections under "Other", then deletes it, in one transaction."""
     category = get_category(db, category_id, account_id)
     protect_other(category, "deleted")
+    refuse_delete_if_sent(uses(db, CATEGORY_LINKS, [category_id])[category_id], "skill category")
     skill_ids = list(db.scalars(select(SkillCategorySkill.skill_id)
                                 .where(SkillCategorySkill.category_id == category_id)
                                 .order_by(SkillCategorySkill.position)))

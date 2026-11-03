@@ -6,6 +6,8 @@ import type { Use } from './usage'
 export const BUILT_IN_SECTION_IDS = { summary: 1, skills: 2, experience: 3, projects: 4, education: 5 }
 
 export interface Section {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   id: number
   title: string
   // The five built-in sections can't be renamed or deleted.
@@ -38,5 +40,6 @@ export const sectionsApi = {
   setEducation: (id: number, educationIds: number[]) =>
     api.put<Section>(`/sections/${id}/education`, { education_ids: educationIds }),
   addVersion: (id: number, title: string) => api.post<Section>(`/sections/${id}/versions`, { title }),
+  setHidden: (id: number, hidden: boolean) => api.put<Section>(`/sections/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/sections/${id}`),
 }

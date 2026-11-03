@@ -59,6 +59,12 @@ export default function BulletItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={bullet.hidden}
+      usedBySent={anyLocked(bullet.used_by)}
+      onSetHidden={async (next) => {
+        await bulletsApi.setHidden(bullet.bullet_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <NameForm
           label="Bullet text"

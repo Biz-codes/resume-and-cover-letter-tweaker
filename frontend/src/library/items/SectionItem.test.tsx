@@ -7,6 +7,7 @@ import { stubApi } from '../../test/stubApi'
 import SectionItem from './SectionItem'
 
 const SKILLS: Section = {
+  hidden: false,
   id: 2,
   title: 'Skills',
   built_in: true,

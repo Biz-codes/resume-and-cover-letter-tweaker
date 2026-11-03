@@ -20,6 +20,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 import { PROJECT_FIELDS, projectLabels } from './itemFields'
+import { offered } from '../../shared/offered'
 
 
 const SENT_NOTE = 'A sent version uses this project, so saving adds a new version. The sent version keeps this one.'
@@ -82,6 +83,12 @@ export default function ProjectItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={project.hidden}
+      usedBySent={anyLocked(project.used_by)}
+      onSetHidden={async (next) => {
+        await projectsApi.setHidden(project.project_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <FieldsForm
           label={`Edit "${label}"`}
@@ -120,7 +127,7 @@ export default function ProjectItem({ id }: { id: number }) {
         <OrderedList
           label={`${label} skills`}
           items={project.skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
-          choices={skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
+          choices={offered(skills).map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
           emptyText="No skills yet."
           onOpen={(item) => host.open({ kind: 'skill', id: item.id, title: item.name })}
           onChange={async (ids) => {
@@ -132,7 +139,7 @@ export default function ProjectItem({ id }: { id: number }) {
       <BulletList
         owner={label}
         bullets={project.bullets}
-        allBullets={bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
+        allBullets={offered(bullets).map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
         onChange={async (ids) => {
           await projectsApi.setBullets(project.project_id, ids)
           await refresh()

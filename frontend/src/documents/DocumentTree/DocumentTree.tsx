@@ -39,6 +39,7 @@ import {
   type NewField,
 } from '../treeItems'
 import styles from './DocumentTree.module.css'
+import { offered } from '../../shared/offered'
 
 // A button for each thing that can be written here, each opening its own form. Focus moves into
 // the form, and back to its button when it closes.
@@ -223,12 +224,14 @@ function EntryChildren({
   const project = entry.kind === 'project' ? library?.projects.find((item) => item.project_id === entry.item_id) : undefined
   const role =
     entry.kind === 'experience' ? library?.experience.find((item) => item.experience_id === entry.item_id) : undefined
-  const skillChoices = (category?.skills ?? project?.skills ?? []).map((skill) => ({
+  // Hidden skills and bullets aren't offered (docs/FRONTEND_CHECKS.md, "Hiding").
+  const hiddenBullets = new Set(library?.bullets.filter((bullet) => bullet.hidden).map((bullet) => bullet.bullet_id))
+  const skillChoices = offered(category?.skills ?? project?.skills ?? []).map((skill) => ({
     id: skill.skill_id,
     name: skill.skill_name,
   }))
   const bulletChoices = (role?.bullets ?? project?.bullets ?? [])
-    .filter((bullet) => !taken.has(bullet.bullet_id))
+    .filter((bullet) => !taken.has(bullet.bullet_id) && !hiddenBullets.has(bullet.bullet_id))
     .map((bullet) => ({
     id: bullet.bullet_id,
     name: bullet.content,
@@ -612,7 +615,7 @@ export default function DocumentTree({
       <OrderedList
         label="Sections"
         items={sectionItems}
-        choices={shown ? shown.sections.map((section) => ({ id: section.id, name: section.title })) : []}
+        choices={shown ? offered(shown.sections).map((section) => ({ id: section.id, name: section.title })) : []}
         emptyText={readOnly ? 'No sections.' : 'No sections yet. Add one to start.'}
         readOnly={readOnly}
         moreOptions

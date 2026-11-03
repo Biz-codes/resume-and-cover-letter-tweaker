@@ -11,6 +11,7 @@ import type { Section } from '../shared/api/sections'
 import type { SkillCategory } from '../shared/api/skills'
 import type { ListItem } from '../shared/components/OrderedList/OrderedList'
 import { distinctLabels } from '../shared/api/labels'
+import { offered } from '../shared/offered'
 
 export interface Library {
   sections: Section[]
@@ -80,21 +81,22 @@ const named = <T extends { created_at: string }>(items: T[], label: (item: T) =>
   return items.map((item) => [item, labelOf(item)] as const)
 }
 
-// Every saved item of one kind, as { id, name }, oldest first.
+// Every saved item of one kind that can be offered (not hidden: docs/FRONTEND_CHECKS.md,
+// "Hiding"), as { id, name }, oldest first.
 export function savedItems(library: Library, kind: EntryKind): { id: number; name: string }[] {
   switch (kind) {
     case 'narrative':
-      return library.narrative.map((item) => ({ id: item.content_id, name: item.content }))
+      return offered(library.narrative).map((item) => ({ id: item.content_id, name: item.content }))
     case 'bullet':
-      return library.bullets.map((item) => ({ id: item.bullet_id, name: item.content }))
+      return offered(library.bullets).map((item) => ({ id: item.bullet_id, name: item.content }))
     case 'category':
-      return library.categories.map((item) => ({ id: item.category_id, name: item.category_name }))
+      return offered(library.categories).map((item) => ({ id: item.category_id, name: item.category_name }))
     case 'experience':
-      return named(library.experience, experienceLabel).map(([item, name]) => ({ id: item.experience_id, name }))
+      return named(offered(library.experience), experienceLabel).map(([item, name]) => ({ id: item.experience_id, name }))
     case 'project':
-      return named(library.projects, projectLabel).map(([item, name]) => ({ id: item.project_id, name }))
+      return named(offered(library.projects), projectLabel).map(([item, name]) => ({ id: item.project_id, name }))
     case 'education':
-      return named(library.education, educationLabel).map(([item, name]) => ({ id: item.education_id, name }))
+      return named(offered(library.education), educationLabel).map(([item, name]) => ({ id: item.education_id, name }))
   }
 }
 

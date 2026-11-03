@@ -61,6 +61,12 @@ export default function HeaderItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={header.hidden}
+      usedBySent={anyLocked(header.used_by)}
+      onSetHidden={async (next) => {
+        await headersApi.setHidden(header.header_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <HeaderForm
           label="Edit header"

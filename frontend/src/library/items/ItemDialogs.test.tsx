@@ -8,6 +8,7 @@ import { stubApi } from '../../test/stubApi'
 import { useItemDialogs } from './ItemDialogs'
 
 const ROLE: Experience = {
+  hidden: false,
   experience_id: 4,
   created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
@@ -19,6 +20,7 @@ const ROLE: Experience = {
   used_by: [],
 }
 const SHIPPED: Bullet = {
+  hidden: false,
   bullet_id: 10,
   content: 'Shipped it',
   experience: [{ experience_id: 4, role_title: 'Engineer', organization: 'Acme', dates: null }],

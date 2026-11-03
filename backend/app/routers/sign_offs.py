@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.models import CoverLetter, SignOff
 from app.schemas import RequiredText
 from app.usage import Use, column_uses, switch_unsent_column
@@ -29,12 +30,13 @@ class SignOffIn(BaseModel):
 
 class SignOffOut(SignOffIn):
     sign_off_id: int
+    hidden: bool
     used_by: list[Use]
 
 
 def to_out(db: Session, sign_offs: list[SignOff]) -> list[SignOffOut]:
     used_by = column_uses(db, USED_BY, [sign_off.sign_off_id for sign_off in sign_offs])
-    return [SignOffOut(sign_off_id=sign_off.sign_off_id, text=sign_off.text,
+    return [SignOffOut(sign_off_id=sign_off.sign_off_id, hidden=sign_off.hidden, text=sign_off.text,
                        used_by=used_by[sign_off.sign_off_id])
             for sign_off in sign_offs]
 
@@ -102,7 +104,18 @@ def add_version(sign_off_id: int, body: SignOffIn, response: Response, db: DbSes
     return one_out(db, new_version(db, body, account_id))
 
 
+@router.put("/{sign_off_id}/hidden")
+def set_sign_off_hidden(sign_off_id: int, body: HiddenIn, db: DbSession,
+                        account_id: AccountId) -> SignOffOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, SignOff, sign_off_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{sign_off_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sign_off(sign_off_id: int, db: DbSession, account_id: AccountId) -> None:
     """Cover letters that used it keep going with no closing."""
-    db.delete(get_owned(db, SignOff, sign_off_id, account_id))
+    item = get_owned(db, SignOff, sign_off_id, account_id)
+    refuse_delete_if_sent(column_uses(db, USED_BY, [sign_off_id])[sign_off_id], "sign-off")
+    db.delete(item)

@@ -328,15 +328,18 @@ def check_link(db: Session, model, column, item_id: int | None, account_id: int,
 
 def latest_header_id(db: Session, account_id: int) -> int | None:
     """The header of the most recently updated resume, cover letter, or posting that has one,
-    or else the most recently updated header (docs/FRONTEND_CHECKS.md, "Headers")."""
+    or else the most recently updated header (docs/FRONTEND_CHECKS.md, "Headers"), never a
+    hidden one."""
     used = [select(model.header_id, model.updated_at)
-            .where(model.account_id == account_id, model.header_id.is_not(None))
+            .join(Header, Header.header_id == model.header_id)
+            .where(model.account_id == account_id, Header.hidden.is_(False))
             for model in (Resume, CoverLetter, JobPosting)]
     latest = union_all(*used).subquery()
     header_id = db.scalar(select(latest.c.header_id)
                           .order_by(latest.c.updated_at.desc()).limit(1))
     if header_id is None:
-        header_id = db.scalar(select(Header.header_id).where(Header.account_id == account_id)
+        header_id = db.scalar(select(Header.header_id)
+                              .where(Header.account_id == account_id, Header.hidden.is_(False))
                               .order_by(Header.updated_at.desc(), Header.header_id.desc())
                               .limit(1))
     return header_id

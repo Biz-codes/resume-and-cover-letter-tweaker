@@ -4,6 +4,8 @@ import { api } from './client'
 import type { Use } from './usage'
 
 export interface NarrativeContent {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   content_id: number
   content: string
   sections: { id: number; title: string }[]
@@ -22,5 +24,6 @@ export const narrativeApi = {
     api.put<NarrativeContent>(`/narrative-content/${id}`, { content, section_ids: sectionIds }),
   addVersion: (id: number, content: string) =>
     api.post<NarrativeContent>(`/narrative-content/${id}/versions`, { content }),
+  setHidden: (id: number, hidden: boolean) => api.put<NarrativeContent>(`/narrative-content/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/narrative-content/${id}`),
 }

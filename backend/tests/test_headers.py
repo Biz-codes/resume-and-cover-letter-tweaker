@@ -75,7 +75,7 @@ def test_create_list_and_get(client: TestClient, account_id: int):
     response = client.post("/api/headers", json=NEPTUNE)
     assert response.status_code == 201
     header = response.json()
-    assert header == {**NEPTUNE, **EMPTY, "header_id": header["header_id"],
+    assert header == {**NEPTUNE, **EMPTY, "header_id": header["header_id"], "hidden": False,
                       "created_at": header["created_at"], "used_by": []}
     assert client.get("/api/headers").json() == [header]
     assert client.get(f"/api/headers/{header['header_id']}").json() == header

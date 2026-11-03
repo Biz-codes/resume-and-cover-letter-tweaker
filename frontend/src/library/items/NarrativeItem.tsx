@@ -16,6 +16,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 import { EXCERPT_FIELDS, type ExcerptFields } from './itemFields'
+import { offered } from '../../shared/offered'
 
 
 const LOCKED_NOTE = 'A sent version uses this excerpt, so saving adds a new one. The sent version keeps this one.'
@@ -65,6 +66,12 @@ export default function NarrativeItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={excerpt.hidden}
+      usedBySent={anyLocked(excerpt.used_by)}
+      onSetHidden={async (next) => {
+        await narrativeApi.setHidden(excerpt.content_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <FieldsForm
           label={`Edit ${label}`}
@@ -77,7 +84,9 @@ export default function NarrativeItem({ id }: { id: number }) {
         >
           <Checklist
             legend="Sections that list it"
-            options={sections.map((section) => ({ id: section.id, name: section.title }))}
+            options={offered(sections, (section) => excerpt.sections.some((listed) => listed.id === section.id)).map(
+              (section) => ({ id: section.id, name: section.title }),
+            )}
             selected={checked}
             onChange={setChosen}
           />

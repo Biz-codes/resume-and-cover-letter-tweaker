@@ -10,8 +10,10 @@ import HeaderForm from './items/HeaderForm'
 import { EMPTY_HEADER, headerLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
 
 // The New header button, where focus returns when its form closes.
 const NEW_HEADER_ID = 'new-header'
@@ -41,6 +43,7 @@ export default function HeadersPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   // A header with exactly these values is reused, so saving may add nothing.
   async function create(fields: HeaderFields) {
@@ -54,6 +57,43 @@ export default function HeadersPage() {
 
   // Names that tell versions apart (labels.ts), for the cards and their buttons.
   const labelOf = headerLabels(headers ?? [])
+
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(header: Header, hidden = false) {
+    const label = labelOf(header)
+    return (
+      <LibraryCard
+        key={header.header_id}
+        title={label}
+        heading={hidden ? 4 : 3}
+        editId={editId('header', header.header_id)}
+        editLabel={`View and Edit "${label}"`}
+        onEdit={() => dialogs.open({ kind: 'header', id: header.header_id, title: label })}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={label}
+              onUnhide={() => unhide('header', header.header_id, label, () => headersApi.setHidden(header.header_id, false))}
+            />
+          )
+        }
+      >
+
+        <p className="muted">{[header.phone, header.email, header.location].filter(Boolean).join(' | ')}</p>
+        {[header.linkedin_url, header.github_url, header.portfolio_url]
+          .filter(Boolean)
+          .map((url) => (
+            <p key={url} className="muted">
+              {url}
+            </p>
+          ))}
+      </LibraryCard>
+    )
+  }
+
+  const all = sortByName(headers ?? [], labelOf)
+  const shown = all.filter((header) => !header.hidden)
+  const hiddenOnes = all.filter((header) => header.hidden)
 
   return (
     <section>
@@ -101,25 +141,8 @@ export default function HeadersPage() {
       )}
 
       {headers?.length === 0 && <p>No headers yet.</p>}
-      {headers && sortByName(headers, labelOf).map((header) => (
-        <LibraryCard
-          key={header.header_id}
-          title={labelOf(header)}
-          heading={3}
-          editId={editId('header', header.header_id)}
-          editLabel={`View and Edit "${labelOf(header)}"`}
-          onEdit={() => dialogs.open({ kind: 'header', id: header.header_id, title: labelOf(header) })}
-        >
-          <p className="muted">{[header.phone, header.email, header.location].filter(Boolean).join(' | ')}</p>
-          {[header.linkedin_url, header.github_url, header.portfolio_url]
-            .filter(Boolean)
-            .map((url) => (
-              <p key={url} className="muted">
-                {url}
-              </p>
-            ))}
-        </LibraryCard>
-      ))}
+      {shown.map((header) => card(header))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((header) => card(header, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

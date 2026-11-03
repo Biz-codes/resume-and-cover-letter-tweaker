@@ -17,6 +17,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 import { lockedNote } from './itemFields'
+import { offered } from '../../shared/offered'
 
 
 export default function CategoryItem({ id }: { id: number }) {
@@ -62,6 +63,12 @@ export default function CategoryItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={category.hidden}
+      usedBySent={anyLocked(category.used_by)}
+      onSetHidden={category.built_in ? undefined : async (next) => {
+        await skillCategoriesApi.setHidden(category.category_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         !category.built_in && (
           <NameForm
@@ -113,7 +120,7 @@ export default function CategoryItem({ id }: { id: number }) {
         <OrderedList
           label={`${category.category_name} skills`}
           items={category.skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
-          choices={skills.map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
+          choices={offered(skills).map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))}
           emptyText="No skills yet."
           onOpen={(item) => host.open({ kind: 'skill', id: item.id, title: item.name })}
           onChange={async (ids) => {

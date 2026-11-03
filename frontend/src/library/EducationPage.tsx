@@ -12,8 +12,11 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { EDUCATION_FIELDS, educationLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
+import { offered } from '../shared/offered'
 
 const EMPTY: EducationFields = { degree: '', institution: '', details: null, graduation: null }
 
@@ -47,6 +50,7 @@ export default function EducationPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(fields: EducationFields) {
     const entry = await educationApi.create(fields, newSection ? Number(newSection) : null)
@@ -61,7 +65,8 @@ export default function EducationPage() {
   const labelOf = educationLabels(entries ?? [])
   const titleOf = distinctLabels(entries ?? [], (item) => `${item.degree}, ${item.institution}`, (item) => item.created_at)
 
-  function card(entry: Education) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(entry: Education, hidden = false) {
     const label = labelOf(entry)
     return (
       <LibraryCard
@@ -69,6 +74,7 @@ export default function EducationPage() {
         title={titleOf(entry)}
         editId={editId('education', entry.education_id)}
         editLabel={`View and Edit "${label}"`}
+        actions={hidden && <UnhideButton name={label} onUnhide={() => unhide('education', entry.education_id, label, () => educationApi.setHidden(entry.education_id, false))} />}
         onEdit={() => dialogs.open({ kind: 'education', id: entry.education_id, title: label })}
       >
         {entry.graduation && <p className="muted">{entry.graduation}</p>}
@@ -76,7 +82,9 @@ export default function EducationPage() {
     )
   }
 
-  const sorted = sortByName(entries ?? [], titleOf)
+  const all = sortByName(entries ?? [], titleOf)
+  const hiddenOnes = all.filter((entry) => entry.hidden)
+  const sorted = all.filter((entry) => !entry.hidden)
   const listed = sorted.filter((entry) => entry.sections.length > 0)
   const unlisted = sorted.filter((entry) => entry.sections.length === 0)
 
@@ -116,7 +124,7 @@ export default function EducationPage() {
           <label>
             List it under
             <select value={newSection} onChange={(event) => setNewSection(event.target.value)}>
-              {sections.map((section) => (
+              {offered(sections).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>
@@ -144,12 +152,13 @@ export default function EducationPage() {
         <div className="section-group">
           <h3>Not listed under any section</h3>
           <p className="muted">List these under a section on the Sections page, or delete them.</p>
-          {unlisted.map(card)}
+          {unlisted.map((item) => card(item))}
         </div>
       )}
       {entries && <h3>Entries</h3>}
       {entries && listed.length === 0 && <p>No education yet.</p>}
-      {listed.map(card)}
+      {listed.map((item) => card(item))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((entry) => card(entry, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

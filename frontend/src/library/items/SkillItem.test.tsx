@@ -7,6 +7,7 @@ import { stubApi } from '../../test/stubApi'
 import SkillItem from './SkillItem'
 
 const CLAUDE: Skill = {
+  hidden: false,
   skill_id: 10,
   skill_name: 'Claude',
   categories: [{ category_id: 6, category_name: 'AI' }],

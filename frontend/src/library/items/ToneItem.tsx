@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { toneSetsApi, type ToneSet } from '../../shared/api/toneSets'
+import { anyLocked } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
@@ -90,6 +91,12 @@ export default function ToneItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={toneSet.hidden}
+      usedBySent={anyLocked(toneSet.used_by)}
+      onSetHidden={async (next) => {
+        await toneSetsApi.setHidden(toneSet.tone_set_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <NameForm
           label="Tone name"

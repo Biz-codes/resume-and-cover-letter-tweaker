@@ -11,8 +11,11 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
 import { PROJECT_FIELDS, projectLabels } from './items/itemFields'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
+import { offered } from '../shared/offered'
 
 const EMPTY: ProjectFields = {
   project_title: '',
@@ -51,6 +54,7 @@ export default function ProjectsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(fields: ProjectFields) {
     const project = await projectsApi.create(fields, newSection ? Number(newSection) : null)
@@ -65,7 +69,8 @@ export default function ProjectsPage() {
   const labelOf = projectLabels(projects ?? [])
   const titleOf = distinctLabels(projects ?? [], (item) => item.project_title, (item) => item.created_at)
 
-  function card(project: Project) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(project: Project, hidden = false) {
     const label = labelOf(project)
     return (
       <LibraryCard
@@ -73,6 +78,7 @@ export default function ProjectsPage() {
         title={titleOf(project)}
         editId={editId('project', project.project_id)}
         editLabel={`View and Edit "${label}"`}
+        actions={hidden && <UnhideButton name={label} onUnhide={() => unhide('project', project.project_id, label, () => projectsApi.setHidden(project.project_id, false))} />}
         onEdit={() => dialogs.open({ kind: 'project', id: project.project_id, title: label })}
       >
         <p className="muted">{[project.done_for, project.dates].filter(Boolean).join(' | ')}</p>
@@ -81,7 +87,9 @@ export default function ProjectsPage() {
     )
   }
 
-  const sorted = sortByName(projects ?? [], titleOf)
+  const all = sortByName(projects ?? [], titleOf)
+  const hiddenOnes = all.filter((project) => project.hidden)
+  const sorted = all.filter((project) => !project.hidden)
   const listed = sorted.filter((project) => project.sections.length > 0)
   const unlisted = sorted.filter((project) => project.sections.length === 0)
 
@@ -121,7 +129,7 @@ export default function ProjectsPage() {
           <label>
             List it under
             <select value={newSection} onChange={(event) => setNewSection(event.target.value)}>
-              {sections.map((section) => (
+              {offered(sections).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>
@@ -149,12 +157,13 @@ export default function ProjectsPage() {
         <div className="section-group">
           <h3>Not listed under any section</h3>
           <p className="muted">List these under a section on the Sections page, or delete them.</p>
-          {unlisted.map(card)}
+          {unlisted.map((item) => card(item))}
         </div>
       )}
       {projects && <h3>Projects</h3>}
       {projects && listed.length === 0 && <p>No projects yet.</p>}
-      {listed.map(card)}
+      {listed.map((item) => card(item))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((project) => card(project, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

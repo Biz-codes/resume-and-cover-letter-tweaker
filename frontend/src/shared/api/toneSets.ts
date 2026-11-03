@@ -3,6 +3,8 @@ import { api } from './client'
 import type { Use } from './usage'
 
 export interface ToneSet {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   tone_set_id: number
   name: string
   rules: { tone_rule_id: number; rule_text: string }[]
@@ -14,6 +16,7 @@ export const toneSetsApi = {
   create: (name: string) => api.post<ToneSet>('/tone-sets', { name }),
   rename: (id: number, name: string) => api.put<ToneSet>(`/tone-sets/${id}`, { name }),
   addVersion: (id: number, name: string) => api.post<ToneSet>(`/tone-sets/${id}/versions`, { name }),
+  setHidden: (id: number, hidden: boolean) => api.put<ToneSet>(`/tone-sets/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/tone-sets/${id}`),
   // Each rule call returns the whole set.
   addRule: (id: number, ruleText: string) => api.post<ToneSet>(`/tone-sets/${id}/rules`, { rule_text: ruleText }),

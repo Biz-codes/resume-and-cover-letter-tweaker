@@ -11,8 +11,11 @@ import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { ROLE_FIELDS, roleLabels } from './items/itemFields'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
+import { offered } from '../shared/offered'
 
 const EMPTY: ExperienceFields = {
   role_title: '',
@@ -51,6 +54,7 @@ export default function ExperiencePage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(fields: ExperienceFields) {
     const role = await experienceApi.create(fields, newSection ? Number(newSection) : null)
@@ -65,7 +69,8 @@ export default function ExperiencePage() {
   const labelOf = roleLabels(roles ?? [])
   const titleOf = distinctLabels(roles ?? [], (item) => `${item.role_title}, ${item.organization}`, (item) => item.created_at)
 
-  function card(role: Experience) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(role: Experience, hidden = false) {
     const label = labelOf(role)
     return (
       <LibraryCard
@@ -73,6 +78,7 @@ export default function ExperiencePage() {
         title={titleOf(role)}
         editId={editId('experience', role.experience_id)}
         editLabel={`View and Edit "${label}"`}
+        actions={hidden && <UnhideButton name={label} onUnhide={() => unhide('experience', role.experience_id, label, () => experienceApi.setHidden(role.experience_id, false))} />}
         onEdit={() => dialogs.open({ kind: 'experience', id: role.experience_id, title: label })}
       >
         <p className="muted">{[role.location, role.dates].filter(Boolean).join(' | ')}</p>
@@ -80,7 +86,9 @@ export default function ExperiencePage() {
     )
   }
 
-  const sorted = sortByName(roles ?? [], titleOf)
+  const all = sortByName(roles ?? [], titleOf)
+  const hiddenOnes = all.filter((role) => role.hidden)
+  const sorted = all.filter((role) => !role.hidden)
   const listed = sorted.filter((role) => role.sections.length > 0)
   const unlisted = sorted.filter((role) => role.sections.length === 0)
 
@@ -120,7 +128,7 @@ export default function ExperiencePage() {
           <label>
             List it under
             <select value={newSection} onChange={(event) => setNewSection(event.target.value)}>
-              {sections.map((section) => (
+              {offered(sections).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>
@@ -148,12 +156,13 @@ export default function ExperiencePage() {
         <div className="section-group">
           <h3>Not listed under any section</h3>
           <p className="muted">List these under a section on the Sections page, or delete them.</p>
-          {unlisted.map(card)}
+          {unlisted.map((item) => card(item))}
         </div>
       )}
       {roles && <h3>Roles</h3>}
       {roles && listed.length === 0 && <p>No roles yet.</p>}
-      {listed.map(card)}
+      {listed.map((item) => card(item))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((role) => card(role, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

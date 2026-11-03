@@ -8,8 +8,10 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
 
 export default function SignOffsPage() {
   const [signOffs, setSignOffs] = useState<SignOff[] | null>(null)
@@ -34,6 +36,7 @@ export default function SignOffsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(text: string) {
     await signOffsApi.create(text)
@@ -41,18 +44,33 @@ export default function SignOffsPage() {
     setNotice(`Added "${text.trim()}".`)
   }
 
-  function card(signOff: SignOff) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(signOff: SignOff, hidden = false) {
     return (
       <LibraryCard
         key={signOff.sign_off_id}
         title={signOff.text}
-        heading={3}
+        heading={hidden ? 4 : 3}
         editId={editId('signOff', signOff.sign_off_id)}
         editLabel={`View and Edit "${signOff.text}"`}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={signOff.text}
+              onUnhide={() =>
+                unhide('signOff', signOff.sign_off_id, signOff.text, () => signOffsApi.setHidden(signOff.sign_off_id, false))
+              }
+            />
+          )
+        }
         onEdit={() => dialogs.open({ kind: 'signOff', id: signOff.sign_off_id, title: signOff.text })}
       />
     )
   }
+
+  const all = sortByName(signOffs ?? [], (signOff) => signOff.text)
+  const shown = all.filter((signOff) => !signOff.hidden)
+  const hiddenOnes = all.filter((signOff) => signOff.hidden)
 
   return (
     <section>
@@ -77,7 +95,8 @@ export default function SignOffsPage() {
 
       {signOffs && <NameForm label="New sign-off" field="text" submitLabel="Add sign-off" onSave={create} />}
       {signOffs && signOffs.length === 0 && <p>No sign-offs yet.</p>}
-      {signOffs && sortByName(signOffs, (signOff) => signOff.text).map(card)}
+      {shown.map((signOff) => card(signOff))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((signOff) => card(signOff, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

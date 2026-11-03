@@ -10,6 +10,8 @@ export interface ExperienceFields {
 }
 
 export interface Experience extends ExperienceFields {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   experience_id: number
   // When it was added, which tells versions apart in lists (labels.ts).
   created_at: string
@@ -39,5 +41,6 @@ export const experienceApi = {
   // the change is saved as a new version with a new id (FRONTEND_CHECKS.md, "Changing a role or project").
   update: (id: number, fields: ExperienceFields, applyToUnsent: boolean) =>
     api.put<Experience>(`/experience/${id}`, { ...fields, apply_to_unsent: applyToUnsent }),
+  setHidden: (id: number, hidden: boolean) => api.put<Experience>(`/experience/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/experience/${id}`),
 }

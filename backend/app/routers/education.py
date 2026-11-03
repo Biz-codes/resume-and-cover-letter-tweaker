@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, list_beside
 from app.models import EDUCATION_SECTION_ID, Education, SectionEducation
 from app.refs import SectionRef, section_refs
@@ -43,6 +44,7 @@ class NewEducation(EducationIn):
 
 class EducationOut(EducationIn):
     education_id: int
+    hidden: bool
     # When it was added, which tells versions apart in lists when all else they show matches.
     created_at: datetime
     sections: list[SectionRef]
@@ -56,7 +58,8 @@ def to_out(db: Session, entries: list[Education]) -> list[EducationOut]:
     ids = [entry.education_id for entry in entries]
     sections = section_refs(db, SectionEducation, "education_id", ids)
     used_by = uses(db, EDUCATION_LINKS, ids)
-    return [EducationOut(education_id=entry.education_id, created_at=entry.created_at,
+    return [EducationOut(education_id=entry.education_id,
+                         hidden=entry.hidden, created_at=entry.created_at,
                          sections=sections[entry.education_id],
                          used_by=used_by[entry.education_id],
                          **{field: getattr(entry, field) for field in FIELDS})
@@ -141,7 +144,19 @@ def add_version(education_id: int, body: EducationIn, response: Response, db: Db
     return one_out(db, new_version(db, original, body, account_id))
 
 
+@router.put("/{education_id}/hidden")
+def set_education_hidden(education_id: int, body: HiddenIn, db: DbSession,
+                         account_id: AccountId) -> EducationOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, Education, education_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{education_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_education(education_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it from every section, resume, and cover letter."""
-    db.delete(get_owned(db, Education, education_id, account_id))
+    item = get_owned(db, Education, education_id, account_id)
+    refuse_delete_if_sent(uses(db, EDUCATION_LINKS, [education_id])[education_id],
+                          "education entry")
+    db.delete(item)

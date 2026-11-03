@@ -18,6 +18,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 import { ROLE_FIELDS, roleLabels } from './itemFields'
+import { offered } from '../../shared/offered'
 
 
 const SENT_NOTE = 'A sent version uses this role, so saving adds a new version. The sent version keeps this one.'
@@ -81,6 +82,12 @@ export default function ExperienceItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={role.hidden}
+      usedBySent={anyLocked(role.used_by)}
+      onSetHidden={async (next) => {
+        await experienceApi.setHidden(role.experience_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <FieldsForm
           label={`Edit "${label}"`}
@@ -118,7 +125,7 @@ export default function ExperienceItem({ id }: { id: number }) {
       <BulletList
         owner={label}
         bullets={role.bullets}
-        allBullets={bullets.map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
+        allBullets={offered(bullets).map((bullet) => ({ bullet_id: bullet.bullet_id, content: bullet.content }))}
         onChange={async (ids) => {
           await experienceApi.setBullets(role.experience_id, ids)
           await refresh()

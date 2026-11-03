@@ -32,6 +32,7 @@ import Tracking from './Tracking'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import type { ListState } from '../documents/DocumentsPage'
+import { offered } from '../shared/offered'
 
 // The buttons that open each form, where focus returns when it closes.
 const BUTTON_IDS = { edit: 'posting-edit', delete: 'posting-delete' }
@@ -235,7 +236,7 @@ export function PostingPage({ id }: { id: number }) {
           >
             <HeaderFields
               header={header}
-              headers={headers}
+              headers={offered(headers)}
               suggested={posting.suggested_header ?? undefined}
               readOnly={posting.locked}
               onSave={saveHeader}

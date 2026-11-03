@@ -7,13 +7,14 @@ import { stubApi } from '../../test/stubApi'
 import ProjectItem from './ProjectItem'
 
 const PROJECT: Project = {
+  hidden: false,
   project_id: 6,
   created_at: '2026-10-01T09:00:00',
   project_title: 'Tweaker',
   done_for: null,
   url: null,
   dates: null,
-  skills: [{ skill_id: 20, skill_name: 'Python' }],
+  skills: [{ hidden: false, skill_id: 20, skill_name: 'Python' }],
   bullets: [],
   sections: [],
   used_by: [],

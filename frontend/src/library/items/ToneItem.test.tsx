@@ -6,7 +6,7 @@ import { renderItem } from '../../test/renderItem'
 import { stubApi } from '../../test/stubApi'
 import ToneItem from './ToneItem'
 
-const TECH: ToneSet = { tone_set_id: 3, name: 'Tech', rules: [{ tone_rule_id: 30, rule_text: 'Lead with tools.' }], used_by: [] }
+const TECH: ToneSet = { hidden: false, tone_set_id: 3, name: 'Tech', rules: [{ tone_rule_id: 30, rule_text: 'Lead with tools.' }], used_by: [] }
 
 describe('ToneItem', () => {
   it('saves a rule in place and says so in the dialog', async () => {

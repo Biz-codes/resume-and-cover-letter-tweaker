@@ -103,7 +103,7 @@ def default_addressee(posting: JobPosting | None) -> str:
 
 def default_sign_off_id(db: Session, account_id: int) -> int | None:
     return db.scalar(select(SignOff.sign_off_id)
-                     .where(SignOff.account_id == account_id,
+                     .where(SignOff.account_id == account_id, SignOff.hidden.is_(False),
                             func.lower(SignOff.text) == DEFAULT_SIGN_OFF.lower())
                      .order_by(SignOff.sign_off_id).limit(1))
 

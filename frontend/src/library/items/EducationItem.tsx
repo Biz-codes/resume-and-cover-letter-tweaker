@@ -67,6 +67,12 @@ export default function EducationItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={entry.hidden}
+      usedBySent={anyLocked(entry.used_by)}
+      onSetHidden={async (next) => {
+        await educationApi.setHidden(entry.education_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <FieldsForm
           label={`Edit "${label}"`}

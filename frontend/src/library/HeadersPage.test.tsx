@@ -5,8 +5,10 @@ import { loadedDialog, openItem } from '../test/openCard'
 import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
+import { unsent } from '../test/unsent'
 
 const BASE: Header = {
+  hidden: false,
   header_id: 1,
   created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',
@@ -107,14 +109,13 @@ describe('HeadersPage', () => {
   it('lists what uses a header before deleting it', async () => {
     const fetchMock = stubApi({
       // The page, then its dialog, then the page again after the delete.
-      'GET /api/headers': [{ status: 200, body: [SENT] }, { status: 200, body: [SENT] }, { status: 200, body: [] }],
+      'GET /api/headers': [{ status: 200, body: [unsent(SENT)] }, { status: 200, body: [unsent(SENT)] }, { status: 200, body: [] }],
       'DELETE /api/headers/2': [{ status: 204 }],
     })
     render(<HeadersPage />)
     fireEvent.click(within(await dialogFor('Front-End Engineer')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sam Rivera, Front-End Engineer"?' })
     expect(confirm).toHaveTextContent('Acme resume')
-    expect(confirm).toHaveTextContent('changes the record of what you sent')
     // The page and its dialog each read the list once; the warning needs nothing more.
     expect(fetchMock).toHaveBeenCalledTimes(2)
     await expectNoA11yViolations()

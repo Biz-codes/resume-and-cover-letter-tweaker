@@ -5,16 +5,18 @@ import type { Use } from './usage'
 export const OTHER_CATEGORY_ID = 1
 
 export interface SkillCategory {
+  hidden: boolean
   category_id: number
   category_name: string
   // The built-in "Other" category can't be renamed or deleted.
   built_in: boolean
-  skills: { skill_id: number; skill_name: string }[]
+  skills: { skill_id: number; skill_name: string; hidden: boolean }[]
   sections: { id: number; title: string }[]
   used_by: Use[]
 }
 
 export interface Skill {
+  hidden: boolean
   skill_id: number
   skill_name: string
   categories: { category_id: number; category_name: string }[]
@@ -36,6 +38,7 @@ export const skillCategoriesApi = {
   // Moves its skills and its resume and cover letter selections under "Other" first.
   addVersion: (id: number, categoryName: string) =>
     api.post<SkillCategory>(`/skill-categories/${id}/versions`, { category_name: categoryName }),
+  setHidden: (id: number, hidden: boolean) => api.put<SkillCategory>(`/skill-categories/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/skill-categories/${id}`),
 }
 
@@ -46,5 +49,6 @@ export const skillsApi = {
   // When a sent version uses the skill, the new name is saved as a new skill.
   rename: (id: number, skillName: string) => api.put<Skill>(`/skills/${id}`, { skill_name: skillName }),
   addVersion: (id: number, skillName: string) => api.post<Skill>(`/skills/${id}/versions`, { skill_name: skillName }),
+  setHidden: (id: number, hidden: boolean) => api.put<Skill>(`/skills/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/skills/${id}`),
 }

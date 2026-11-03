@@ -7,10 +7,11 @@ import { stubApi } from '../../test/stubApi'
 import CategoryItem from './CategoryItem'
 
 const AI: SkillCategory = {
+  hidden: false,
   category_id: 6,
   category_name: 'AI',
   built_in: false,
-  skills: [{ skill_id: 10, skill_name: 'Claude' }],
+  skills: [{ hidden: false, skill_id: 10, skill_name: 'Claude' }],
   sections: [{ id: 2, title: 'Skills' }],
   used_by: [],
 }

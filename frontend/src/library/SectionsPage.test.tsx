@@ -8,8 +8,10 @@ import { findCard, loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
+import { unsent } from '../test/unsent'
 
 const SKILLS: Section = {
+  hidden: false,
   id: 2,
   title: 'Skills',
   built_in: true,
@@ -22,6 +24,7 @@ const SKILLS: Section = {
   used_by: [],
 }
 const FREELANCE: Section = {
+  hidden: false,
   id: 6,
   title: 'Freelance',
   built_in: false,
@@ -34,6 +37,7 @@ const FREELANCE: Section = {
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: true }],
 }
 const category = (id: number, name: string, builtIn = false): SkillCategory => ({
+  hidden: false,
   category_id: id,
   category_name: name,
   built_in: builtIn,
@@ -42,6 +46,7 @@ const category = (id: number, name: string, builtIn = false): SkillCategory => (
   used_by: [],
 })
 const ROLE: Experience = {
+  hidden: false,
   experience_id: 9,
   created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
@@ -53,6 +58,7 @@ const ROLE: Experience = {
   used_by: [],
 }
 const DEGREE: Education = {
+  hidden: false,
   education_id: 7,
   created_at: '2026-10-01T09:00:00',
   degree: 'B.A. in English',
@@ -103,6 +109,7 @@ const group = (heading: string) => screen.getByRole('heading', { name: heading }
 describe('SectionsPage', () => {
   it('groups sections by whether their titles print', async () => {
     const intro: Section = {
+      hidden: false,
       id: 7,
       title: 'intro',
       built_in: false,
@@ -127,7 +134,7 @@ describe('SectionsPage', () => {
   })
 
   it("doesn't offer renaming or deleting built-in sections, only a new version", async () => {
-    stub()
+    stub({}, [SKILLS, unsent(FREELANCE)])
     render(<SectionsPage />)
     expect(within(await findCard(/^Skills/)).getByText('built in')).toBeInTheDocument()
     const skills = await card('Skills')
@@ -233,12 +240,11 @@ describe('SectionsPage', () => {
   })
 
   it('lists what uses a section before deleting it', async () => {
-    stub({ 'DELETE /api/sections/6': [{ status: 204 }] })
+    stub({ 'DELETE /api/sections/6': [{ status: 204 }] }, [SKILLS, unsent(FREELANCE)])
     render(<SectionsPage />)
     fireEvent.click(within(await card('Freelance')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Freelance"?' })
     expect(confirm).toHaveTextContent('Acme resume')
-    expect(confirm).toHaveTextContent('changes the record of what you sent')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Freelance".')
@@ -246,7 +252,7 @@ describe('SectionsPage', () => {
   })
 
   it('moves focus into the dialog and its confirm, and back to their buttons when they close', async () => {
-    stub()
+    stub({}, [SKILLS, unsent(FREELANCE)])
     render(<SectionsPage />)
     expect(document.title).toBe('Sections – Resume Tweaker')
     const edit = await screen.findByRole('button', { name: 'View and Edit "Freelance"' })
@@ -307,6 +313,15 @@ describe('SectionsPage', () => {
       expect(sentBody(fetchMock, 'POST /api/bullet-points')).toEqual({ content: 'Ran workshops', section_id: 6 }),
     )
     await vi.waitFor(() => expect(within(freelance).getByRole('status')).toHaveTextContent('Added the bullet "Ran workshops".'))
+  })
+
+  it('offers no hidden item to add to a section', async () => {
+    stub({ 'GET /api/experience': [{ status: 200, body: [{ ...ROLE, hidden: true }] }] })
+    render(<SectionsPage />)
+    const freelance = await card('Freelance')
+    expect(within(freelance).getByText('Roles (0)')).toBeInTheDocument()
+    expect(within(freelance).queryByLabelText('Add to Freelance roles')).not.toBeInTheDocument()
+    expect(within(freelance).getByLabelText('Add to Freelance education')).toBeInTheDocument()
   })
 
   it("writes narrative content in a section and saves its education list", async () => {

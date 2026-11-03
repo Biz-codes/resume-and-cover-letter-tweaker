@@ -11,6 +11,7 @@ export default function LibraryCard({
   editId,
   editLabel,
   onEdit,
+  actions,
   children,
 }: {
   title: ReactNode
@@ -23,6 +24,8 @@ export default function LibraryCard({
   // Names the item, e.g. `View and Edit "Engineer, Acme"`, since every card has one.
   editLabel: string
   onEdit: () => void
+  // Other buttons, before View and Edit (a hidden item's Unhide).
+  actions?: ReactNode
   // The summary under the title.
   children?: ReactNode
 }) {
@@ -35,6 +38,7 @@ export default function LibraryCard({
           {tags}
         </Heading>
         <div className="actions">
+          {actions}
           <button type="button" id={editId} aria-label={editLabel} onClick={onEdit}>
             View and Edit
           </button>

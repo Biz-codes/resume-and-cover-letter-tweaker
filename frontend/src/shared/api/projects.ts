@@ -10,10 +10,12 @@ export interface ProjectFields {
 }
 
 export interface Project extends ProjectFields {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   project_id: number
   // When it was added, which tells versions apart in lists (labels.ts).
   created_at: string
-  skills: { skill_id: number; skill_name: string }[]
+  skills: { skill_id: number; skill_name: string; hidden: boolean }[]
   bullets: { bullet_id: number; content: string }[]
   sections: { id: number; title: string }[]
   used_by: Use[]
@@ -40,5 +42,6 @@ export const projectsApi = {
   // the change is saved as a new version with a new id (FRONTEND_CHECKS.md, "Changing a role or project").
   update: (id: number, fields: ProjectFields, applyToUnsent: boolean) =>
     api.put<Project>(`/projects/${id}`, { ...fields, apply_to_unsent: applyToUnsent }),
+  setHidden: (id: number, hidden: boolean) => api.put<Project>(`/projects/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/projects/${id}`),
 }

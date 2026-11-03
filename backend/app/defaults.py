@@ -12,8 +12,9 @@ When no other document has, the default is the first DEFAULT_COUNT items the lib
 under the parent (a section's: of the kind it lists most), or nothing for sections, which no
 library list orders. Skills and bullets the library no longer lists under their parent are left
 out (a section's items needn't be listed under it), and so are bullets already in the section
-(each goes in a section once). Phase 5 replaces these with
-AI suggestions; the rest of the app only calls the functions here.
+(each goes in a section once). Hidden items are never defaults (docs/FRONTEND_CHECKS.md,
+"Hiding"). Phase 5 replaces these with AI suggestions; the rest of the app only calls the
+functions here.
 """
 
 from typing import Any
@@ -27,6 +28,7 @@ from app.models import (
     ExperienceBulletPoint,
     ProjectBulletPoint,
     ProjectSkill,
+    Section,
     SectionBulletPoint,
     SectionEducation,
     SectionExperience,
@@ -77,19 +79,22 @@ def default_sections(db: Session, kind: Kind, account_id: int, doc_id: int | Non
                        .order_by(*_latest(kind)).limit(1))
     if latest is None:
         return []
-    return list(db.scalars(select(table.c.section_id).where(table.c[kind.doc_id] == latest)
+    return list(db.scalars(select(table.c.section_id)
+                           .join(Section, Section.id == table.c.section_id)
+                           .where(table.c[kind.doc_id] == latest, Section.hidden.is_(False))
                            .order_by(table.c.position)))
 
 
 def _listed(db: Session, link, parent_col: str, parent_id: int, child_col: str,
             library, account_id: int) -> list[int]:
-    """The account's items a library list holds under the parent, in its order (a built-in
-    parent's list holds every account's)."""
+    """The account's items a library list holds under the parent that aren't hidden, in its
+    order (a built-in parent's list holds every account's)."""
     table = link.__table__
     return list(db.scalars(
         select(table.c[child_col])
         .join(library, getattr(library, child_col) == table.c[child_col])
-        .where(table.c[parent_col] == parent_id, library.account_id == account_id)
+        .where(table.c[parent_col] == parent_id, library.account_id == account_id,
+               library.hidden.is_(False))
         .order_by(table.c.position)))
 
 
@@ -120,10 +125,11 @@ def default_entries(db: Session, kind: Kind, account_id: int, doc_id: int, secti
         placed: list[tuple[int, EntryKind, int]] = []
         for entry_kind, model in kind.entry_tables():
             table = model.__table__
-            item_column = LIBRARY[entry_kind][1]
+            library, item_column, _ = LIBRARY[entry_kind]
             placed += [(position, entry_kind, item_id) for item_id, position in db.execute(
                 select(table.c[item_column], table.c.position)
-                .where(in_section(kind, model, latest)))]
+                .join(library, getattr(library, item_column) == table.c[item_column])
+                .where(in_section(kind, model, latest), library.hidden.is_(False)))]
         return [(entry_kind, item_id) for _, entry_kind, item_id in sorted(placed)
                 if not (entry_kind == "bullet" and item_id in taken)]
 

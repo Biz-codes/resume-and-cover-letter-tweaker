@@ -34,6 +34,7 @@ import { PAGE_HEADING_ID, useFocusLater } from '../../shared/hooks/useFocusLater
 import { usePageTitle } from '../../shared/hooks/usePageTitle'
 import type { ListState } from '../DocumentsPage'
 import styles from './DocumentPage.module.css'
+import { offered } from '../../shared/offered'
 
 // Base versions the user chose to edit in place since the app was opened, so the warning
 // isn't repeated ("Warn before editing a base resume / cover letter").
@@ -414,7 +415,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
               >
                 <option value="">None</option>
-                {toneSets.map((item) => (
+                {offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id).map((item) => (
                   <option key={item.tone_set_id} value={item.tone_set_id}>
                     {item.name}
                   </option>
@@ -453,7 +454,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 <HeaderFields
                   key={restored}
                   header={header}
-                  headers={headers}
+                  headers={offered(headers)}
                   readOnly={readOnly || Boolean(doc.job_posting)}
                   onSave={saveHeader}
                 />

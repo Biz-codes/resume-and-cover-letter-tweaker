@@ -7,6 +7,7 @@ import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../tes
 import ToneSetsPage from './ToneSetsPage'
 
 const TECH: ToneSet = {
+  hidden: false,
   tone_set_id: 3,
   name: 'Tech',
   rules: [
@@ -15,7 +16,7 @@ const TECH: ToneSet = {
   ],
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: false }],
 }
-const TEACHING: ToneSet = { tone_set_id: 4, name: 'Teaching', rules: [], used_by: [] }
+const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', rules: [], used_by: [] }
 
 function stub(extra: Record<string, Reply[]> = {}, sets = [TEACHING, TECH]) {
   return stubApi({

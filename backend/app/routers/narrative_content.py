@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, list_beside, set_parents
 from app.models import NarrativeContent, Section, SectionNarrativeContent
 from app.refs import SectionRef, section_refs
@@ -47,6 +48,7 @@ class NarrativeEdit(NarrativeIn):
 
 class NarrativeOut(NarrativeIn):
     content_id: int
+    hidden: bool
     sections: list[SectionRef]
     used_by: list[Use]
 
@@ -55,7 +57,8 @@ def to_out(db: Session, excerpts: list[NarrativeContent]) -> list[NarrativeOut]:
     ids = [excerpt.content_id for excerpt in excerpts]
     sections = section_refs(db, SectionNarrativeContent, "content_id", ids)
     used_by = uses(db, NARRATIVE_LINKS, ids)
-    return [NarrativeOut(content_id=excerpt.content_id, content=excerpt.content,
+    return [NarrativeOut(content_id=excerpt.content_id,
+                         hidden=excerpt.hidden, content=excerpt.content,
                          sections=sections[excerpt.content_id],
                          used_by=used_by[excerpt.content_id])
             for excerpt in excerpts]
@@ -146,7 +149,18 @@ def add_version(content_id: int, body: NarrativeIn, response: Response, db: DbSe
     return one_out(db, new_version(db, original, body, account_id))
 
 
+@router.put("/{content_id}/hidden")
+def set_narrative_content_hidden(content_id: int, body: HiddenIn, db: DbSession,
+                                 account_id: AccountId) -> NarrativeOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, NarrativeContent, content_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_narrative(content_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it from every section, resume, and cover letter."""
-    db.delete(get_owned(db, NarrativeContent, content_id, account_id))
+    item = get_owned(db, NarrativeContent, content_id, account_id)
+    refuse_delete_if_sent(uses(db, NARRATIVE_LINKS, [content_id])[content_id], "narrative content")
+    db.delete(item)

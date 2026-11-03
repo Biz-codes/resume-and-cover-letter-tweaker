@@ -6,7 +6,7 @@ import { renderItem } from '../../test/renderItem'
 import { sentBody, stubApi } from '../../test/stubApi'
 import NarrativeItem from './NarrativeItem'
 
-const INTRO: NarrativeContent = { content_id: 12, content: 'I build tools.', sections: [{ id: 1, title: 'Summary' }], used_by: [] }
+const INTRO: NarrativeContent = { hidden: false, content_id: 12, content: 'I build tools.', sections: [{ id: 1, title: 'Summary' }], used_by: [] }
 const SECTIONS = [1, 9].map((id) => ({
   id,
   title: id === 1 ? 'Summary' : 'Outro',

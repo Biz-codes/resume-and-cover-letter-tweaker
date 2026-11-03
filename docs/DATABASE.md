@@ -31,6 +31,8 @@ Every foreign key uses `ON DELETE CASCADE`: deleting a row also deletes every ro
 
 Checks the app must handle (delete warnings, which items to suggest, timestamp updates) are listed in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
+Every library table except `writing_rule` and `tone_rule` has a `hidden` column, so an item can be set aside without losing it. A hidden item isn't offered anywhere new (pickers, More options, Add content, and the defaults a new resume, cover letter, or section starts with), but every resume and cover letter that already shows it keeps it, sent or not, and the parents that list it keep listing it. The built-in sections and "Other" can't be hidden (`BUILT_IN_PROTECTED`). An item a sent (locked) resume or cover letter uses can't be deleted (`VERSION_LOCKED`), only hidden, so a sent application always keeps its record. The app enforces these; see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+
 Library join tables and resume and cover letter join tables have no timestamps. When a resume's or cover letter's selections change, the app updates that resume's or cover letter's `updated_at` instead.
 
 ## Tables
@@ -46,20 +48,21 @@ Library items stand alone: none of them stores a parent id. Which items belong u
 Note: one row for now (the app's owner). Login fields such as a password will be added when multiple accounts are needed. Every top-level table has an `account_id`; join tables belong to an account through their resume or cover letter.
 
 ### header
-| Column        | Type         | Constraints                                               | Description                    |
-|---------------|--------------|-----------------------------------------------------------|--------------------------------|
-| header_id     | SERIAL       | PRIMARY KEY                                               | unique header id               |
-| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account           |
-| full_name     | VARCHAR(100) | NOT NULL                                                  | name at the top                |
-| headline      | VARCHAR(100) |                                                           | role title shown under the name |
-| email         | VARCHAR(255) |                                                           | contact email                  |
-| phone         | VARCHAR(50)  |                                                           | contact phone number           |
-| location      | VARCHAR(100) |                                                           | city/state                     |
-| linkedin_url  | TEXT         |                                                           | LinkedIn link                  |
-| github_url    | TEXT         |                                                           | GitHub link                    |
-| portfolio_url | TEXT         |                                                           | portfolio link                 |
-| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header added to db   |
-| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header last updated  |
+| Column        | Type         | Constraints                                               | Description                                   |
+|---------------|--------------|-----------------------------------------------------------|-----------------------------------------------|
+| header_id     | SERIAL       | PRIMARY KEY                                               | unique header id                              |
+| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                          |
+| full_name     | VARCHAR(100) | NOT NULL                                                  | name at the top                               |
+| headline      | VARCHAR(100) |                                                           | role title shown under the name               |
+| email         | VARCHAR(255) |                                                           | contact email                                 |
+| phone         | VARCHAR(50)  |                                                           | contact phone number                          |
+| location      | VARCHAR(100) |                                                           | city/state                                    |
+| linkedin_url  | TEXT         |                                                           | LinkedIn link                                 |
+| github_url    | TEXT         |                                                           | GitHub link                                   |
+| portfolio_url | TEXT         |                                                           | portfolio link                                |
+| hidden        | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the header is hidden from new choices |
+| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header added to db                  |
+| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time header last updated                 |
 
 Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, always the posting's header.
 
@@ -179,6 +182,7 @@ Note: `addressee` is everything after "Dear" in the greeting. It defaults to "[o
 | id         | SERIAL       | PRIMARY KEY                                      | unique section id                                 |
 | account_id | INTEGER      | REFERENCES account(account_id) ON DELETE CASCADE | id of owning account; empty for built-in sections |
 | title      | VARCHAR(100) | NOT NULL                                         | heading of resume section or cover letter topic   |
+| hidden     | BOOLEAN      | NOT NULL DEFAULT FALSE                           | whether the section is hidden from new choices    |
 | created_at | TIMESTAMP    | DEFAULT NOW()                                    | date/time section added to db                     |
 | updated_at | TIMESTAMP    | DEFAULT NOW()                                    | date/time section last updated                    |
 
@@ -199,26 +203,28 @@ Note: titles are unique in the account, ignoring capitals and counting the built
 Note: "New version" on a resume or cover letter saves a new section with a new title and the same lists (only the account's items, for a built-in section), in the original's place there. It must change the title (`VALIDATION_FAILED`), and the title must be new (`DUPLICATE`). See "New versions in a resume or cover letter" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 ### narrative_content
-| Column     | Type         | Constraints                                               | Description                              |
-|------------|--------------|-----------------------------------------------------------|------------------------------------------|
-| content_id | SERIAL       | PRIMARY KEY                                               | unique narrative content id              |
-| account_id | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                     |
-| content    | TEXT         | NOT NULL                                                  | text of one sentence up to a paragraph   |
-| created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time narrative content added to db  |
-| updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time narrative content last updated |
+| Column     | Type      | Constraints                                               | Description                                              |
+|------------|-----------|-----------------------------------------------------------|----------------------------------------------------------|
+| content_id | SERIAL    | PRIMARY KEY                                               | unique narrative content id                              |
+| account_id | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                     |
+| content    | TEXT      | NOT NULL                                                  | text of one sentence up to a paragraph                   |
+| hidden     | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the narrative content is hidden from new choices |
+| created_at | TIMESTAMP | DEFAULT NOW()                                             | date/time narrative content added to db                  |
+| updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time narrative content last updated                 |
 
 Note: each row (an "excerpt" in the app) holds anything from one sentence to a full paragraph. Narrative sections, such as a resume summary or a cover letter paragraph, combine the excerpts chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. The user decides how to split text: for example, a paragraph used in many resumes with only its first sentence changed can be one row per first sentence plus one row for the rest of the paragraph. No label column is needed, because sections list their excerpts in `section_narrative_content`.
 
 Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row. A new version must differ from the original (`VALIDATION_FAILED`).
 
 ### skill_category
-| Column        | Type         | Constraints                                      | Description                                      |
-|---------------|--------------|--------------------------------------------------|--------------------------------------------------|
-| category_id   | SERIAL       | PRIMARY KEY                                      | unique skill category id                         |
-| account_id    | INTEGER      | REFERENCES account(account_id) ON DELETE CASCADE | id of owning account; empty for built-in "Other" |
-| category_name | VARCHAR(100) | NOT NULL                                         | name of skill category                           |
-| created_at    | TIMESTAMP    | DEFAULT NOW()                                    | date/time skill category added to db             |
-| updated_at    | TIMESTAMP    | DEFAULT NOW()                                    | date/time skill category last updated            |
+| Column        | Type         | Constraints                                      | Description                                           |
+|---------------|--------------|--------------------------------------------------|-------------------------------------------------------|
+| category_id   | SERIAL       | PRIMARY KEY                                      | unique skill category id                              |
+| account_id    | INTEGER      | REFERENCES account(account_id) ON DELETE CASCADE | id of owning account; empty for built-in "Other"      |
+| category_name | VARCHAR(100) | NOT NULL                                         | name of skill category                                |
+| hidden        | BOOLEAN      | NOT NULL DEFAULT FALSE                           | whether the skill category is hidden from new choices |
+| created_at    | TIMESTAMP    | DEFAULT NOW()                                    | date/time skill category added to db                  |
+| updated_at    | TIMESTAMP    | DEFAULT NOW()                                    | date/time skill category last updated                 |
 
 Note: a category lists its skills in `skill_category_skill`, and sections list their categories in `section_skill_category`.
 
@@ -231,13 +237,14 @@ Note: when a category is deleted, the app first lists any of its skills that no 
 Note: "New version" on a resume or cover letter saves a new category with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in its sections and listing the same skills (only the account's, for "Other"), in the original's place there.
 
 ### skill
-| Column     | Type         | Constraints                                               | Description                  |
-|------------|--------------|-----------------------------------------------------------|------------------------------|
-| skill_id   | SERIAL       | PRIMARY KEY                                               | unique skill id              |
-| account_id | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account         |
-| skill_name | VARCHAR(100) | NOT NULL                                                  | name of skill                |
-| created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time skill added to db  |
-| updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time skill last updated |
+| Column     | Type         | Constraints                                               | Description                                  |
+|------------|--------------|-----------------------------------------------------------|----------------------------------------------|
+| skill_id   | SERIAL       | PRIMARY KEY                                               | unique skill id                              |
+| account_id | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                         |
+| skill_name | VARCHAR(100) | NOT NULL                                                  | name of skill                                |
+| hidden     | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the skill is hidden from new choices |
+| created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time skill added to db                  |
+| updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time skill last updated                 |
 
 Note: a skill can be listed under any number of categories (`skill_category_skill`) and projects (`project_skill`). When a category is added to a resume, the app suggests skills from the category's list, in its default order.
 
@@ -248,32 +255,34 @@ Note: every skill is listed under at least one category. Taking a skill out of i
 Note: "New version" on a resume or cover letter saves a new skill with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in every category and project, in the original's place there.
 
 ### experience
-| Column        | Type         | Constraints                                               | Description                            |
-|---------------|--------------|-----------------------------------------------------------|----------------------------------------|
-| experience_id | SERIAL       | PRIMARY KEY                                               | unique experience id                   |
-| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                   |
-| role_title    | VARCHAR(100) | NOT NULL                                                  | title of role held                     |
-| organization  | VARCHAR(100) | NOT NULL                                                  | name of employer or organization       |
-| location      | VARCHAR(100) |                                                           | city/state and/or remote               |
-| dates         | VARCHAR(50)  |                                                           | dates worked (e.g. Jan 2020 – Present) |
-| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db       |
-| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated      |
+| Column        | Type         | Constraints                                               | Description                                       |
+|---------------|--------------|-----------------------------------------------------------|---------------------------------------------------|
+| experience_id | SERIAL       | PRIMARY KEY                                               | unique experience id                              |
+| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                              |
+| role_title    | VARCHAR(100) | NOT NULL                                                  | title of role held                                |
+| organization  | VARCHAR(100) | NOT NULL                                                  | name of employer or organization                  |
+| location      | VARCHAR(100) |                                                           | city/state and/or remote                          |
+| dates         | VARCHAR(50)  |                                                           | dates worked (e.g. Jan 2020 – Present)            |
+| hidden        | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the experience is hidden from new choices |
+| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db                  |
+| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated                 |
 
 Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
 ### project
-| Column        | Type         | Constraints                                               | Description                                                 |
-|---------------|--------------|-----------------------------------------------------------|-------------------------------------------------------------|
-| project_id    | SERIAL       | PRIMARY KEY                                               | unique project id                                           |
-| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                        |
-| project_title | VARCHAR(100) | NOT NULL                                                  | name of project                                             |
-| done_for      | VARCHAR(100) |                                                           | who or what the project is affiliated with                  |
-| url           | TEXT         |                                                           | link to the project (repo, demo, or write-up)               |
-| dates         | VARCHAR(50)  |                                                           | dates worked as displayed (e.g. Spring 2024)                |
-| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project added to db                               |
-| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project last updated                              |
+| Column        | Type         | Constraints                                               | Description                                    |
+|---------------|--------------|-----------------------------------------------------------|------------------------------------------------|
+| project_id    | SERIAL       | PRIMARY KEY                                               | unique project id                              |
+| account_id    | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                           |
+| project_title | VARCHAR(100) | NOT NULL                                                  | name of project                                |
+| done_for      | VARCHAR(100) |                                                           | who or what the project is affiliated with     |
+| url           | TEXT         |                                                           | link to the project (repo, demo, or write-up)  |
+| dates         | VARCHAR(50)  |                                                           | dates worked as displayed (e.g. Spring 2024)   |
+| hidden        | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the project is hidden from new choices |
+| created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project added to db                  |
+| updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time project last updated                 |
 
 Note: a project lists its skills in `project_skill` and its bullets in `project_bullet_point`.
 
@@ -284,13 +293,14 @@ Note: each version of a project is its own row, like a role's versions. A versio
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the skills and bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
 ### bullet_point
-| Column     | Type         | Constraints                                               | Description                         |
-|------------|--------------|-----------------------------------------------------------|-------------------------------------|
-| bullet_id  | SERIAL       | PRIMARY KEY                                               | unique bullet point id              |
-| account_id | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                |
-| content    | TEXT         | NOT NULL                                                  | text of bullet point                |
-| created_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time bullet point added to db  |
-| updated_at | TIMESTAMP    | DEFAULT NOW()                                             | date/time bullet point last updated |
+| Column     | Type      | Constraints                                               | Description                                         |
+|------------|-----------|-----------------------------------------------------------|-----------------------------------------------------|
+| bullet_id  | SERIAL    | PRIMARY KEY                                               | unique bullet point id                              |
+| account_id | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                |
+| content    | TEXT      | NOT NULL                                                  | text of bullet point                                |
+| hidden     | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the bullet point is hidden from new choices |
+| created_at | TIMESTAMP | DEFAULT NOW()                                             | date/time bullet point added to db                  |
+| updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time bullet point last updated                 |
 
 Note: a bullet is listed under roles (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
 
@@ -305,6 +315,7 @@ Note: an accepted rewording, or a new version written on a resume or cover lette
 | institution  | VARCHAR(100) | NOT NULL                                                  | name of school or institution                                            |
 | details      | TEXT         |                                                           | optional details about education                                         |
 | graduation   | VARCHAR(100) |                                                           | graduation date and honors as displayed (e.g. May 2015, magna cum laude) |
+| hidden       | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the education is hidden from new choices                         |
 | created_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education added to db                                          |
 | updated_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education last updated                                         |
 
@@ -331,6 +342,7 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 | tone_set_id | SERIAL       | PRIMARY KEY                                               | unique tone set id                               |
 | account_id  | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                             |
 | name        | VARCHAR(100) | NOT NULL                                                  | label for the tone set (e.g. "Tech", "Teaching") |
+| hidden      | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the tone set is hidden from new choices  |
 | created_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set added to db                   |
 | updated_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set last updated                  |
 
@@ -356,6 +368,7 @@ Note: deleting a tone set deletes its rules. Reordering a set's rules must send 
 | sign_off_id | SERIAL       | PRIMARY KEY                                               | unique sign-off id                                 |
 | account_id  | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                               |
 | text        | VARCHAR(100) | NOT NULL                                                  | closing word(s) before the name (e.g. "Sincerely") |
+| hidden      | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the sign-off is hidden from new choices    |
 | created_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time sign-off added to db                     |
 | updated_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time sign-off last updated                    |
 

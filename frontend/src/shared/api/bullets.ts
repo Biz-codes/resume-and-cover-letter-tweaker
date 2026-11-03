@@ -3,6 +3,8 @@ import { api } from './client'
 import type { Use } from './usage'
 
 export interface Bullet {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   bullet_id: number
   content: string
   experience: { experience_id: number; role_title: string; organization: string; dates: string | null }[]
@@ -26,5 +28,6 @@ export const bulletsApi = {
   // When a sent version uses the bullet, the new text is saved as a new bullet with a new id.
   update: (id: number, content: string) => api.put<Bullet>(`/bullet-points/${id}`, { content }),
   addVersion: (id: number, content: string) => api.post<Bullet>(`/bullet-points/${id}/versions`, { content }),
+  setHidden: (id: number, hidden: boolean) => api.put<Bullet>(`/bullet-points/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/bullet-points/${id}`),
 }

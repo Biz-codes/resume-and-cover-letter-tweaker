@@ -10,8 +10,10 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
 
 export default function ToneSetsPage() {
   const [sets, setSets] = useState<ToneSet[] | null>(null)
@@ -36,12 +38,41 @@ export default function ToneSetsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
   async function create(name: string) {
     await toneSetsApi.create(name)
     await load()
     setNotice(`Added "${name.trim()}".`)
   }
+
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(toneSet: ToneSet, hidden = false) {
+    return (
+      <LibraryCard
+        key={toneSet.tone_set_id}
+        title={toneSet.name}
+        heading={hidden ? 4 : 3}
+        editId={editId('tone', toneSet.tone_set_id)}
+        editLabel={`View and Edit "${toneSet.name}"`}
+        onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title: toneSet.name })}
+        actions={
+          hidden && (
+            <UnhideButton
+              name={toneSet.name}
+              onUnhide={() => unhide('tone', toneSet.tone_set_id, toneSet.name, () => toneSetsApi.setHidden(toneSet.tone_set_id, false))}
+            />
+          )
+        }
+      >
+        <p className="muted">{toneSet.rules.length === 1 ? '1 rule' : `${toneSet.rules.length} rules`}</p>
+      </LibraryCard>
+    )
+  }
+
+  const all = sortByName(sets ?? [], (toneSet) => toneSet.name)
+  const shown = all.filter((toneSet) => !toneSet.hidden)
+  const hiddenOnes = all.filter((toneSet) => toneSet.hidden)
 
   return (
     <section>
@@ -67,18 +98,8 @@ export default function ToneSetsPage() {
 
       {sets && <NameForm label="New tone name" field="name" submitLabel="Add tone" onSave={create} />}
       {sets && sets.length === 0 && <p>No tones yet.</p>}
-      {sets && sortByName(sets, (toneSet) => toneSet.name).map((toneSet) => (
-        <LibraryCard
-          key={toneSet.tone_set_id}
-          title={toneSet.name}
-          heading={3}
-          editId={editId('tone', toneSet.tone_set_id)}
-          editLabel={`View and Edit "${toneSet.name}"`}
-          onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title: toneSet.name })}
-        >
-          <p className="muted">{toneSet.rules.length === 1 ? '1 rule' : `${toneSet.rules.length} rules`}</p>
-        </LibraryCard>
-      ))}
+      {shown.map((toneSet) => card(toneSet))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((toneSet) => card(toneSet, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

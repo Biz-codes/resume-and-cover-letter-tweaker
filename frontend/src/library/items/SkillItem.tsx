@@ -53,6 +53,12 @@ export default function SkillItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={skill.hidden}
+      usedBySent={anyLocked(skill.used_by)}
+      onSetHidden={async (next) => {
+        await skillsApi.setHidden(skill.skill_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <NameForm
           label="Skill name"

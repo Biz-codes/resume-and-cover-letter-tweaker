@@ -17,6 +17,8 @@ export interface HeaderFields {
 export type HeaderUse = Use
 
 export interface Header extends HeaderFields {
+  // Set aside: not offered anywhere new, but kept wherever it's used.
+  hidden: boolean
   header_id: number
   // When it was added, which tells versions apart in lists (labels.ts).
   created_at: string
@@ -35,5 +37,6 @@ export const headersApi = {
   update: (headerId: number, fields: HeaderFields) =>
     api.put<Header>(`/headers/${headerId}`, fields),
   addVersion: (headerId: number, fields: HeaderFields) => api.post<Header>(`/headers/${headerId}/versions`, fields),
+  setHidden: (headerId: number, hidden: boolean) => api.put<Header>(`/headers/${headerId}/hidden`, { hidden }),
   delete: (headerId: number) => api.delete(`/headers/${headerId}`),
 }

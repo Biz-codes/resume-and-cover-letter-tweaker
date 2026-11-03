@@ -22,8 +22,8 @@ const LETTER: DocDetail = {
   output: { parts: [], text: '' },
 }
 const SIGN_OFFS = [
-  { sign_off_id: 3, text: 'Sincerely', used_by: [] },
-  { sign_off_id: 4, text: 'Best regards', used_by: [] },
+  { sign_off_id: 3, text: 'Sincerely', hidden: false, used_by: [] },
+  { sign_off_id: 4, text: 'Best regards', hidden: false, used_by: [] },
 ]
 
 describe('Greeting', () => {
@@ -91,6 +91,21 @@ describe('SignOffPart', () => {
     fireEvent.change(name, { target: { value: 'Sam Rivera' } })
     fireEvent.blur(name)
     await vi.waitFor(() => expect(onSave).toHaveBeenLastCalledWith({ signature_name: null }))
+  })
+
+  it('offers no hidden sign-off, apart from the one the letter already has', () => {
+    const signOffs = [
+      { ...SIGN_OFFS[0], hidden: true },
+      { ...SIGN_OFFS[1], hidden: true },
+      { sign_off_id: 5, text: 'Thanks', hidden: false, used_by: [] },
+    ]
+    render(<SignOffPart {...PART} signOffs={signOffs} doc={LETTER} readOnly={false} onSave={vi.fn()} />)
+    const select = screen.getByRole('combobox', { name: 'Sign-off' })
+    expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'No sign-off',
+      'Sincerely',
+      'Thanks',
+    ])
   })
 
   it("saves nothing when the header's name is left as it is", () => {

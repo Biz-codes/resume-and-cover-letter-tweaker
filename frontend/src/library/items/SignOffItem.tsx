@@ -54,6 +54,12 @@ export default function SignOffItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      hidden={signOff.hidden}
+      usedBySent={anyLocked(signOff.used_by)}
+      onSetHidden={async (next) => {
+        await signOffsApi.setHidden(signOff.sign_off_id, next)
+        await Promise.all([load(), host.refresh()])
+      }}
       form={
         <NameForm
           label="Sign-off"

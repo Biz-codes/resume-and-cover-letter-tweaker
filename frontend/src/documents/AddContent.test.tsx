@@ -15,19 +15,21 @@ const role = (id: number, organization: string, bullets: { bullet_id: number; co
   dates: null,
   bullets,
   sections: [],
+  hidden: false,
   used_by: [],
 })
 const nothing = { narrative_content: [], skill_categories: [], projects: [], bullets: [], education: [], used_by: [] }
 const LIBRARY: Library = {
   sections: [
     {
+      hidden: false,
       id: 3,
       title: 'Experience',
       built_in: true,
       ...nothing,
       experience: [{ experience_id: 8, role_title: 'Engineer', organization: 'Beta', dates: null }],
     },
-    { id: 12, title: 'Talks', built_in: false, ...nothing, experience: [] },
+    { hidden: false, id: 12, title: 'Talks', built_in: false, ...nothing, experience: [] },
   ],
   narrative: [],
   categories: [],
@@ -80,6 +82,12 @@ describe('AddContent', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add to Experience' })).toHaveAttribute('aria-disabled', 'true')
     await expectNoA11yViolations()
+  })
+
+  it('offers no hidden item', () => {
+    const library = { ...LIBRARY, experience: LIBRARY.experience.map((role) => ({ ...role, hidden: role.experience_id === 8 })) }
+    render(<AddContent section={EMPTY} library={library} onAdd={vi.fn()} onWrite={vi.fn()} />)
+    expect(options(screen.getByLabelText('Role'))).toEqual(['Choose a role…', 'Engineer, Acme', 'Engineer, Gamma', 'New role…'])
   })
 
   it('adds a saved item (with its defaults), leaving out the ones already placed, then closes to its button', async () => {

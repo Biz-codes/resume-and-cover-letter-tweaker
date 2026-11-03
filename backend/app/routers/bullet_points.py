@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, list_beside
 from app.models import (
     BulletPoint,
@@ -61,6 +62,7 @@ class NewBullet(BulletIn):
 
 class BulletOut(BulletIn):
     bullet_id: int
+    hidden: bool
     experience: list[ExperienceRef]
     projects: list[ProjectRef]
     sections: list[SectionRef]
@@ -75,7 +77,7 @@ def to_out(db: Session, bullets: list[BulletPoint], account_id: int) -> list[Bul
                             order_by=Project.project_title)
     sections = section_refs(db, SectionBulletPoint, "bullet_id", ids)
     used_by = uses(db, BULLET_LINKS, ids)
-    return [BulletOut(bullet_id=bullet.bullet_id, content=bullet.content,
+    return [BulletOut(bullet_id=bullet.bullet_id, hidden=bullet.hidden, content=bullet.content,
                       experience=experience[bullet.bullet_id],
                       projects=projects[bullet.bullet_id], sections=sections[bullet.bullet_id],
                       used_by=used_by[bullet.bullet_id])
@@ -164,7 +166,18 @@ def add_version(bullet_id: int, body: BulletIn, response: Response, db: DbSessio
     return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
+@router.put("/{bullet_id}/hidden")
+def set_bullet_point_hidden(bullet_id: int, body: HiddenIn, db: DbSession,
+                            account_id: AccountId) -> BulletOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, BulletPoint, bullet_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item, account_id)
+
+
 @router.delete("/{bullet_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bullet(bullet_id: int, db: DbSession, account_id: AccountId) -> None:
     """Removes it from every role, project, section, resume, and cover letter."""
-    db.delete(get_owned(db, BulletPoint, bullet_id, account_id))
+    item = get_owned(db, BulletPoint, bullet_id, account_id)
+    refuse_delete_if_sent(uses(db, BULLET_LINKS, [bullet_id])[bullet_id], "bullet")
+    db.delete(item)

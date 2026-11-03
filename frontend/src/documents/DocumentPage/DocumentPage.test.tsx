@@ -8,6 +8,7 @@ import DocumentRoute from './DocumentPage'
 import DocumentsPage from '../DocumentsPage'
 
 const SAM: Header = {
+  hidden: false,
   header_id: 1,
   created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',

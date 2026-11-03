@@ -9,8 +9,10 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
+import { useUnhide } from './useUnhide'
 
 const isListed = (bullet: Bullet) => bullet.experience.length + bullet.projects.length + bullet.sections.length > 0
 
@@ -37,8 +39,10 @@ export default function BulletsPage() {
   }, [load])
 
   const dialogs = useItemDialogs({ reload: load, notify: setNotice })
+  const unhide = useUnhide(load, setNotice)
 
-  function card(bullet: Bullet) {
+  // `hidden`: a card in the Hidden group, with Unhide.
+  function card(bullet: Bullet, hidden = false) {
     const title = shortBullet(bullet.content)
     return (
       <LibraryCard
@@ -47,12 +51,15 @@ export default function BulletsPage() {
         titleClassName="bullet-text"
         editId={editId('bullet', bullet.bullet_id)}
         editLabel={`View and Edit "${title}"`}
+        actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('bullet', bullet.bullet_id, title, () => bulletsApi.setHidden(bullet.bullet_id, false))} />}
         onEdit={() => dialogs.open({ kind: 'bullet', id: bullet.bullet_id, title })}
       />
     )
   }
 
-  const sorted = sortByName(bullets ?? [], (bullet) => bullet.content)
+  const all = sortByName(bullets ?? [], (bullet) => bullet.content)
+  const hiddenOnes = all.filter((bullet) => bullet.hidden)
+  const sorted = all.filter((bullet) => !bullet.hidden)
   const unlisted = sorted.filter((bullet) => !isListed(bullet))
   const listed = sorted.filter(isListed)
 
@@ -83,12 +90,13 @@ export default function BulletsPage() {
           <p className="muted">
             No role, project, or section lists these. Add them to one on its page, or delete them.
           </p>
-          {unlisted.map(card)}
+          {unlisted.map((item) => card(item))}
         </div>
       )}
       {bullets && <h3>Listed bullets</h3>}
       {bullets && listed.length === 0 && <p>No bullets yet.</p>}
-      {listed.map(card)}
+      {listed.map((item) => card(item))}
+      <HiddenItems count={hiddenOnes.length}>{hiddenOnes.map((bullet) => card(bullet, true))}</HiddenItems>
       {dialogs.dialog}
     </section>
   )

@@ -8,11 +8,13 @@ import { expectNoA11yViolations } from '../test/axe'
 import { findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import ExperiencePage from './ExperiencePage'
+import { unsent } from '../test/unsent'
 
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const SHIPPED = { bullet_id: 10, content: 'Shipped the checkout flow' }
 const TESTED = { bullet_id: 11, content: 'Tested it' }
 const ENGINEER: Experience = {
+  hidden: false,
   experience_id: 4,
   created_at: '2026-10-01T09:00:00',
   role_title: 'Engineer',
@@ -34,6 +36,7 @@ const GIG: Experience = {
   used_by: [],
 }
 const bullet = (ref: { bullet_id: number; content: string }): Bullet => ({
+  hidden: false,
   ...ref,
   experience: [],
   projects: [],
@@ -41,8 +44,8 @@ const bullet = (ref: { bullet_id: number; content: string }): Bullet => ({
   used_by: [],
 })
 const SECTIONS: Section[] = [
-  { id: 3, title: 'Experience', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
-  { id: 6, title: 'Freelance', built_in: false, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 3, title: 'Experience', built_in: true, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
+  { hidden: false, id: 6, title: 'Freelance', built_in: false, narrative_content: [], skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] },
 ]
 
 function stub(extra: Record<string, Reply[]> = {}, roles = [ENGINEER, GIG]) {
@@ -248,7 +251,7 @@ describe('ExperiencePage', () => {
   })
 
   it('lists what a delete affects, then deletes', async () => {
-    stub({ 'DELETE /api/experience/4': [{ status: 204 }] })
+    stub({ 'DELETE /api/experience/4': [{ status: 204 }] }, [unsent(ENGINEER), GIG])
     render(<ExperiencePage />)
     const dialog = await openItem('Engineer, Acme')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
@@ -256,7 +259,6 @@ describe('ExperiencePage', () => {
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('Used by: Acme resume.')
     expect(confirm).toHaveTextContent('The bullets stay in the library.')
-    expect(confirm).toHaveTextContent('changes the record of what you sent')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Engineer, Acme (2020 – 2022)".')

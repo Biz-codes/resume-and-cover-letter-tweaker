@@ -5,8 +5,10 @@ import { expectNoA11yViolations } from '../test/axe'
 import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import SignOffsPage from './SignOffsPage'
+import { unsent } from '../test/unsent'
 
 const SINCERELY: SignOff = {
+  hidden: false,
   sign_off_id: 1,
   text: 'Sincerely',
   used_by: [
@@ -14,7 +16,7 @@ const SINCERELY: SignOff = {
     { kind: 'cover_letter', id: 3, name: 'Draft letter', locked: false },
   ],
 }
-const BEST: SignOff = { sign_off_id: 4, text: 'Best regards', used_by: [] }
+const BEST: SignOff = { hidden: false, sign_off_id: 4, text: 'Best regards', used_by: [] }
 
 function stub(extra: Record<string, Reply[]> = {}, signOffs = [SINCERELY, BEST]) {
   return stubApi({
@@ -112,13 +114,12 @@ describe('SignOffsPage', () => {
   })
 
   it('lists what a delete affects, then deletes', async () => {
-    stub({ 'DELETE /api/sign-offs/1': [{ status: 204 }] })
+    stub({ 'DELETE /api/sign-offs/1': [{ status: 204 }] }, [unsent(SINCERELY), BEST])
     render(<SignOffsPage />)
     fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: 'Delete' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sincerely"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep going with no closing')
-    expect(confirm).toHaveTextContent('A sent version uses it')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted "Sincerely".')
@@ -150,5 +151,59 @@ describe('SignOffsPage', () => {
     stub({}, [])
     render(<SignOffsPage />)
     expect(await screen.findByText('No sign-offs yet.')).toBeInTheDocument()
+  })
+
+  it('lists hidden sign-offs last, under "Hidden (n)", and unhides one', async () => {
+    const hidden = { ...BEST, hidden: true }
+    const fetchMock = stub(
+      {
+        'PUT /api/sign-offs/4/hidden': [{ status: 200, body: BEST }],
+        'GET /api/sign-offs': [
+          { status: 200, body: [SINCERELY, hidden] },
+          { status: 200, body: [SINCERELY, BEST] },
+        ],
+      },
+    )
+    render(<SignOffsPage />)
+    await screen.findByRole('heading', { name: 'Sincerely' })
+    expect(screen.queryByRole('heading', { name: 'Best regards' })).not.toBeInTheDocument()
+    const group = screen.getByRole('button', { name: 'Hidden (1)' })
+    expect(group).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(group)
+    expect(screen.getByRole('heading', { level: 4, name: 'Best regards' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Unhide "Best regards"' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Unhid "Best regards".')
+    expect(sentBody(fetchMock, 'PUT /api/sign-offs/4/hidden')).toEqual({ hidden: false })
+    expect(screen.queryByRole('button', { name: 'Hidden (1)' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'View and Edit "Best regards"' })).toHaveFocus())
+  })
+
+  it('hides a sign-off a sent letter uses from its dialog, which offers no Delete', async () => {
+    const hidden = { ...SINCERELY, hidden: true }
+    const fetchMock = stub({
+      'PUT /api/sign-offs/1/hidden': [{ status: 200, body: hidden }],
+      // The page and its dialog, then both again after hiding.
+      'GET /api/sign-offs': [
+        { status: 200, body: [SINCERELY, BEST] },
+        { status: 200, body: [SINCERELY, BEST] },
+        { status: 200, body: [hidden, BEST] },
+      ],
+    })
+    render(<SignOffsPage />)
+    const dialog = await openItem('Sincerely')
+    expect(within(dialog).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/A sent application uses it, so it can't be deleted/)).toBeInTheDocument()
+    const hide = within(dialog).getByRole('button', { name: 'Hide' })
+    hide.focus()
+    fireEvent.click(hide)
+    await vi.waitFor(() =>
+      expect(within(dialog).getByRole('status')).toHaveTextContent('Hidden. It isn’t offered anywhere new.'),
+    )
+    await vi.waitFor(() => expect(hide).toHaveTextContent('Unhide'))
+    expect(hide).toHaveFocus()
+    expect(within(dialog).getByText(/^Hidden: it isn't offered anywhere new/)).toBeInTheDocument()
+    expect(sentBody(fetchMock, 'PUT /api/sign-offs/1/hidden')).toEqual({ hidden: true })
+    await expectNoA11yViolations()
   })
 })

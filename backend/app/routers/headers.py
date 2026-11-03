@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
 from app.db import DbSession
+from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.models import CoverLetter, Header, JobPosting, Resume
 from app.schemas import OptionalText, RequiredText
 from app.usage import Use
@@ -34,6 +35,7 @@ class HeaderIn(BaseModel):
 
 class HeaderOut(HeaderIn):
     header_id: int
+    hidden: bool
     # When it was added, which tells versions apart in lists when all else they show matches.
     created_at: datetime
     used_by: list[Use]
@@ -63,7 +65,8 @@ def uses(db: Session, header_ids: list[int]) -> dict[int, list[Use]]:
 
 
 def to_out(header: Header, used_by: list[Use]) -> HeaderOut:
-    return HeaderOut(header_id=header.header_id, created_at=header.created_at, used_by=used_by,
+    return HeaderOut(header_id=header.header_id,
+                     hidden=header.hidden, created_at=header.created_at, used_by=used_by,
                      **{field: getattr(header, field) for field in FIELDS})
 
 
@@ -155,7 +158,18 @@ def update_header(header_id: int, body: HeaderIn, db: DbSession,
     return one_out(db, find_or_add(db, account_id, body)[0])
 
 
+@router.put("/{header_id}/hidden")
+def set_header_hidden(header_id: int, body: HiddenIn, db: DbSession,
+                      account_id: AccountId) -> HeaderOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"). Nothing that uses it changes."""
+    item = get_owned(db, Header, header_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return one_out(db, item)
+
+
 @router.delete("/{header_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_header(header_id: int, db: DbSession, account_id: AccountId) -> None:
     """Postings, resumes, and cover letters that used it keep going with no header."""
-    db.delete(get_owned(db, Header, header_id, account_id))
+    item = get_owned(db, Header, header_id, account_id)
+    refuse_delete_if_sent(uses(db, [header_id])[header_id], "header")
+    db.delete(item)

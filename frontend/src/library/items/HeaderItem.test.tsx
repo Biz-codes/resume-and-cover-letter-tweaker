@@ -7,6 +7,7 @@ import { stubApi } from '../../test/stubApi'
 import HeaderItem from './HeaderItem'
 
 const HEADER: Header = {
+  hidden: false,
   header_id: 1,
   created_at: '2026-10-01T09:00:00',
   full_name: 'Sam Rivera',
