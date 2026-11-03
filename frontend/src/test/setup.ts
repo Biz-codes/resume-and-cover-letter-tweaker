@@ -16,6 +16,10 @@ HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
   this.removeAttribute('open')
 }
 
+// jsdom has no canvas: its getContext returns null after printing "Not implemented". axe asks
+// for one to check for icon fonts and goes on without it, so return null without the noise.
+HTMLCanvasElement.prototype.getContext = () => null
+
 // Every test that renders something gets an axe check of where it ends up, so no test can
 // skip accessibility. Tests still call expectNoA11yViolations for states they pass through
 // on the way (loading, a form open before it's saved). Pending fetches and renders settle

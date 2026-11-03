@@ -16,6 +16,9 @@
 // what's under the item (a section's contents, a role's bullets) below the row. With
 // `readOnly`, only the names (and what opens under them) are shown.
 //
+// With `where`, each row's buttons also say where the list is ("Move React under Front End in
+// Skills"), for a page that shows the same item in more than one list (a resume's tree).
+//
 // Adding is from a picker, or with `moreOptions`, from checkboxes behind a "More options" level
 // (MoreOptions), for the lists in a resume's or cover letter's tree, which start with defaults;
 // `moreChildren` adds other ways to add inside that level.
@@ -38,6 +41,7 @@ export interface ListItem<K extends ListKey = number> {
 }
 
 const labelOf = (item: ListItem<ListKey>) => item.label ?? item.name
+const placed = (name: string, where?: string) => (where ? `${name} ${where}` : name)
 
 // How far a pointer moves before a press on the handle becomes a drag, in pixels.
 const DRAG_THRESHOLD = 4
@@ -56,6 +60,7 @@ function grouped<K extends ListKey>(choices: ListItem<K>[]) {
 
 export default function OrderedList<K extends ListKey = number>({
   label,
+  where,
   items,
   choices,
   emptyText,
@@ -71,6 +76,8 @@ export default function OrderedList<K extends ListKey = number>({
   onChange,
 }: {
   label: string
+  // Where the list is, added to each row's button names: "under Front End in Skills".
+  where?: string
   items: ListItem<K>[]
   // Items that can be added (the ones already listed are left out here).
   choices: ListItem<K>[]
@@ -346,7 +353,7 @@ export default function OrderedList<K extends ListKey = number>({
                       if (handle) handles.current.set(item.id, handle)
                       else handles.current.delete(item.id)
                     }}
-                    aria-label={`Move ${labelOf(item)}`}
+                    aria-label={`Move ${placed(labelOf(item), where)}`}
                     aria-pressed={moving?.id === item.id}
                     aria-describedby={instructionsId}
                     onClick={() => onHandleClick(item)}
@@ -366,6 +373,7 @@ export default function OrderedList<K extends ListKey = number>({
                   <button
                     type="button"
                     className={`${styles.itemName} disclosure-toggle`}
+                    aria-label={where && placed(item.name, where)}
                     aria-expanded={opened}
                     aria-controls={bodyId}
                     onClick={() => toggle(item.id)}
@@ -379,7 +387,7 @@ export default function OrderedList<K extends ListKey = number>({
                     {!moving && removable && (
                       <button
                         type="button"
-                        aria-label={`Remove ${labelOf(item)}`}
+                        aria-label={`Remove ${placed(labelOf(item), where)}`}
                         onClick={() =>
                           void save(
                             items.filter((other) => other.id !== item.id).map((other) => other.id),
@@ -424,31 +432,31 @@ export default function OrderedList<K extends ListKey = number>({
       )}
       {!readOnly && !moreOptions && available.length > 0 && !moving && (
         <div className="actions">
-          <select
-            ref={pickerRef}
-            aria-label={`Add to ${label}`}
-            value={adding}
-            onChange={(event) => setAdding(event.target.value)}
-          >
-            <option value="">Choose one to add…</option>
-            {grouped(available).map(([group, options]) => {
-              const rendered = options.map((choice) => (
-                <option key={choice.id} value={String(choice.id)}>
-                  {choice.name}
-                </option>
-              ))
-              return group ? (
-                <optgroup key={group} label={group}>
-                  {rendered}
-                </optgroup>
-              ) : (
-                rendered
-              )
-            })}
-          </select>
+          {/* The list's name is in the label for screen readers, after the visible text (WCAG 2.5.3). */}
+          <label className={styles.picker}>
+            Choose one to add<span className="visually-hidden"> to {label}</span>
+            <select ref={pickerRef} value={adding} onChange={(event) => setAdding(event.target.value)}>
+              <option value="">None chosen</option>
+              {grouped(available).map(([group, options]) => {
+                const rendered = options.map((choice) => (
+                  <option key={choice.id} value={String(choice.id)}>
+                    {choice.name}
+                  </option>
+                ))
+                return group ? (
+                  <optgroup key={group} label={group}>
+                    {rendered}
+                  </optgroup>
+                ) : (
+                  rendered
+                )
+              })}
+            </select>
+          </label>
           <button
             type="button"
             aria-disabled={!adding}
+            aria-label={`Add to ${label}`}
             onClick={() => {
               const chosen = available.find((choice) => String(choice.id) === adding)
               if (!chosen) return

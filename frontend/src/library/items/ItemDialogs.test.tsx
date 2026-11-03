@@ -29,13 +29,13 @@ const SHIPPED: Bullet = {
   used_by: [],
 }
 
-// A page with one Edit button, as the library pages have.
+// A page with one View and Edit button, as each library card has.
 function Page({ reload, notify }: { reload: () => Promise<void>; notify: (notice: string | null) => void }) {
   const dialogs = useItemDialogs({ reload, notify })
   return (
     <main>
       <button type="button" id="experience-4-edit" onClick={() => dialogs.open({ kind: 'experience', id: 4, title: 'Engineer, Acme' })}>
-        Edit
+        View and Edit
       </button>
       {dialogs.dialog}
     </main>
@@ -50,7 +50,7 @@ function renderPage() {
   })
   const props = { reload: vi.fn(() => Promise.resolve()), notify: vi.fn() }
   render(<Page {...props} />)
-  const edit = screen.getByRole('button', { name: 'Edit' })
+  const edit = screen.getByRole('button', { name: 'View and Edit' })
   edit.focus()
   fireEvent.click(edit)
   return { ...props, edit }
@@ -93,7 +93,7 @@ describe('useItemDialogs', () => {
     expect(edit).toHaveFocus()
   })
 
-  it('closes on save, then tells the page and moves focus to the item’s Edit button', async () => {
+  it('closes on save, then tells the page and moves focus to the item’s View and Edit button', async () => {
     const { reload, notify, edit } = renderPage()
     fireEvent.click(within(await loadedDialog()).getByText('Save'))
     await vi.waitFor(() => expect(notify).toHaveBeenLastCalledWith('Saved.'))

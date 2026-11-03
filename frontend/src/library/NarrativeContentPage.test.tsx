@@ -90,7 +90,7 @@ describe('NarrativeContentPage', () => {
     })
   })
 
-  it('adds an excerpt under the sections checked, then focuses its Edit button', async () => {
+  it('adds an excerpt under the sections checked, then focuses its View and Edit button', async () => {
     const added = { ...LOOSE, content_id: 12, content: 'I teach.', sections: [{ id: 9, title: 'Outro' }] }
     const fetchMock = stub({ 'POST /api/narrative-content': [{ status: 201, body: added }] }, [INTRO, LOOSE])
     render(<NarrativeContentPage />)
