@@ -13,4 +13,8 @@ export const KIND_LABELS: Record<Use['kind'], string> = {
   cover_letter: 'Cover letter',
 }
 
+// Each use's own page, where its name links to.
+export const pathOf = (use: Use) =>
+  ({ job_posting: '/postings', resume: '/resumes', cover_letter: '/cover-letters' })[use.kind] + `/${use.id}`
+
 export const anyLocked = (uses: Use[]) => uses.some((use) => use.locked)

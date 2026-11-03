@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Education } from '../shared/api/education'
 import type { Section } from '../shared/api/sections'
 import { expectNoA11yViolations } from '../test/axe'
-import { findCard, openItem } from '../test/openCard'
+import { findCard, loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import EducationPage from './EducationPage'
 
@@ -106,7 +106,7 @@ describe('EducationPage', () => {
     const edit = await screen.findByRole('button', { name: `Edit "${LABEL}"` })
     edit.focus()
     fireEvent.click(edit)
-    fireEvent.click(within(screen.getByRole('dialog')).getByText('Cancel'))
+    fireEvent.click(within(await loadedDialog()).getByText('Cancel'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(edit).toHaveFocus()
   })

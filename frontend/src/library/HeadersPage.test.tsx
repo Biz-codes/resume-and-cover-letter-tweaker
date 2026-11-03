@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Header } from '../shared/api/headers'
-import { openItem } from '../test/openCard'
+import { loadedDialog, openItem } from '../test/openCard'
 import { sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import HeadersPage from './HeadersPage'
@@ -106,7 +106,8 @@ describe('HeadersPage', () => {
 
   it('lists what uses a header before deleting it', async () => {
     const fetchMock = stubApi({
-      'GET /api/headers': [{ status: 200, body: [SENT] }, { status: 200, body: [] }],
+      // The page, then its dialog, then the page again after the delete.
+      'GET /api/headers': [{ status: 200, body: [SENT] }, { status: 200, body: [SENT] }, { status: 200, body: [] }],
       'DELETE /api/headers/2': [{ status: 204 }],
     })
     render(<HeadersPage />)
@@ -114,7 +115,8 @@ describe('HeadersPage', () => {
     const confirm = screen.getByRole('group', { name: 'Delete "Sam Rivera, Front-End Engineer"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     expect(confirm).toHaveTextContent('changes the record of what you sent')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // The page and its dialog each read the list once; the warning needs nothing more.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     expect(await screen.findByRole('status')).toHaveTextContent('Header deleted.')
@@ -128,6 +130,9 @@ describe('HeadersPage', () => {
     const edit = await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })
     edit.focus()
     fireEvent.click(edit)
+    expect(screen.getByRole('heading', { level: 2, name: 'Sam Rivera, Software Engineer' })).toHaveFocus()
+    // Its form loads with it, leaving focus on the heading.
+    await loadedDialog()
     expect(screen.getByRole('heading', { level: 2, name: 'Sam Rivera, Software Engineer' })).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(edit).toHaveFocus()
@@ -147,6 +152,7 @@ describe('HeadersPage', () => {
     })
     render(<HeadersPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' }))
+    await loadedDialog()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
@@ -156,7 +162,7 @@ describe('HeadersPage', () => {
   it('adds a new version of a header, or says one with those values exists', async () => {
     const version = { ...BASE, header_id: 6, headline: 'Engineer', used_by: [] }
     const fetchMock = stubApi({
-      'GET /api/headers': [{ status: 200, body: [BASE] }, { status: 200, body: [BASE, version] }],
+      'GET /api/headers': [{ status: 200, body: [BASE] }, { status: 200, body: [BASE] }, { status: 200, body: [BASE, version] }],
       'POST /api/headers/1/versions': [{ status: 201, body: version }],
     })
     render(<HeadersPage />)

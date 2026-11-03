@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { SignOff } from '../shared/api/signOffs'
 import { expectNoA11yViolations } from '../test/axe'
-import { openItem } from '../test/openCard'
+import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import SignOffsPage from './SignOffsPage'
 
@@ -51,6 +51,7 @@ describe('SignOffsPage', () => {
     const fetchMock = stub({ 'PUT /api/sign-offs/1': [{ status: 200, body: saved }] })
     render(<SignOffsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit "Sincerely"' }))
+    await loadedDialog()
     const field = screen.getByLabelText('Sign-off')
     expect(field).toHaveAccessibleDescription(/A sent version uses this sign-off, so saving adds a new one/)
     await expectNoA11yViolations()
@@ -66,6 +67,7 @@ describe('SignOffsPage', () => {
     stub({ 'PUT /api/sign-offs/4': [{ status: 422, body: errorBody('VALIDATION_FAILED', 'Text is required.', 'text') }] })
     render(<SignOffsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit "Best regards"' }))
+    await loadedDialog()
     const field = screen.getByLabelText('Sign-off')
     fireEvent.change(field, { target: { value: ' ' } })
     fireEvent.click(screen.getByText('Save'))
@@ -80,7 +82,7 @@ describe('SignOffsPage', () => {
     const edit = await screen.findByRole('button', { name: 'Edit "Best regards"' })
     edit.focus()
     fireEvent.click(edit)
-    fireEvent.click(within(screen.getByRole('dialog')).getByText('Cancel'))
+    fireEvent.click(within(await loadedDialog()).getByText('Cancel'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(edit).toHaveFocus()
   })

@@ -19,6 +19,7 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   initial,
   note,
   submitLabel = 'Save',
+  focusOnOpen = true,
   children,
   onSave,
   onCancel,
@@ -30,6 +31,9 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   // Shown above the fields and read with the first one (e.g. how saving works).
   note?: string
   submitLabel?: string
+  // Whether its first field takes focus when it opens. Off for an item's form in its dialog, where
+  // the dialog's heading has focus.
+  focusOnOpen?: boolean
   // More controls, shown after the fields (e.g. which section lists a new item).
   children?: ReactNode
   onSave: (values: T) => Promise<void>
@@ -42,7 +46,9 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   const noteId = useId()
   const formRef = useRef<HTMLFormElement>(null)
 
-  useEffect(() => formRef.current?.querySelector<HTMLElement>('input, textarea')?.focus(), [])
+  useEffect(() => {
+    if (focusOnOpen) formRef.current?.querySelector<HTMLElement>('input, textarea')?.focus()
+  }, [focusOnOpen])
 
   async function submit(event: FormEvent) {
     event.preventDefault()

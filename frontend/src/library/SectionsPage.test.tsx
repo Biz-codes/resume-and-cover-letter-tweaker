@@ -4,7 +4,7 @@ import type { Education } from '../shared/api/education'
 import type { Experience } from '../shared/api/experience'
 import type { Section } from '../shared/api/sections'
 import type { SkillCategory } from '../shared/api/skills'
-import { findCard, openItem } from '../test/openCard'
+import { findCard, loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi } from '../test/stubApi'
 import { expectNoA11yViolations } from '../test/axe'
 import SectionsPage from './SectionsPage'
@@ -229,6 +229,8 @@ describe('SectionsPage', () => {
     edit.focus()
     fireEvent.click(edit)
     const dialog = screen.getByRole('dialog', { name: 'Freelance' })
+    expect(within(dialog).getByRole('heading', { level: 2 })).toHaveFocus()
+    await loadedDialog()
     expect(within(dialog).getByRole('heading', { level: 2 })).toHaveFocus()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     expect(within(screen.getByRole('group', { name: 'Delete "Freelance"?' })).getByText('Cancel')).toHaveFocus()

@@ -17,6 +17,8 @@ describe('UsedBy', () => {
       'Resume: Tech base',
       'Cover letter: Acme lettersent',
     ])
+    expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
+    expect(screen.getByRole('link', { name: 'Acme letter' })).toHaveAttribute('href', '/cover-letters/2')
     await expectNoA11yViolations()
   })
 

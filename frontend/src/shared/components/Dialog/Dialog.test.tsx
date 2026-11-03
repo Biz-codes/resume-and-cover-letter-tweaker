@@ -49,7 +49,36 @@ describe('Dialog', () => {
     expect(opener).toHaveFocus()
   })
 
-  it('closes with Escape, leaving the closing to the page', () => {
+  it('closes with the Escape key from inside it or from the body', () => {
+    render(<Page />)
+    const opener = screen.getByRole('button', { name: 'Edit' })
+    opener.focus()
+    fireEvent.click(opener)
+    fireEvent.keyDown(screen.getByRole('heading', { level: 2 }), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+    fireEvent.click(opener)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('stays open when a control inside it uses Escape itself', () => {
+    render(<Page />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const usedBy = screen.getByText('Used by (2)')
+    usedBy.addEventListener('keydown', (event) => event.preventDefault())
+    fireEvent.keyDown(usedBy, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('stays open on Escape while typing with an input method', () => {
+    render(<Page />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.keyDown(screen.getByRole('heading', { level: 2 }), { key: 'Escape', isComposing: true })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('closes on the browser’s cancel event, leaving the closing to the page', () => {
     render(<Page />)
     const opener = screen.getByRole('button', { name: 'Edit' })
     opener.focus()

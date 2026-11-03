@@ -4,10 +4,12 @@ import { vi } from 'vitest'
 export type Reply = { status: number; body?: unknown; delayMs?: number }
 
 // Answers each request from the replies for its method and path ("PUT /api/skills/3"), in order.
+// The last reply answers every request after it, since a page and its dialog each read the lists.
 export function stubApi(replies: Record<string, Reply[]>) {
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     const key = `${init?.method ?? 'GET'} ${url}`
-    const reply = replies[key]?.shift()
+    const queue = replies[key]
+    const reply = queue && queue.length > 1 ? queue.shift() : queue?.[0]
     if (!reply) throw new Error(`unexpected request: ${key}`)
     const response =
       reply.status === 204 ? new Response(null, { status: 204 }) : Response.json(reply.body, { status: reply.status })

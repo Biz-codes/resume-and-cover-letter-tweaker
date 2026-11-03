@@ -12,6 +12,7 @@ export default function NameForm({
   lockedNote,
   submitLabel = 'Save',
   multiline = false,
+  focusOnOpen = true,
   onSave,
   onCancel,
 }: {
@@ -24,6 +25,9 @@ export default function NameForm({
   submitLabel?: string
   // A textarea for text longer than a name, such as a bullet point.
   multiline?: boolean
+  // Whether a form that can be cancelled takes focus when it opens. Off for an item's form in its
+  // dialog, where the dialog's heading has focus.
+  focusOnOpen?: boolean
   onSave: (name: string) => Promise<void>
   onCancel?: () => void
 }) {
@@ -33,7 +37,7 @@ export default function NameForm({
   const errorId = useId()
   const noteId = useId()
   const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
-  const opensInPlace = Boolean(onCancel)
+  const opensInPlace = Boolean(onCancel) && focusOnOpen
 
   useEffect(() => {
     if (opensInPlace) inputRef.current?.focus()

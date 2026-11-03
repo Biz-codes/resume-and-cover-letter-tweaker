@@ -64,6 +64,7 @@ export default function OrderedList<K extends ListKey = number>({
   actions,
   details,
   under,
+  onOpen,
   readOnly = false,
   moreOptions = false,
   moreChildren,
@@ -85,6 +86,8 @@ export default function OrderedList<K extends ListKey = number>({
   details?: (item: ListItem<K>) => ReactNode | null
   // Shown below a row while nothing is moving, or null for nothing (a form an action opened).
   under?: (item: ListItem<K>) => ReactNode | null
+  // Makes each name a button that shows the item (in a library dialog), for a row with no `details`.
+  onOpen?: (item: ListItem<K>) => void
   // Names only: no reordering, adding, or removing (a sent version, or before editing starts).
   readOnly?: boolean
   // Add any number of the choices at once, from checkboxes, instead of one from a picker.
@@ -357,7 +360,11 @@ export default function OrderedList<K extends ListKey = number>({
                     <span aria-hidden="true">⠿</span>
                   </button>
                 )}
-                {body === null ? (
+                {body === null && onOpen ? (
+                  <button type="button" className={`${styles.itemName} link-button`} onClick={() => onOpen(item)}>
+                    {item.name}
+                  </button>
+                ) : body === null ? (
                   <span className={styles.itemName}>{item.name}</span>
                 ) : (
                   <button

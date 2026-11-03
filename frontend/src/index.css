@@ -290,6 +290,18 @@ form.card label select {
   margin: 0;
 }
 
+/* A name that shows its item in a library dialog: a button that reads like a link. */
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* The button that opens and closes a level (Disclosure, and OrderedList rows with `details`).
    The marker is decoration; aria-expanded says open or closed. */
 .disclosure-toggle {

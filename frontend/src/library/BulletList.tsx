@@ -1,9 +1,11 @@
 // A role's, project's, or section's list of bullets: reorder them, take one out, add one from
 // the library, or write a new one (listed here, last). Bullets taken out stay in the library.
+// In a library dialog, each bullet's text shows that bullet in the same dialog.
 import { shortBullet } from '../shared/api/bullets'
 import Collapsible from './Collapsible/Collapsible'
 import NameForm from '../shared/components/NameForm/NameForm'
 import OrderedList from '../shared/components/OrderedList/OrderedList'
+import { useOptionalItemHost } from './items/itemHost'
 
 type BulletRef = { bullet_id: number; content: string }
 
@@ -30,9 +32,11 @@ export default function BulletList({
   onChange: (ids: number[]) => Promise<void>
   onWrite: (content: string) => Promise<void>
 }) {
+  const host = useOptionalItemHost()
   return (
     <Collapsible title={title} count={bullets.length}>
       <OrderedList
+        onOpen={host ? (item) => host.open({ kind: 'bullet', id: item.id, title: shortBullet(item.name) }) : undefined}
         label={`${owner} bullets`}
         items={bullets.map(toItem)}
         choices={allBullets.map(toItem)}

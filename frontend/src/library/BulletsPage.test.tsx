@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Bullet } from '../shared/api/bullets'
 import { expectNoA11yViolations } from '../test/axe'
-import { openItem } from '../test/openCard'
+import { loadedDialog, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
 
@@ -52,6 +52,7 @@ describe('BulletsPage', () => {
     const fetchMock = stub({ 'PUT /api/bullet-points/10': [{ status: 200, body: saved }] })
     render(<BulletsPage />)
     fireEvent.click(await screen.findByRole('button', { name: `Edit ${LABEL}` }))
+    await loadedDialog()
     const field = screen.getByLabelText('Bullet text')
     expect(field).toHaveAccessibleDescription(/A sent version uses this bullet, so saving adds a new one/)
     await expectNoA11yViolations()

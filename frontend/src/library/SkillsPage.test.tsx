@@ -63,7 +63,8 @@ describe('SkillsPage', () => {
     expect(within(await findCard(/^AI/)).getByText('Claude, Gemini')).toBeInTheDocument()
     const ai = await categoryCard('AI')
     expect(within(ai).getByText('Sections that list it (1)')).toBeInTheDocument()
-    expect(within(ai).getByText('Skills', { selector: 'li' })).toBeInTheDocument()
+    // Each section that lists it opens in the same dialog.
+    expect(within(ai).getByRole('button', { name: 'Skills' })).toBeInTheDocument()
     expect(within(ai).getAllByRole('listitem').map((item) => item.textContent)).toContain('Resume: Acme resumesent')
     await expectNoA11yViolations()
     fireEvent.click(within(ai).getByRole('button', { name: 'Close' }))
