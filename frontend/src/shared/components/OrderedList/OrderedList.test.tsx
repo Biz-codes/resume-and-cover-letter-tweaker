@@ -149,17 +149,42 @@ describe('OrderedList', () => {
 
   it('offers only unlisted items, adds one at the end, and returns focus to the picker', async () => {
     const onChange = renderList()
-    const select = screen.getByLabelText('Add to Back End skills')
+    const select = screen.getByLabelText('Choose one to add to Back End skills')
     expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'Choose one to add…',
+      'None chosen',
       'Rust',
     ])
-    expect(button('Add')).toHaveAttribute('aria-disabled', 'true')
+    expect(button('Add to Back End skills')).toHaveAttribute('aria-disabled', 'true')
     fireEvent.change(select, { target: { value: '4' } })
-    fireEvent.click(button('Add'))
+    fireEvent.click(button('Add to Back End skills'))
     expect(onChange).toHaveBeenLastCalledWith([1, 2, 3, 4])
     await vi.waitFor(() => expect(select).toHaveFocus())
     expect(announced()).toHaveTextContent('Added Rust to Back End skills.')
+  })
+
+  it('shows the picker’s label, with the list’s name for screen readers', () => {
+    renderList()
+    const select = screen.getByLabelText('Choose one to add to Back End skills')
+    expect(select.closest('label')).toHaveTextContent(/^Choose one to add/)
+    expect(screen.getByText('to Back End skills', { exact: false })).toHaveClass('visually-hidden')
+  })
+
+  it('adds where the list is to each row’s buttons', async () => {
+    render(
+      <OrderedList
+        label="Front End skills"
+        where="under Front End in Skills"
+        items={ITEMS}
+        choices={ITEMS}
+        emptyText="None."
+        details={(item) => (item.id === 1 ? <p>Under Go</p> : null)}
+        onChange={vi.fn(() => Promise.resolve())}
+      />,
+    )
+    expect(button('Move Python under Front End in Skills')).toBeInTheDocument()
+    expect(button('Remove Python under Front End in Skills')).toBeInTheDocument()
+    expect(button('Go under Front End in Skills')).toHaveAttribute('aria-expanded', 'false')
+    await expectNoA11yViolations()
   })
 
   it('takes string ids and shows choices under their groups', async () => {
@@ -177,14 +202,14 @@ describe('OrderedList', () => {
         onChange={onChange}
       />,
     )
-    const select = screen.getByLabelText('Add to Items in Experience')
+    const select = screen.getByLabelText('Choose one to add to Items in Experience')
     expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
       'Listed under Experience',
       'Education',
     ])
     await expectNoA11yViolations()
     fireEvent.change(select, { target: { value: 'bullet:2' } })
-    fireEvent.click(button('Add'))
+    fireEvent.click(button('Add to Items in Experience'))
     expect(onChange).toHaveBeenLastCalledWith(['experience:1', 'bullet:2'])
   })
 

@@ -166,8 +166,8 @@ async function expand(name: string) {
 // Opens the Experience section, the role and category in it, and the role's bullets.
 async function openExperience() {
   await expand('Experience')
-  await expand('Role: Engineer, Acme')
-  await expand('Skills: Front End')
+  await expand('Role: Engineer, Acme in Experience')
+  await expand('Skills: Front End in Experience')
   await expand('Bullets for Engineer, Acme (1)')
 }
 
@@ -182,7 +182,7 @@ describe('DocumentTree', () => {
     await expand('Experience')
     expect(await rowNames('Items in Experience')).toEqual(['Role: Engineer, Acme', 'Skills: Front End'])
     expect(screen.queryByRole('group', { name: 'Engineer, Acme bullets' })).not.toBeInTheDocument()
-    await expand('Role: Engineer, Acme')
+    await expand('Role: Engineer, Acme in Experience')
     // A role has more than one part, so each opens on its own, named for the role, and starts
     // closed; a category has only its skills, shown right away.
     const details = screen.getByRole('button', { name: 'Details for Engineer, Acme' })
@@ -192,7 +192,7 @@ describe('DocumentTree', () => {
     expect(within(bulletsToggle).getByText('for Engineer, Acme')).toHaveClass('visually-hidden')
     expect(screen.queryByRole('group', { name: 'Engineer, Acme bullets' })).not.toBeInTheDocument()
     await expectNoA11yViolations()
-    await expand('Skills: Front End')
+    await expand('Skills: Front End in Experience')
     expect(screen.getByRole('group', { name: 'Front End skills' })).toBeInTheDocument()
     await expand('Bullets for Engineer, Acme (1)')
     expect(await rowNames('Engineer, Acme bullets')).toEqual(['Led the redesign.'])
@@ -307,11 +307,11 @@ describe('DocumentTree', () => {
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/resumes/1/items/category/301/skills')).toEqual({ skill_ids: [1, 3] }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Remove "Led the redesign."' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove "Led the redesign." under Engineer, Acme in Experience' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/resumes/1/items/experience/300/bullets')).toEqual({ bullet_ids: [] }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Skills: Front End' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Skills: Front End in Experience' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/resumes/1/sections/101/items')).toEqual({
         entries: [{ kind: 'experience', item_id: 7 }],
@@ -361,7 +361,7 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/items/experience/300/written': [{ status: 201, body: saved }] }, 2)
     const { onNotice } = renderTree()
     await openExperience()
-    const button = () => screen.getByRole('button', { name: 'View and Edit "Led the redesign."' })
+    const button = () => screen.getByRole('button', { name: 'View and Edit "Led the redesign." under Engineer, Acme in Experience' })
     expect(button()).toHaveTextContent(/^View and Edit$/)
     fireEvent.click(button())
     const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
@@ -397,7 +397,7 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/sections/100/written': [{ status: 201, body: saved }] }, 2)
     renderTree()
     await expand('Summary')
-    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Text: "Engineer with 4 years."' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Text: "Engineer with 4 years." in Summary' }))
     const dialog = await screen.findByRole('dialog', { name: 'Engineer with 4 years.' })
     const version = within(dialog).getByRole('button', { name: /^New version of / })
     fireEvent.click(version)
@@ -421,7 +421,7 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/items/300/version': [{ status: 201, body: saved }] }, 2)
     const { onNotice } = renderTree()
     await expand('Experience')
-    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' }))
     const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
     fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
     const title = within(dialog).getByLabelText('Title (required)')
@@ -462,7 +462,7 @@ describe('DocumentTree', () => {
       expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/101/version')).toEqual({ title: 'Teaching Experience' }),
     )
     await openExperience()
-    fireEvent.click(screen.getByRole('button', { name: 'View and Edit React' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit React under Front End in Experience' }))
     dialog = await screen.findByRole('dialog', { name: 'React' })
     fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
     fireEvent.change(within(dialog).getByLabelText("New version's name"), { target: { value: 'React 19' } })
@@ -483,7 +483,7 @@ describe('DocumentTree', () => {
     )
     const { onChange, onReload, onNotice } = renderTree()
     await openExperience()
-    const button = screen.getByRole('button', { name: 'View and Edit "Led the redesign."' })
+    const button = screen.getByRole('button', { name: 'View and Edit "Led the redesign." under Engineer, Acme in Experience' })
     fireEvent.click(button)
     const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
     fireEvent.change(within(dialog).getByLabelText('Bullet text'), { target: { value: 'Led the whole redesign.' } })
@@ -506,7 +506,7 @@ describe('DocumentTree', () => {
     )
     const { onChange } = renderTree()
     await expand('Experience')
-    const row = screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme' })
+    const row = screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' })
     fireEvent.click(row)
     const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Led the redesign.' }))
@@ -519,6 +519,26 @@ describe('DocumentTree', () => {
     await vi.waitFor(() => expect(sentBody(fetchMock, 'POST /api/bullet-points/8/versions')).toEqual({ content: 'Led two redesigns.' }))
     expect(onChange).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(row).toHaveFocus())
+  })
+
+  it('names each row’s buttons for its place, so the same item in two sections reads differently', async () => {
+    stub()
+    const role = DOC.sections[1].entries[0]
+    renderTree({
+      ...DOC,
+      sections: [...DOC.sections, { row_id: 102, section_id: 12, title: 'Talks', entries: [{ ...role, row_id: 302 }] }],
+    })
+    await expand('Experience')
+    await expand('Talks')
+    expect(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Talks' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move Role: Engineer, Acme in Talks' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Role: Engineer, Acme in Talks' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Role: Engineer, Acme in Talks' })).toHaveAttribute('aria-expanded', 'false')
+    for (const start of [/^View and Edit/, /^Move /, /^Remove /, /^Role: /]) {
+      const names = screen.getAllByRole('button', { name: start }).map((button) => button.getAttribute('aria-label'))
+      expect(new Set(names).size).toBe(names.length)
+    }
   })
 
   it('keeps the dialog open with the reason when a new version is refused', async () => {
@@ -563,7 +583,7 @@ describe('DocumentTree', () => {
       </>,
     )
     await openExperience()
-    fireEvent.click(screen.getByRole('button', { name: 'View and Edit "Led the redesign."' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit "Led the redesign." under Engineer, Acme in Experience' }))
     const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
     fireEvent.click(within(dialog).getByRole('button', { name: /^Delete "/ }))
     const confirm = within(dialog).getByRole('group', { name: /^Delete/ })
@@ -621,7 +641,7 @@ describe('DocumentTree', () => {
     const fetchMock = stubApi({})
     renderTree(DOC, true)
     await expand('Experience')
-    await expand('Role: Engineer, Acme')
+    await expand('Role: Engineer, Acme in Experience')
     await expand('Bullets for Engineer, Acme (1)')
     expect(await rowNames('Engineer, Acme bullets')).toEqual(['Led the redesign.'])
     expect(screen.queryByRole('button', { name: /^Move|^Remove|^New|^Add|^View and Edit/ })).not.toBeInTheDocument()
