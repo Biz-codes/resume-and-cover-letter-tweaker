@@ -70,7 +70,7 @@ export function useItemHost() {
 // The host, or none outside a dialog (a list shown on its own), where names don't open items.
 export const useOptionalItemHost = () => useContext(ItemHostContext)
 
-// Each card's View and Edit button, where focus returns when the dialog closes after a save.
+// Each card's Edit button, where focus returns when the dialog closes after a save.
 export const editId = (kind: ItemKind, id: number) => `${kind}-${id}-edit`
 
 // The dialog's heading, where focus goes after something inside it is removed.

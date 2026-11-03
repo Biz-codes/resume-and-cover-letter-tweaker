@@ -112,8 +112,7 @@ function Writer({
 const same = (values: VersionValues, before: Record<string, string>) =>
   Object.keys(before).every((name) => (values[name] ?? '').trim() === before[name].trim())
 
-// A row's View and Edit button: `row` makes its id unique on the page, `label` names the row and
-// where it is (an item can be in more than one section, a skill under more than one category),
+// A row's View and Edit button: `row` makes its id unique on the page, `label` names the row,
 // `ref` is its library item, `current` the values it shows now, and `version` saves a new version
 // in its place here.
 type EditRow = (
@@ -137,7 +136,6 @@ function EntryChildren({
   onWriteSkill,
   onVersionSkill,
   editRow,
-  sectionTitle,
 }: {
   entry: TreeEntry
   // Null when read-only: nothing to add from.
@@ -154,8 +152,6 @@ function EntryChildren({
   // A new version of a skill shown here, by its row.
   onVersionSkill: (skillRow: number, skillName: string) => Promise<DocDetail>
   editRow: EditRow
-  // The section it's placed in, which names its rows' buttons.
-  sectionTitle: string
 }) {
   const name = placedItem(entry).name.replace(/^[^:]*: /, '')
   const readOnly = library === null
@@ -192,7 +188,7 @@ function EntryChildren({
       row &&
       editRow(
         `bullet-${parentKind}-${row.row_id}`,
-        `${item.label ?? item.name} under ${name} in ${sectionTitle}`,
+        item.label ?? item.name,
         { kind: 'bullet', id: row.item_id, title: shortBullet(row.text) },
         { content: row.text },
         (values) => onVersionBullet(values.content ?? '', row.item_id),
@@ -205,7 +201,7 @@ function EntryChildren({
       row &&
       editRow(
         `skill-${parentKind}-${row.row_id}`,
-        `${item.name} under ${name} in ${sectionTitle}`,
+        item.name,
         { kind: 'skill', id: row.item_id, title: row.text },
         { skill_name: row.text },
         (values) => onVersionSkill(row.row_id, values.skill_name ?? ''),
@@ -243,7 +239,6 @@ function EntryChildren({
         <>
           <OrderedList
             label={`${name} skills`}
-            where={`under ${name} in ${sectionTitle}`}
             items={skills}
             choices={skillChoices}
             emptyText={`No skills shown with ${name} yet.`}
@@ -282,7 +277,6 @@ function EntryChildren({
         <>
           <OrderedList
             label={`${name} bullets`}
-            where={`under ${name} in ${sectionTitle}`}
             items={bullets}
             choices={bulletChoices}
             emptyText={`No bullets shown with ${name} yet.`}
@@ -397,7 +391,7 @@ function SectionBody({
     const current = Object.fromEntries(NEW_FIELDS[entry.kind].map((field) => [field.name, entry.values[field.name] ?? '']))
     return editRow(
       `${entry.kind}-${entry.row_id}`,
-      `${item.label ?? item.name} in ${section.title}`,
+      item.label ?? item.name,
       { kind: entry.kind, id: entry.item_id, title: opens(entry.kind) ? name : shortBullet(name) },
       current,
       // Text takes the original's place through writing; the other kinds have their own version.
@@ -412,7 +406,6 @@ function SectionBody({
     <>
       <OrderedList
         label={`Items in ${section.title}`}
-        where={`in ${section.title}`}
         items={items}
         choices={choices}
         emptyText="Nothing here yet."
@@ -468,7 +461,6 @@ function SectionBody({
                 api.versionSkill(doc.id, entry.kind === 'project' ? 'project' : 'category', skillRow, skillName)
               }
               editRow={editRow}
-              sectionTitle={section.title}
             />
           )
         }}

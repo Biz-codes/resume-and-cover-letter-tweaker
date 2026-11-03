@@ -233,7 +233,7 @@ describe('ExperiencePage', () => {
     })
     render(<ExperiencePage />)
     const engineer = await openItem('Engineer, Acme')
-    fireEvent.change(within(engineer).getByLabelText('Choose one to add to Engineer, Acme (2020 – 2022) bullets'), {
+    fireEvent.change(within(engineer).getByLabelText('Add to Engineer, Acme (2020 – 2022) bullets'), {
       target: { value: '11' },
     })
     fireEvent.click(within(engineer).getByText('Add'))
