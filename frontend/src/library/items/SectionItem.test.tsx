@@ -38,7 +38,7 @@ describe('SectionItem', () => {
     stub()
     const host = await renderItem(<SectionItem id={2} />)
     expect(screen.queryByLabelText('Section title')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete "/ })).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Back End' }))
     expect(host.open).toHaveBeenLastCalledWith({ kind: 'category', id: 3, title: 'Back End' })

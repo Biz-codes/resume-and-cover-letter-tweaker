@@ -75,7 +75,7 @@ describe('SkillsPage', () => {
     const other = await categoryCard('Other')
     expect(within(other).queryByText('Delete')).not.toBeInTheDocument()
     expect(within(other).queryByLabelText('Category name')).not.toBeInTheDocument()
-    expect(within(other).getByRole('button', { name: 'New version' })).toBeInTheDocument()
+    expect(within(other).getByRole('button', { name: /^New version of / })).toBeInTheDocument()
   })
 
   it('saves a reordered skill list', async () => {
@@ -127,7 +127,7 @@ describe('SkillsPage', () => {
   it('explains that deleting a category keeps its skills under "Other"', async () => {
     stub({ 'DELETE /api/skill-categories/6': [{ status: 204 }] }, [OTHER, unsent(AI)])
     render(<SkillsPage />)
-    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: 'Delete "AI"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep showing its skills, under "Other".')
@@ -170,13 +170,13 @@ describe('SkillsPage', () => {
     stub({}, undefined, [unsent(CLAUDE), GEMINI])
     render(<SkillsPage />)
     const dialog = await openItem('Claude')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: 'Delete "Claude"?' })
     expect(confirm).toHaveTextContent('Used by: Acme resume.')
     expect(confirm).toHaveTextContent('from every category and project')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Cancel'))
-    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveFocus())
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: /^Delete "/ })).toHaveFocus())
   })
 
   it('adds a new version of a category, and of a skill', async () => {
@@ -185,14 +185,14 @@ describe('SkillsPage', () => {
       'POST /api/skills/10/versions': [{ status: 201, body: { ...CLAUDE, skill_id: 13, skill_name: 'Claude Code' } }],
     })
     render(<SkillsPage />)
-    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: /^New version of / }))
     expect(screen.getByLabelText("New version's name")).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'ML' } })
     fireEvent.click(screen.getByText('Add version'))
     expect(await screen.findByRole('status')).toHaveTextContent('Added "ML", with the same skills.')
     expect(sentBody(fetchMock, 'POST /api/skill-categories/6/versions')).toEqual({ category_name: 'ML' })
-    fireEvent.click(within(await openItem('Claude')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem('Claude')).getByRole('button', { name: /^New version of / }))
     fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'Claude Code' } })
     fireEvent.click(screen.getByText('Add version'))
     expect(await screen.findByRole('status')).toHaveTextContent('Added "Claude Code", listed right after "Claude".')

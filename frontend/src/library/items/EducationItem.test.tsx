@@ -25,7 +25,7 @@ describe('EducationItem', () => {
       'POST /api/education/7/versions': [{ status: 201, body: { ...DEGREE, education_id: 8, graduation: '2015' } }],
     })
     const host = await renderItem(<EducationItem id={7} />)
-    fireEvent.click(screen.getByRole('button', { name: 'New version' }))
+    fireEvent.click(screen.getByRole('button', { name: /^New version of / }))
     fireEvent.change(screen.getByLabelText(/^Graduation/), { target: { value: '2015' } })
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Add version'))

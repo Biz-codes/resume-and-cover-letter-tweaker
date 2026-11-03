@@ -11,7 +11,7 @@ import Checklist from '../../shared/components/Checklist'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -45,6 +45,8 @@ export default function NarrativeItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: NarrativeContent, { content }: ExcerptFields) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ content })
     const version = await narrativeApi.addVersion(original.content_id, content)
     await host.saved(
       version.content_id === original.content_id
@@ -66,6 +68,7 @@ export default function NarrativeItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={label}
       hidden={excerpt.hidden}
       usedBySent={anyLocked(excerpt.used_by)}
       onSetHidden={async (next) => {
@@ -97,6 +100,7 @@ export default function NarrativeItem({ id }: { id: number }) {
           label={`New version of ${label}`}
           fields={EXCERPT_FIELDS}
           initial={{ content: excerpt.content }}
+          note={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(fields) => addVersion(excerpt, fields)}
           onCancel={back}

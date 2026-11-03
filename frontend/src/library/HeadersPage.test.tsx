@@ -113,7 +113,7 @@ describe('HeadersPage', () => {
       'DELETE /api/headers/2': [{ status: 204 }],
     })
     render(<HeadersPage />)
-    fireEvent.click(within(await dialogFor('Front-End Engineer')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await dialogFor('Front-End Engineer')).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sam Rivera, Front-End Engineer"?' })
     expect(confirm).toHaveTextContent('Acme resume')
     // The page and its dialog each read the list once; the warning needs nothing more.
@@ -167,7 +167,7 @@ describe('HeadersPage', () => {
       'POST /api/headers/1/versions': [{ status: 201, body: version }],
     })
     render(<HeadersPage />)
-    fireEvent.click(within(await dialogFor('Software Engineer')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await dialogFor('Software Engineer')).getByRole('button', { name: /^New version of / }))
     const form = screen.getByRole('form', { name: 'New version of the header' })
     expect(within(form).getByLabelText('Full name (required)')).toHaveFocus()
     await expectNoA11yViolations()

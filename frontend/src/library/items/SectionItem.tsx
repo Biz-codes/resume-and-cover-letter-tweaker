@@ -21,7 +21,7 @@ import OrderedList from '../../shared/components/OrderedList/OrderedList'
 import BulletList from '../BulletList'
 import Collapsible from '../Collapsible/Collapsible'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { educationLabels, projectLabels, roleLabels } from './itemFields'
@@ -114,6 +114,8 @@ export default function SectionItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Section, title: string) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ title })
     const version = await sectionsApi.addVersion(original.id, title)
     await host.saved(
       `Added "${version.title}", with the same lists. Resumes and cover letters keep "${original.title}" until you pick the new one.`,
@@ -250,6 +252,7 @@ export default function SectionItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${section.title}"`}
       hidden={section.hidden}
       usedBySent={anyLocked(section.used_by)}
       onSetHidden={section.built_in ? undefined : async (next) => {
@@ -274,6 +277,7 @@ export default function SectionItem({ id }: { id: number }) {
           label="New version's title"
           field="title"
           initial={section.title}
+          lockedNote={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(title) => addVersion(section, title)}
           onCancel={back}

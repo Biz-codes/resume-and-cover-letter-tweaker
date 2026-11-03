@@ -135,7 +135,7 @@ describe('ToneSetsPage', () => {
     const version = { ...TECH, tone_set_id: 9, name: 'Tech, short', used_by: [] }
     const fetchMock = stub({ 'POST /api/tone-sets/3/versions': [{ status: 201, body: version }] })
     render(<ToneSetsPage />)
-    fireEvent.click(within(await techCard()).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await techCard()).getByRole('button', { name: /^New version of / }))
     const field = screen.getByLabelText("New version's name")
     expect(field).toHaveFocus()
     await expectNoA11yViolations()
@@ -153,7 +153,7 @@ describe('ToneSetsPage', () => {
       ],
     })
     render(<ToneSetsPage />)
-    fireEvent.click(within(await techCard()).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await techCard()).getByRole('button', { name: 'Delete "Tech"' }))
     const confirm = screen.getByRole('group', { name: 'Delete "Tech"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('Used by: Acme resume. They keep going with no tone.')

@@ -10,7 +10,7 @@ import NameForm from '../../shared/components/NameForm/NameForm'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
 import { lockedNote } from './itemFields'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -34,6 +34,8 @@ export default function SkillItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Skill, name: string) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ skill_name: name })
     const version = await skillsApi.addVersion(original.skill_id, name)
     await host.saved(
       `Added "${version.skill_name}", listed right after "${original.skill_name}". Resumes and cover letters keep "${original.skill_name}" until you pick the new one.`,
@@ -53,6 +55,7 @@ export default function SkillItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${skill.skill_name}"`}
       hidden={skill.hidden}
       usedBySent={anyLocked(skill.used_by)}
       onSetHidden={async (next) => {
@@ -75,6 +78,7 @@ export default function SkillItem({ id }: { id: number }) {
           label="New version's name"
           field="skill_name"
           initial={skill.skill_name}
+          lockedNote={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(name) => addVersion(skill, name)}
           onCancel={back}

@@ -117,7 +117,7 @@ describe('EducationPage', () => {
     const version = { ...DEGREE, education_id: 11, graduation: '2015', used_by: [] }
     const fetchMock = stub({ 'POST /api/education/7/versions': [{ status: 201, body: version }] })
     render(<EducationPage />)
-    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: /^New version of / }))
     const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
     await expectNoA11yViolations()
@@ -130,7 +130,7 @@ describe('EducationPage', () => {
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/education/7': [{ status: 204 }] }, [unsent(DEGREE), LOOSE])
     render(<EducationPage />)
-    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: `Delete "${LABEL}"?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     await expectNoA11yViolations()

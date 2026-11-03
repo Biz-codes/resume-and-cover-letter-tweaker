@@ -160,7 +160,7 @@ describe('NarrativeContentPage', () => {
     const version = { ...INTRO, content_id: 13, content: 'I build web tools.', used_by: [] }
     const fetchMock = stub({ 'POST /api/narrative-content/10/versions': [{ status: 201, body: version }] })
     render(<NarrativeContentPage />)
-    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: /^New version of / }))
     const form = screen.getByRole('form', { name: `New version of ${LABEL}` })
     fireEvent.change(within(form).getByLabelText('Narrative content text (required)'), {
       target: { value: 'I build web tools.' },
@@ -174,7 +174,7 @@ describe('NarrativeContentPage', () => {
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/narrative-content/10': [{ status: 204 }] }, [unsent(INTRO), LOOSE])
     render(<NarrativeContentPage />)
-    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('Used by: Acme letter')

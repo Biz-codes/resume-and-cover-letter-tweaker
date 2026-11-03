@@ -15,7 +15,7 @@ import BulletList from '../BulletList'
 import Collapsible from '../Collapsible/Collapsible'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -62,6 +62,8 @@ export default function ProjectItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Project, fields: ProjectFields) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ ...fields })
     const version = await projectsApi.addVersion(original.project_id, fields)
     await host.saved(
       version.project_id === original.project_id
@@ -83,6 +85,7 @@ export default function ProjectItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${label}"`}
       hidden={project.hidden}
       usedBySent={anyLocked(project.used_by)}
       onSetHidden={async (next) => {
@@ -107,6 +110,7 @@ export default function ProjectItem({ id }: { id: number }) {
           label={`New version of "${label}"`}
           fields={PROJECT_FIELDS}
           initial={fieldsOf(project)}
+          note={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(fields) => addVersion(project, fields)}
           onCancel={back}

@@ -54,6 +54,7 @@ export default function SignOffItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${signOff.text}"`}
       hidden={signOff.hidden}
       usedBySent={anyLocked(signOff.used_by)}
       onSetHidden={async (next) => {

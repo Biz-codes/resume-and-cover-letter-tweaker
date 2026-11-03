@@ -25,6 +25,7 @@ const SECTIONS = [
   { id: 12, title: 'Talks', built_in: false, narrative_content: [], ...empty },
 ]
 const LEAD = { bullet_id: 8, content: 'Led the redesign.' }
+const REACT = { skill_id: 1, skill_name: 'React', categories: [{ category_id: 2, category_name: 'Front End' }], projects: [], used_by: [] }
 const CUT = { bullet_id: 9, content: 'Cut load time in half.' }
 const LIBRARY: Record<string, unknown[]> = {
   sections: SECTIONS,
@@ -148,7 +149,7 @@ async function rowNames(list: string) {
 }
 
 function renderTree(doc: DocDetail = DOC, readOnly = false) {
-  const props = { onChange: vi.fn(), onNotice: vi.fn() }
+  const props = { onChange: vi.fn(), onReload: vi.fn(), onNotice: vi.fn() }
   render(<DocumentTree kind="resume" doc={doc} readOnly={readOnly} {...props} />)
   return props
 }
@@ -356,48 +357,57 @@ describe('DocumentTree', () => {
     )
   })
 
-  it("saves a new version of a role's bullet only when its text changed", async () => {
+  it("opens a row's item in its dialog, where a new version of a bullet takes its place here only when changed", async () => {
     const fetchMock = stub({ 'POST /api/resumes/1/items/experience/300/written': [{ status: 201, body: saved }] }, 2)
     const { onNotice } = renderTree()
     await openExperience()
-    const button = () => screen.getByRole('button', { name: 'New version of "Led the redesign."' })
-    expect(button()).toHaveTextContent(/^New version$/)
+    const button = () => screen.getByRole('button', { name: 'View and Edit "Led the redesign."' })
+    expect(button()).toHaveTextContent(/^View and Edit$/)
     fireEvent.click(button())
-    // Starts from the bullet's text, under its row.
-    expect(screen.getByRole('form', { name: 'New version of "Led the redesign."' })).toBeInTheDocument()
-    const field = screen.getByLabelText('Bullet text (required)')
+    const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    // Starts from the bullet's text, and says where it goes.
+    const field = within(dialog).getByLabelText("New version's text")
     expect(field).toHaveFocus()
     expect(field).toHaveValue('Led the redesign.')
+    expect(field).toHaveAccessibleDescription(/takes the original's place in this resume only/)
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: ' Led the redesign. ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
-    await vi.waitFor(() => expect(onNotice).toHaveBeenCalledWith('Nothing changed, so nothing was saved.'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
+    await vi.waitFor(() => expect(onNotice).toHaveBeenLastCalledWith('Nothing changed, so nothing was saved.'))
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await vi.waitFor(() => expect(button()).toHaveFocus())
 
     fireEvent.click(button())
-    fireEvent.change(screen.getByLabelText('Bullet text (required)'), { target: { value: 'Led the checkout redesign.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^New version of / }))
+    fireEvent.change(screen.getByLabelText("New version's text"), { target: { value: 'Led the checkout redesign.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add version' }))
     await vi.waitFor(() =>
-      expect(onNotice).toHaveBeenLastCalledWith('Saved the new version. The original is still in your library.'),
+      expect(onNotice).toHaveBeenLastCalledWith('Saved the new version here. The original is still in your library.'),
     )
     expect(sentBody(fetchMock, 'POST /api/resumes/1/items/experience/300/written')).toEqual({
       content: 'Led the checkout redesign.',
       replaces: 8,
     })
+    await vi.waitFor(() => expect(button()).toHaveFocus())
   })
 
-  it('saves a new version of narrative content in a section, and cancels back to its button', async () => {
+  it('saves a new version of narrative content in its place, and cancels back inside the dialog', async () => {
     const fetchMock = stub({ 'POST /api/resumes/1/sections/100/written': [{ status: 201, body: saved }] }, 2)
     renderTree()
     await expand('Summary')
-    const button = () => screen.getByRole('button', { name: 'New version of Text: "Engineer with 4 years."' })
-    fireEvent.click(button())
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() => expect(button()).toHaveFocus())
-    fireEvent.click(button())
-    fireEvent.change(screen.getByLabelText('Text (required)'), { target: { value: 'Engineer with 5 years.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Text: "Engineer with 4 years."' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Engineer with 4 years.' })
+    const version = within(dialog).getByRole('button', { name: /^New version of / })
+    fireEvent.click(version)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: /^New version of / })).toHaveFocus())
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    fireEvent.change(within(dialog).getByLabelText('Narrative content text (required)'), {
+      target: { value: 'Engineer with 5 years.' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/100/written')).toEqual({
         kind: 'narrative',
@@ -411,16 +421,18 @@ describe('DocumentTree', () => {
     const fetchMock = stub({ 'POST /api/resumes/1/items/300/version': [{ status: 201, body: saved }] }, 2)
     const { onNotice } = renderTree()
     await expand('Experience')
-    fireEvent.click(screen.getByRole('button', { name: 'New version of Role: Engineer, Acme' }))
-    const title = screen.getByLabelText('Role title (required)')
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    const title = within(dialog).getByLabelText('Title (required)')
     expect(title).toHaveFocus()
     expect(title).toHaveValue('Engineer')
-    expect(screen.getByLabelText('Organization (required)')).toHaveValue('Acme')
+    expect(within(dialog).getByLabelText('Organization (required)')).toHaveValue('Acme')
     await expectNoA11yViolations()
     fireEvent.change(title, { target: { value: 'Senior Engineer' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
     await vi.waitFor(() =>
-      expect(onNotice).toHaveBeenCalledWith('Saved the new version. The original is still in your library.'),
+      expect(onNotice).toHaveBeenCalledWith('Saved the new version here. The original is still in your library.'),
     )
     expect(sentBody(fetchMock, 'POST /api/resumes/1/items/300/version')).toEqual({
       kind: 'experience',
@@ -431,28 +443,136 @@ describe('DocumentTree', () => {
     })
   })
 
-  it('saves a new version of a section and of a skill', async () => {
+  it('saves a new version of a section and of a skill, each in its place', async () => {
     const fetchMock = stub(
       {
         'POST /api/resumes/1/sections/101/version': [{ status: 201, body: saved }],
         'POST /api/resumes/1/skills/category/401/version': [{ status: 201, body: saved }],
+        'GET /api/skills': [{ status: 200, body: [REACT] }],
       },
       3,
     )
     renderTree()
-    fireEvent.click(await screen.findByRole('button', { name: 'New version of Experience' }))
-    fireEvent.change(screen.getByLabelText('Title (required)'), { target: { value: 'Teaching Experience' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit Experience' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Experience' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    fireEvent.change(within(dialog).getByLabelText("New version's title"), { target: { value: 'Teaching Experience' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/resumes/1/sections/101/version')).toEqual({ title: 'Teaching Experience' }),
     )
     await openExperience()
-    fireEvent.click(screen.getByRole('button', { name: 'New version of React' }))
-    fireEvent.change(screen.getByLabelText('Name (required)'), { target: { value: 'React 19' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit React' }))
+    dialog = await screen.findByRole('dialog', { name: 'React' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    fireEvent.change(within(dialog).getByLabelText("New version's name"), { target: { value: 'React 19' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'POST /api/resumes/1/skills/category/401/version')).toEqual({ skill_name: 'React 19' }),
     )
+  })
+
+  it("saves a change to the library item from its dialog, reads the document again, and returns to the row", async () => {
+    const edited = { ...LIBRARY['bullet-points'][0] as object, content: 'Led the whole redesign.' }
+    const fetchMock = stub(
+      {
+        'PUT /api/bullet-points/8': [{ status: 200, body: edited }],
+        'GET /api/resumes/1': [{ status: 200, body: saved }],
+      },
+      2,
+    )
+    const { onChange, onReload, onNotice } = renderTree()
+    await openExperience()
+    const button = screen.getByRole('button', { name: 'View and Edit "Led the redesign."' })
+    fireEvent.click(button)
+    const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
+    fireEvent.change(within(dialog).getByLabelText('Bullet text'), { target: { value: 'Led the whole redesign.' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(onNotice).toHaveBeenLastCalledWith('Saved.'))
+    expect(sentBody(fetchMock, 'PUT /api/bullet-points/8')).toEqual({ content: 'Led the whole redesign.' })
+    // Read again without counting as a change here to undo.
+    expect(onReload).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
+    expect(onChange).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(button).toHaveFocus())
+  })
+
+  it("keeps a new version of an item shown from a name inside the dialog in the library only", async () => {
+    const fetchMock = stub(
+      {
+        'POST /api/bullet-points/8/versions': [{ status: 201, body: { ...LEAD, bullet_id: 10 } }],
+        'GET /api/resumes/1': [{ status: 200, body: saved }],
+      },
+      2,
+    )
+    const { onChange } = renderTree()
+    await expand('Experience')
+    const row = screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme' })
+    fireEvent.click(row)
+    const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Led the redesign.' }))
+    await screen.findByRole('dialog', { name: 'Led the redesign.' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    // Its form has no note about this resume.
+    expect(within(dialog).getByLabelText("New version's text")).not.toHaveAccessibleDescription()
+    fireEvent.change(within(dialog).getByLabelText("New version's text"), { target: { value: 'Led two redesigns.' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
+    await vi.waitFor(() => expect(sentBody(fetchMock, 'POST /api/bullet-points/8/versions')).toEqual({ content: 'Led two redesigns.' }))
+    expect(onChange).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(row).toHaveFocus())
+  })
+
+  it('keeps the dialog open with the reason when a new version is refused', async () => {
+    stub(
+      {
+        'POST /api/resumes/1/sections/101/version': [
+          { status: 409, body: errorBody('DUPLICATE', 'A section named "Talks" already exists.', 'title') },
+        ],
+      },
+      2,
+    )
+    const { onChange, onNotice } = renderTree()
+    fireEvent.click(await screen.findByRole('button', { name: 'View and Edit Experience' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Experience' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
+    const field = within(dialog).getByLabelText("New version's title")
+    fireEvent.change(field, { target: { value: 'Talks' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add version' }))
+    expect(await within(dialog).findByText('A section named "Talks" already exists.')).toBeInTheDocument()
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('dialog', { name: 'Experience' })).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+    expect(onNotice).not.toHaveBeenCalledWith(expect.stringMatching(/^Saved/))
+    await expectNoA11yViolations()
+  })
+
+  it("deletes a row's library item from its dialog, reads the document again, and moves focus to the page heading", async () => {
+    stub(
+      {
+        'DELETE /api/bullet-points/8': [{ status: 204 }],
+        'GET /api/resumes/1': [{ status: 200, body: saved }],
+      },
+      2,
+    )
+    const props = { onChange: vi.fn(), onReload: vi.fn(), onNotice: vi.fn() }
+    render(
+      <>
+        <h2 id="page-heading" tabIndex={-1}>
+          Tech base Resume
+        </h2>
+        <DocumentTree kind="resume" doc={DOC} readOnly={false} {...props} />
+      </>,
+    )
+    await openExperience()
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit "Led the redesign."' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Delete "/ }))
+    const confirm = within(dialog).getByRole('group', { name: /^Delete/ })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await vi.waitFor(() => expect(props.onNotice).toHaveBeenLastCalledWith('Deleted "Led the redesign.".'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(props.onReload).toHaveBeenCalled()
+    expect(props.onChange).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Tech base Resume' })).toHaveFocus())
   })
 
   it("writes a new skill under a category, in one line", async () => {
@@ -504,7 +624,7 @@ describe('DocumentTree', () => {
     await expand('Role: Engineer, Acme')
     await expand('Bullets for Engineer, Acme (1)')
     expect(await rowNames('Engineer, Acme bullets')).toEqual(['Led the redesign.'])
-    expect(screen.queryByRole('button', { name: /^Move|^Remove|^New|^Add/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Move|^Remove|^New|^Add|^View and Edit/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
     await expectNoA11yViolations()

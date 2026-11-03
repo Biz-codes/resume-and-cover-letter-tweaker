@@ -142,7 +142,7 @@ describe('ProjectsPage', () => {
     const version = { ...TWEAKER, project_id: 8, dates: 'Fall 2024', used_by: [] }
     const fetchMock = stub({ 'POST /api/projects/4/versions': [{ status: 201, body: version }] })
     render(<ProjectsPage />)
-    fireEvent.click(within(await openItem('Tweaker')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem('Tweaker')).getByRole('button', { name: /^New version of / }))
     const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
     expect(within(form).getByLabelText(/Affiliation/)).toHaveValue('Freelance')
     fireEvent.change(within(form).getByLabelText(/Dates/), { target: { value: 'Fall 2024' } })
@@ -155,12 +155,12 @@ describe('ProjectsPage', () => {
     stub({}, [unsent(TWEAKER)])
     render(<ProjectsPage />)
     const dialog = await openItem('Tweaker')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: `Delete "${LABEL}"?` })
     expect(confirm).toHaveTextContent('The skills and bullets stay in the library.')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Cancel'))
-    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveFocus())
+    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: /^Delete "/ })).toHaveFocus())
   })
 
   it('says it is loading', async () => {

@@ -12,7 +12,7 @@ import OrderedList from '../../shared/components/OrderedList/OrderedList'
 import Collapsible from '../Collapsible/Collapsible'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -44,6 +44,8 @@ export default function CategoryItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: SkillCategory, name: string) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ category_name: name })
     const version = await skillCategoriesApi.addVersion(original.category_id, name)
     await host.saved(
       `Added "${version.category_name}", with the same skills. Resumes and cover letters keep "${original.category_name}" until you pick the new one.`,
@@ -63,6 +65,7 @@ export default function CategoryItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${category.category_name}"`}
       hidden={category.hidden}
       usedBySent={anyLocked(category.used_by)}
       onSetHidden={category.built_in ? undefined : async (next) => {
@@ -87,6 +90,7 @@ export default function CategoryItem({ id }: { id: number }) {
           label="New version's name"
           field="category_name"
           initial={category.category_name}
+          lockedNote={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(name) => addVersion(category, name)}
           onCancel={back}

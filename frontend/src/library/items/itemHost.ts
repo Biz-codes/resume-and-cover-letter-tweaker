@@ -16,6 +16,20 @@ export type ItemKind =
   | 'signOff'
   | 'tone'
 
+// Values a new version is saved with, by field name (empty fields as null).
+export type VersionValues = Record<string, string | null>
+
+// Where an item opened from a row of a resume's or cover letter's tree is placed. Its New version
+// takes its place there only (docs/FRONTEND_CHECKS.md, "New versions in a resume or cover letter").
+export interface Placement {
+  // "resume" or "cover letter".
+  doc: string
+  // The row's View and Edit button, where focus goes when the dialog closes after a change.
+  returnTo: string
+  // Saves the new version in the item's place, and gives the notice for the page.
+  version: (values: VersionValues) => Promise<string>
+}
+
 // An item to show, with the title its dialog is named by.
 export interface ItemRef {
   kind: ItemKind
@@ -36,7 +50,14 @@ export interface ItemHost {
   // Says `message` in the dialog, for a change that keeps it open.
   say: (message: string) => void
   close: () => void
+  // Set only for the item opened from a tree row, not one shown from a name inside the dialog:
+  // what it's placed in, and New version, which saves the version in its place there and closes
+  // the dialog with a notice on the page.
+  placed?: { doc: string; version: (values: VersionValues) => Promise<void> }
 }
+
+// The note on a placed item's New version form.
+export const placedNote = (doc: string) => `It takes the original's place in this ${doc} only. The original stays in your library.`
 
 export const ItemHostContext = createContext<ItemHost | null>(null)
 

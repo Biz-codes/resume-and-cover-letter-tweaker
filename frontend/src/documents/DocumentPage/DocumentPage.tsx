@@ -467,7 +467,17 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             </li>
             <li>
               <Disclosure title={`Sections (${doc.sections.length})`}>
-                <DocumentTree kind={kind} doc={doc} readOnly={readOnly} onChange={record} onNotice={setNotice} />
+                <DocumentTree
+                  kind={kind}
+                  doc={doc}
+                  readOnly={readOnly}
+                  onChange={record}
+                  onReload={(next) => {
+                    latest.current = next
+                    setDoc(next)
+                  }}
+                  onNotice={setNotice}
+                />
               </Disclosure>
             </li>
             {kind === 'cover_letter' && (

@@ -18,6 +18,7 @@ function renderParts(
   render(
     <main>
       <ItemParts
+        name='"Shipped it"'
         hidden={hidden}
         usedBySent={usedBySent}
         onSetHidden={onSetHidden}
@@ -55,38 +56,39 @@ describe('ItemParts', () => {
   it('shows the item’s form, New version, Delete, and what it lists', async () => {
     renderParts()
     expect(screen.getByLabelText('Title')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New version' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    // Named for its item, starting with its text (WCAG 2.5.3).
+    expect(screen.getByRole('button', { name: 'New version of "Shipped it"' })).toHaveTextContent(/^New version$/)
+    expect(screen.getByRole('button', { name: 'Delete "Shipped it"' })).toHaveTextContent(/^Delete$/)
     expect(screen.getByText('Used by (2)')).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
   it('opens New version in place of the form, and goes back to its button', async () => {
     renderParts()
-    fireEvent.click(screen.getByRole('button', { name: 'New version' }))
+    fireEvent.click(screen.getByRole('button', { name: /^New version of / }))
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'New version form' })).toBeInTheDocument()
     expect(screen.getByText('Used by (2)')).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Cancel version'))
     expect(screen.getByLabelText('Title')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New version' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^New version of / })).toHaveFocus()
   })
 
   it('opens the delete confirm in place of the form, and goes back to Delete', async () => {
     renderParts()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Delete "/ }))
     expect(screen.getByRole('group', { name: 'Delete confirm' })).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Cancel delete'))
-    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Delete "/ })).toHaveFocus()
   })
 
   it('leaves out what an item can’t do', () => {
     renderParts({ form: false, confirmDelete: false })
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New version' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete "/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^New version of / })).toBeInTheDocument()
   })
 
   it('shows no buttons row when there is nothing but the form', () => {
@@ -97,11 +99,12 @@ describe('ItemParts', () => {
   it('hides an item, keeping focus on the button, which becomes Unhide', async () => {
     const onSetHidden = vi.fn(() => Promise.resolve())
     renderParts({ hidden: false, onSetHidden })
-    const hide = screen.getByRole('button', { name: 'Hide' })
+    const hide = screen.getByRole('button', { name: 'Hide "Shipped it"' })
     hide.focus()
     fireEvent.click(hide)
     expect(onSetHidden).toHaveBeenCalledWith(true)
     expect(hide).toHaveTextContent('Hiding…')
+    expect(hide).toHaveAccessibleName('Hiding… "Shipped it"')
     expect(hide).toHaveAttribute('aria-disabled', 'true')
     await expectNoA11yViolations()
     await vi.waitFor(() => expect(hide).toHaveTextContent('Hide'))
@@ -112,16 +115,16 @@ describe('ItemParts', () => {
     const onSetHidden = vi.fn(() => Promise.resolve())
     renderParts({ hidden: true, onSetHidden })
     expect(screen.getByText(HIDDEN_NOTE)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Unhide' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unhide "Shipped it"' }))
     expect(onSetHidden).toHaveBeenCalledWith(false)
     await expectNoA11yViolations()
   })
 
   it('offers Hide in place of Delete when a sent application uses it', async () => {
     renderParts({ hidden: false, usedBySent: true, onSetHidden: () => Promise.resolve() })
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete "/ })).not.toBeInTheDocument()
     expect(screen.getByText(SENT_DELETE_NOTE)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Hide "/ })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
@@ -130,8 +133,8 @@ describe('ItemParts', () => {
       Promise.reject(new ApiError('INTERNAL_ERROR', 'Something went wrong. Nothing was changed.', null, 500)),
     )
     renderParts({ hidden: false, onSetHidden })
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Hide "/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was changed.')
-    expect(screen.getByRole('button', { name: 'Hide' })).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByRole('button', { name: /^Hide "/ })).toHaveAttribute('aria-disabled', 'false')
   })
 })

@@ -13,8 +13,7 @@
 // list once nothing is left to add).
 //
 // A row can also open and close (`details`): its name becomes a disclosure button that shows
-// what's under the item (a section's contents, a role's bullets) below the row. A row can also
-// show something of its own below it (`under`), such as a form one of its `actions` opened. With
+// what's under the item (a section's contents, a role's bullets) below the row. With
 // `readOnly`, only the names (and what opens under them) are shown.
 //
 // Adding is from a picker, or with `moreOptions`, from checkboxes behind a "More options" level
@@ -63,7 +62,6 @@ export default function OrderedList<K extends ListKey = number>({
   removable = true,
   actions,
   details,
-  under,
   onOpen,
   readOnly = false,
   moreOptions = false,
@@ -84,8 +82,6 @@ export default function OrderedList<K extends ListKey = number>({
   actions?: (item: ListItem<K>) => ReactNode
   // What opens under a row, or null for a row that has nothing under it.
   details?: (item: ListItem<K>) => ReactNode | null
-  // Shown below a row while nothing is moving, or null for nothing (a form an action opened).
-  under?: (item: ListItem<K>) => ReactNode | null
   // Makes each name a button that shows the item (in a library dialog), for a row with no `details`.
   onOpen?: (item: ListItem<K>) => void
   // Names only: no reordering, adding, or removing (a sent version, or before editing starts).
@@ -411,7 +407,6 @@ export default function OrderedList<K extends ListKey = number>({
                     )}
                   </span>
                 )}
-                {!readOnly && !moving && under?.(item)}
                 {body !== null && (
                   <div className={styles.itemBody} id={bodyId} hidden={!opened}>
                     {opened && body}

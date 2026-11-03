@@ -91,6 +91,7 @@ export default function ToneItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${toneSet.name}"`}
       hidden={toneSet.hidden}
       usedBySent={anyLocked(toneSet.used_by)}
       onSetHidden={async (next) => {

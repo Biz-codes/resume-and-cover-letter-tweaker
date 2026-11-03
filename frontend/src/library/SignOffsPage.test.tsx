@@ -101,7 +101,7 @@ describe('SignOffsPage', () => {
     const version = { ...SINCERELY, sign_off_id: 7, text: 'Sincerely yours', used_by: [] }
     const fetchMock = stub({ 'POST /api/sign-offs/1/versions': [{ status: 201, body: version }] })
     render(<SignOffsPage />)
-    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: /^New version of / }))
     const field = screen.getByLabelText("New version's sign-off")
     expect(field).toHaveFocus()
     await expectNoA11yViolations()
@@ -116,7 +116,7 @@ describe('SignOffsPage', () => {
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/sign-offs/1': [{ status: 204 }] }, [unsent(SINCERELY), BEST])
     render(<SignOffsPage />)
-    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: 'Delete "Sincerely"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('They keep going with no closing')
@@ -192,9 +192,9 @@ describe('SignOffsPage', () => {
     })
     render(<SignOffsPage />)
     const dialog = await openItem('Sincerely')
-    expect(within(dialog).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /^Delete "/ })).not.toBeInTheDocument()
     expect(within(dialog).getByText(/A sent application uses it, so it can't be deleted/)).toBeInTheDocument()
-    const hide = within(dialog).getByRole('button', { name: 'Hide' })
+    const hide = within(dialog).getByRole('button', { name: /^Hide "/ })
     hide.focus()
     fireEvent.click(hide)
     await vi.waitFor(() =>

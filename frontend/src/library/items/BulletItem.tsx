@@ -11,7 +11,7 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -38,6 +38,8 @@ export default function BulletItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Bullet, content: string) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ content })
     const version = await bulletsApi.addVersion(original.bullet_id, content)
     await host.saved(
       version.bullet_id === original.bullet_id
@@ -59,6 +61,7 @@ export default function BulletItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={label}
       hidden={bullet.hidden}
       usedBySent={anyLocked(bullet.used_by)}
       onSetHidden={async (next) => {
@@ -83,6 +86,7 @@ export default function BulletItem({ id }: { id: number }) {
           field="content"
           initial={bullet.content}
           multiline
+          lockedNote={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(content) => addVersion(bullet, content)}
           onCancel={back}

@@ -9,7 +9,7 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -46,6 +46,8 @@ export default function EducationItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Education, fields: EducationFields) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ ...fields })
     const version = await educationApi.addVersion(original.education_id, fields)
     await host.saved(
       version.education_id === original.education_id
@@ -67,6 +69,7 @@ export default function EducationItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${label}"`}
       hidden={entry.hidden}
       usedBySent={anyLocked(entry.used_by)}
       onSetHidden={async (next) => {
@@ -89,6 +92,7 @@ export default function EducationItem({ id }: { id: number }) {
           label={`New version of "${label}"`}
           fields={EDUCATION_FIELDS}
           initial={fieldsOf(entry)}
+          note={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(fields) => addVersion(entry, fields)}
           onCancel={back}

@@ -32,7 +32,7 @@ describe('ProjectItem', () => {
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Python' }))
     expect(host.open).toHaveBeenCalledWith({ kind: 'skill', id: 20, title: 'Python' })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Delete "/ }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1)!)
     await vi.waitFor(() => expect(host.deleted).toHaveBeenCalledWith('Deleted "Tweaker".'))
   })

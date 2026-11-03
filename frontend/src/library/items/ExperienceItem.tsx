@@ -13,7 +13,7 @@ import ApplyChoice from '../ApplyChoice'
 import BulletList from '../BulletList'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { useItemHost } from './itemHost'
+import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -61,6 +61,8 @@ export default function ExperienceItem({ id }: { id: number }) {
   }
 
   async function addVersion(original: Experience, fields: ExperienceFields) {
+    // From a resume's or cover letter's tree, it takes the original's place there.
+    if (host.placed) return host.placed.version({ ...fields })
     const version = await experienceApi.addVersion(original.experience_id, fields)
     await host.saved(
       version.experience_id === original.experience_id
@@ -82,6 +84,7 @@ export default function ExperienceItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${label}"`}
       hidden={role.hidden}
       usedBySent={anyLocked(role.used_by)}
       onSetHidden={async (next) => {
@@ -106,6 +109,7 @@ export default function ExperienceItem({ id }: { id: number }) {
           label={`New version of "${label}"`}
           fields={ROLE_FIELDS}
           initial={fieldsOf(role)}
+          note={host.placed && placedNote(host.placed.doc)}
           submitLabel="Add version"
           onSave={(fields) => addVersion(role, fields)}
           onCancel={back}

@@ -2,11 +2,12 @@
 // kind's view. A name inside it (a bullet under a role, a role that lists a bullet) shows that
 // item in the same dialog, never a second one, with "Back to [the item before]"; Close closes the
 // whole dialog, and focus goes back to where it was first opened. Each view reads what it needs,
-// and tells the page (`reload`, `notify`) when something changed.
+// and tells the page (`reload`, `notify`) when something changed. Opened from a row of a resume's
+// or cover letter's tree (with a Placement), the item's New version takes its place there.
 import { useCallback, useState } from 'react'
 import Dialog from '../../shared/components/Dialog/Dialog'
 import { PAGE_HEADING_ID, useFocusLater } from '../../shared/hooks/useFocusLater'
-import { DIALOG_HEADING_ID, editId, ItemHostContext, type ItemHost, type ItemRef } from './itemHost'
+import { DIALOG_HEADING_ID, editId, ItemHostContext, type ItemHost, type ItemRef, type Placement } from './itemHost'
 import ItemView from './ItemView'
 
 export function useItemDialogs({
@@ -21,11 +22,13 @@ export function useItemDialogs({
   // The items shown, the first one opened from the page and each next one from a name inside.
   const [stack, setStack] = useState<ItemRef[]>([])
   const [notice, setNotice] = useState<string | null>(null)
+  const [placement, setPlacement] = useState<Placement | null>(null)
   const focusLater = useFocusLater()
 
   const open = useCallback(
-    (ref: ItemRef) => {
+    (ref: ItemRef, placed?: Placement) => {
       setStack([ref])
+      setPlacement(placed ?? null)
       setNotice(null)
       notify(null)
     },
@@ -45,7 +48,8 @@ export function useItemDialogs({
       setStack([])
       await reload()
       notify(message)
-      focusLater(editId(item.kind, item.id))
+      // A tree row stays where it was, even when the saved item is a new one.
+      focusLater(placement ? placement.returnTo : editId(item.kind, item.id))
     },
     deleted: async (message) => {
       setStack([])
@@ -55,6 +59,18 @@ export function useItemDialogs({
     },
     say: setNotice,
     close: () => setStack([]),
+    placed:
+      placement && stack.length === 1
+        ? {
+            doc: placement.doc,
+            version: async (values) => {
+              const message = await placement.version(values)
+              setStack([])
+              notify(message)
+              focusLater(placement.returnTo)
+            },
+          }
+        : undefined,
   }
 
   const top = stack.at(-1)

@@ -28,7 +28,7 @@ describe('HeaderItem', () => {
       'POST /api/headers/1/versions': [{ status: 200, body: HEADER }],
     })
     const host = await renderItem(<HeaderItem id={1} />)
-    fireEvent.click(screen.getByRole('button', { name: 'New version' }))
+    fireEvent.click(screen.getByRole('button', { name: /^New version of / }))
     await expectNoA11yViolations()
     fireEvent.click(screen.getByText('Add version'))
     await vi.waitFor(() =>

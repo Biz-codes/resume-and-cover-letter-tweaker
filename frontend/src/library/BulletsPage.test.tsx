@@ -68,7 +68,7 @@ describe('BulletsPage', () => {
     const version = { ...SHIPPED, bullet_id: 13, content: 'Shipped the checkout flow', used_by: [] }
     const fetchMock = stub({ 'POST /api/bullet-points/10/versions': [{ status: 201, body: version }] })
     render(<BulletsPage />)
-    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: 'New version' }))
+    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: /^New version of / }))
     const field = screen.getByLabelText("New version's text")
     expect(field).toHaveFocus()
     expect(field).toHaveValue(SHIPPED.content)
@@ -83,7 +83,7 @@ describe('BulletsPage', () => {
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/bullet-points/10': [{ status: 204 }] }, [unsent(SHIPPED), LOOSE])
     render(<BulletsPage />)
-    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: /^Delete "/ }))
     const confirm = screen.getByRole('group', { name: `Delete ${LABEL}?` })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
     expect(confirm).toHaveTextContent('from every role, project, and section')

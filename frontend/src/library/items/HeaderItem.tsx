@@ -61,6 +61,7 @@ export default function HeaderItem({ id }: { id: number }) {
 
   return (
     <ItemParts
+      name={`"${label}"`}
       hidden={header.hidden}
       usedBySent={anyLocked(header.used_by)}
       onSetHidden={async (next) => {

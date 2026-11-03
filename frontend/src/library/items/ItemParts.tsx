@@ -15,6 +15,7 @@ export const HIDDEN_NOTE = "Hidden: it isn't offered anywhere new. Everything th
 export const SENT_DELETE_NOTE = "A sent application uses it, so it can't be deleted. Hide it to set it aside."
 
 export default function ItemParts({
+  name,
   form,
   newVersion,
   confirmDelete,
@@ -23,6 +24,9 @@ export default function ItemParts({
   onSetHidden,
   children,
 }: {
+  // The item's name as its buttons say it (`"Led the redesign."`), so New version, Hide, and Delete
+  // each name their item.
+  name: string
   // The item's own form. Left out for an item that can't be changed (a built-in section).
   form?: ReactNode
   // The new version form; `back` returns to the item's form.
@@ -87,18 +91,23 @@ export default function ItemParts({
           {(newVersion || onSetHidden || canDelete) && (
             <div className="actions">
               {newVersion && (
-                <button type="button" ref={versionRef} onClick={() => open('version')}>
+                <button type="button" ref={versionRef} aria-label={`New version of ${name}`} onClick={() => open('version')}>
                   New version
                 </button>
               )}
               {onSetHidden && (
                 // aria-disabled, not disabled, so the button keeps focus while it saves.
-                <button type="button" aria-disabled={hiding} onClick={() => void toggleHidden()}>
+                <button
+                  type="button"
+                  aria-disabled={hiding}
+                  aria-label={`${hiding ? `${hidden ? 'Unhiding' : 'Hiding'}…` : hideLabel} ${name}`}
+                  onClick={() => void toggleHidden()}
+                >
                   {hiding ? `${hidden ? 'Unhiding' : 'Hiding'}…` : hideLabel}
                 </button>
               )}
               {canDelete && (
-                <button type="button" ref={deleteRef} onClick={() => open('delete')}>
+                <button type="button" ref={deleteRef} aria-label={`Delete ${name}`} onClick={() => open('delete')}>
                   Delete
                 </button>
               )}
