@@ -3,8 +3,8 @@
 A role's row lists every bullet that can go under it. A resume or cover letter stores only
 which role and bullets it picked (resume_experience, resume_bullet_point, and the cover letter
 tables), and prints everything about the role itself (role_title, organization, location, dates)
-from this row. So changing a role's fields follows "Changing a role or project" in
-docs/FRONTEND_CHECKS.md:
+from this row. So changing a role's fields follows "Changing a role, project, bullet, or
+narrative content" in docs/FRONTEND_CHECKS.md:
 
 - A sent version never changes: if one uses the role, the change is saved as a new row.
 - Resumes and cover letters in progress change only if the user picks them (apply_to). If

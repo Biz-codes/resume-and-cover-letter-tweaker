@@ -1,19 +1,17 @@
 // The job postings page: every posting, most recently updated first, each linking to its own
-// page (PostingPage), and a form for a new one from its url and pasted description. Fetching a
-// posting from its url comes in phase 5. A new posting opens on its own page, to pick its header.
+// page (PostingPage), and a form for a new one (NewPosting), read from its page or pasted text. A
+// new posting opens on its own page, to pick its header.
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toApiError, type ApiError } from '../shared/api/client'
-import { POSTING_FIELDS, postingName, postingsApi, type Posting, type PostingFields } from './postings'
-import FieldsForm from '../shared/components/FieldsForm'
+import { postingName, postingsApi, type Posting, type PostingFields } from './postings'
+import NewPosting from './NewPosting'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import type { ListState } from '../documents/DocumentsPage'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const NEW_POSTING_ID = 'new-posting'
-
-const EMPTY: PostingFields = { url: '', organization: '', role_title: '', description: '' }
 
 // How many resumes and cover letters a posting has, for its line in a list.
 function versionCount(posting: Posting) {
@@ -86,11 +84,7 @@ export default function PostingsPage() {
       {!postings && !loadError && <p>Loading…</p>}
 
       {creating ? (
-        <FieldsForm
-          label="New job posting"
-          fields={POSTING_FIELDS}
-          initial={EMPTY}
-          submitLabel="Save posting"
+        <NewPosting
           onSave={create}
           onCancel={() => {
             setCreating(false)

@@ -489,7 +489,7 @@ describe('DocumentTree', () => {
     fireEvent.change(within(dialog).getByLabelText('Bullet text'), { target: { value: 'Led the whole redesign.' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await vi.waitFor(() => expect(onNotice).toHaveBeenLastCalledWith('Saved.'))
-    expect(sentBody(fetchMock, 'PUT /api/bullet-points/8')).toEqual({ content: 'Led the whole redesign.' })
+    expect(sentBody(fetchMock, 'PUT /api/bullet-points/8')).toEqual({ content: 'Led the whole redesign.', apply_to: [] })
     // Read again without counting as a change here to undo.
     expect(onReload).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
     expect(onChange).not.toHaveBeenCalled()

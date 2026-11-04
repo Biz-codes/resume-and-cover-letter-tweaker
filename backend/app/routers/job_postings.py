@@ -1,11 +1,11 @@
-"""Job postings, entered by hand from a pasted description: list, read, create, edit, pick the
+"""Job postings: read one from its url or pasted text, then list, create, edit, pick the
 header, track the application, and delete.
 
 Everything for an application hangs off its posting (docs/APP_FLOW.md, "User flow"): its
 header, which all its resumes and cover letters use, and those versions themselves,
 which are started from app/routers/resumes.py and cover_letters.py with a job_posting_id.
-Fetching a posting from its url comes in phase 5. Its interviews are added and changed in
-app/routers/interviews.py.
+Reading a posting (app/posting_reader.py) only fills the form: the user corrects it and saves
+it with create. Its interviews are added and changed in app/routers/interviews.py.
 """
 
 from datetime import date, datetime
@@ -16,10 +16,12 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude
 from app.db import DbSession
 from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
+from app.posting_reader import PostingDraft, read_posting
 from app.routers.headers import FIELDS as HEADER_FIELDS
 from app.routers.headers import HeaderIn, find_or_add
 from app.schemas import OptionalText, RequiredText
@@ -33,6 +35,13 @@ class PostingIn(BaseModel):
     organization: RequiredText(100)
     role_title: RequiredText(100)
     description: RequiredText()
+
+
+class ReadIn(BaseModel):
+    # A link to the posting, or how to reach its primary contact.
+    url: OptionalText()
+    # The description, pasted in when the page can't be read.
+    text: OptionalText()
 
 
 class TrackingIn(BaseModel):
@@ -173,6 +182,15 @@ def list_postings(db: DbSession, account_id: AccountId) -> list[PostingOut]:
     return to_out(db, list(db.scalars(
         select(JobPosting).where(JobPosting.account_id == account_id)
         .order_by(JobPosting.updated_at.desc(), JobPosting.job_posting_id.desc()))))
+
+
+@router.post("/read")
+def read(body: ReadIn, client: Claude) -> PostingDraft:
+    """The organization, role title, and description Claude finds in the pasted text, or else
+    on the page at the url, for the user to check and correct. Saves nothing. A page that
+    can't be fetched or holds no job description is POSTING_FETCH_FAILED, so the user can
+    paste it in instead."""
+    return read_posting(client, body.url, body.text)
 
 
 @router.get("/{posting_id}")

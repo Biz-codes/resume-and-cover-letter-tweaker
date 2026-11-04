@@ -151,12 +151,13 @@ export default function HeaderFields({
                 onChange={(event) => setChoices({ ...choices, [name]: event.target.value })}
               >
                 {!required && <option value={NONE}>None</option>}
+                {/* New comes before the saved values, so it's reached without going through them all. */}
+                <option value={NEW}>New {label.toLowerCase()}…</option>
                 {saved(name).map((value) => (
                   <option key={value} value={value}>
                     {value}
                   </option>
                 ))}
-                <option value={NEW}>New {label.toLowerCase()}…</option>
               </select>
             </label>
             {isNew && (

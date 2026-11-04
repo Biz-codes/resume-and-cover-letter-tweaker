@@ -5,11 +5,14 @@ A resume or cover letter stores only which bullets it picked (resume_bullet_poin
 cover_letter_bullet_point), and they're locked once the posting is applied to; the text is
 read from this row.
 
-So nothing printed on a sent version can change: editing a bullet a sent version uses saves
-a new bullet, listed right after the original wherever it's listed. Sent versions keep the
-original; unsent ones switch to the new one. A bullet no sent version uses is edited in
-place (docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is
-listed the same way, and nothing switches to it.
+Editing a bullet follows "Changing a role, project, bullet, or narrative content" in
+docs/FRONTEND_CHECKS.md:
+- Sent versions never change.
+- Resumes and cover letters in progress change only if the user picks them (apply_to). If
+  every one is picked and no sent version uses the bullet, it's edited in place.
+- Otherwise the new text is saved as a new bullet, listed right after the original wherever
+  it's listed, and only the picked ones switch to it.
+A version added on purpose is listed the same way, and nothing switches to it.
 """
 
 from fastapi import APIRouter, Response, status
@@ -39,7 +42,7 @@ from app.refs import (
 )
 from app.routers.sections import get_section
 from app.schemas import RequiredText
-from app.usage import BULLET_LINKS, Use, switch_unsent, used_by_sent_version, uses
+from app.usage import BULLET_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
 
 router = APIRouter(prefix="/api/bullet-points", tags=["bullet points"])
 
@@ -58,6 +61,11 @@ class NewBullet(BulletIn):
     experience_id: int | None = None
     project_id: int | None = None
     section_id: int | None = None
+
+
+class BulletChange(BulletIn):
+    # The resumes and cover letters in progress the user checked to get the change.
+    apply_to: list[DocRef] = []
 
 
 class BulletOut(BulletIn):
@@ -132,25 +140,28 @@ def create_bullet(body: NewBullet, db: DbSession, account_id: AccountId) -> Bull
 
 
 @router.put("/{bullet_id}")
-def update_bullet(bullet_id: int, body: BulletIn, db: DbSession,
+def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
                   account_id: AccountId) -> BulletOut:
-    """Edits the bullet in place, unless a sent version uses it.
+    """Changes the bullet's text (see the module docstring for when that's a new bullet).
 
-    Then the new text is saved as a new bullet, listed right after the original under every
-    role, project, and section, and unsent resumes and cover letters switch to it. The
-    response's bullet_id differs from the one in the url then.
+    The response's bullet_id differs from the one in the url when a new bullet was saved.
     """
     bullet = get_owned(db, BulletPoint, bullet_id, account_id)
     if bullet.content == body.content:
         return one_out(db, bullet, account_id)
-    if not used_by_sent_version(db, BULLET_LINKS, bullet_id):
+    used_by = uses(db, BULLET_LINKS, [bullet_id])[bullet_id]
+    sent = any(use.locked for use in used_by)
+    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
+    chosen = chosen_in_progress(body.apply_to, used_by)
+    if not sent and chosen == in_progress:
         bullet.content = body.content
         db.flush()
         db.refresh(bullet)
         return one_out(db, bullet, account_id)
 
-    replacement = new_version(db, bullet, body, account_id)
-    switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id)
+    replacement = new_version(db, bullet, BulletIn(content=body.content), account_id)
+    if chosen:
+        switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id, only=chosen)
     return one_out(db, replacement, account_id)
 
 

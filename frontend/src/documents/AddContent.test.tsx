@@ -63,13 +63,20 @@ const PLACED: TreeSection = {
 }
 
 function renderForm(section = EMPTY, onAdd = vi.fn(() => Promise.resolve()), onWrite = vi.fn(() => Promise.resolve())) {
-  render(<AddContent section={section} library={LIBRARY} onAdd={onAdd} onWrite={onWrite} />)
+  render(<AddContent docKind="resume" section={section} library={LIBRARY} onAdd={onAdd} onWrite={onWrite} />)
   return { onAdd, onWrite }
 }
 
 const options = (select: HTMLElement) => [...select.querySelectorAll('option')].map((option) => option.textContent)
 
 describe('AddContent', () => {
+  it("starts a cover letter's content as narrative content, whatever the section lists", async () => {
+    render(<AddContent docKind="cover_letter" section={EMPTY} library={LIBRARY} onAdd={vi.fn()} onWrite={vi.fn()} />)
+    expect(screen.getByLabelText('Type of content')).toHaveValue('narrative')
+    expect(screen.getByLabelText('Narrative content')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
   it("shows an empty section's form right away, starting with the type the section lists", async () => {
     renderForm()
     expect(screen.getByLabelText('Type of content')).toHaveValue('experience')
@@ -78,7 +85,7 @@ describe('AddContent', () => {
       'Listed under Experience',
       'Others',
     ])
-    expect(options(roles)).toEqual(['Choose a role…', 'Engineer, Beta', 'Engineer, Acme', 'Engineer, Gamma', 'New role…'])
+    expect(options(roles)).toEqual(['Choose a role…', 'New role…', 'Engineer, Beta', 'Engineer, Acme', 'Engineer, Gamma'])
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add to Experience' })).toHaveAttribute('aria-disabled', 'true')
     await expectNoA11yViolations()
@@ -86,8 +93,8 @@ describe('AddContent', () => {
 
   it('offers no hidden item', () => {
     const library = { ...LIBRARY, experience: LIBRARY.experience.map((role) => ({ ...role, hidden: role.experience_id === 8 })) }
-    render(<AddContent section={EMPTY} library={library} onAdd={vi.fn()} onWrite={vi.fn()} />)
-    expect(options(screen.getByLabelText('Role'))).toEqual(['Choose a role…', 'Engineer, Acme', 'Engineer, Gamma', 'New role…'])
+    render(<AddContent docKind="resume" section={EMPTY} library={library} onAdd={vi.fn()} onWrite={vi.fn()} />)
+    expect(options(screen.getByLabelText('Role'))).toEqual(['Choose a role…', 'New role…', 'Engineer, Acme', 'Engineer, Gamma'])
   })
 
   it('adds a saved item (with its defaults), leaving out the ones already placed, then closes to its button', async () => {

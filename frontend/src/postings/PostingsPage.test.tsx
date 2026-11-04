@@ -56,19 +56,23 @@ describe('PostingsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('saves a new posting and opens it', async () => {
-    const fetchMock = stub({ 'POST /api/job-postings': [{ status: 201, body: posting(7, 'Lincoln High') }] })
+  it('reads a new posting, then saves what the user checked and opens it', async () => {
+    const fetchMock = stub({
+      'POST /api/job-postings/read': [
+        { status: 200, body: { organization: 'Lincoln High', role_title: 'Teacher', description: 'Teach ninth grade.' } },
+      ],
+      'POST /api/job-postings': [{ status: 201, body: posting(7, 'Lincoln High') }],
+    })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New job posting' }))
     const url = screen.getByLabelText('Link to the posting or primary contact (required)')
     expect(url).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.change(url, { target: { value: 'https://example.com/jobs/7' } })
-    fireEvent.change(screen.getByLabelText('Organization (required)'), { target: { value: 'Lincoln High' } })
-    fireEvent.change(screen.getByLabelText('Role title (required)'), { target: { value: 'English Teacher' } })
-    fireEvent.change(screen.getByLabelText('Job description (paste it in) (required)'), {
-      target: { value: 'Teach ninth grade.' },
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Read posting' }))
+    const role = await screen.findByLabelText('Role title (required)')
+    expect(role).toHaveValue('Teacher')
+    fireEvent.change(role, { target: { value: 'English Teacher' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save posting' }))
     expect(await screen.findByRole('heading', { name: 'Opened posting' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'POST /api/job-postings')).toEqual({
@@ -87,10 +91,11 @@ describe('PostingsPage', () => {
     })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New job posting' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fill in by hand' }))
     fireEvent.change(screen.getByLabelText('Organization (required)'), { target: { value: 'Lincoln High' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save posting' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid description')
-    expect(screen.getByLabelText('Job description (paste it in) (required)')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Job description (required)')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('Organization (required)')).toHaveValue('Lincoln High')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))

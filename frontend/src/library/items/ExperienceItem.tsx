@@ -1,7 +1,7 @@
-// A role's dialog: edit it (following "Changing a role or project" in docs/FRONTEND_CHECKS.md:
-// sent versions never change, and resumes and cover letters in progress change only if the user
-// says so), add a version of it, delete it, and edit its ordered bullet list. Its bullets and
-// sections open in the same dialog.
+// A role's dialog: edit it (following "Changing a role, project, bullet, or narrative content" in
+// docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters in progress
+// change only if the user picks them), add a version of it, delete it, and edit its ordered bullet list. Its
+// bullets and sections open in the same dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -10,6 +10,7 @@ import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import ApplyChoice from '../ApplyChoice'
+import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import BulletList from '../BulletList'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
@@ -42,27 +43,22 @@ export default function ExperienceItem({ id }: { id: number }) {
   const [roles, bullets] = data
   const labelOf = roleLabels(roles)
   const label = labelOf(role)
-  const inProgress = role.used_by.filter((use) => !use.locked)
-  // Opened from a resume's or cover letter's tree, that one gets the change; the choice is for the others.
-  const where = host.placed?.where
-  const here = inProgress.find((use) => use.kind === where?.kind && use.id === where?.id)
-  const others = inProgress.filter((use) => use !== here)
+  const { here, others } = inProgressUses(role.used_by, host.placed?.where)
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
   }
 
   async function update(original: Experience, fields: ExperienceFields) {
-    const picked = here ? [here, ...applyTo] : applyTo
-    const saved = await experienceApi.update(original.experience_id, fields, picked)
-    let message = 'Saved.'
-    if (saved.experience_id !== original.experience_id) {
-      message = here
-        ? `Saved as a new version, "${experienceLabel(saved)}", which this ${host.placed?.doc} uses now${applyTo.length > 0 ? ', as do the others you checked' : ''}. Everything else keeps "${experienceLabel(original)}".`
-        : picked.length > 0
-        ? `Saved as a new version, "${experienceLabel(saved)}". The ones in progress you checked use it now; everything else keeps "${experienceLabel(original)}".`
-        : `Saved as a new version, "${experienceLabel(saved)}". Everything that used "${experienceLabel(original)}" still does; pick the new version where you want it.`
-    }
+    const saved = await experienceApi.update(original.experience_id, fields, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.experience_id !== original.experience_id,
+      before: experienceLabel(original),
+      after: experienceLabel(saved),
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
     await host.saved(message, { kind: 'experience', id: saved.experience_id })
   }
 

@@ -3,12 +3,12 @@
 // (the ones the library lists under the section first), or a new one typed into that type's own
 // fields, which saves it to the library under the section too. A saved role, project, or skill
 // category comes with its default bullets and skills (the backend's app/defaults.py), which the
-// tree then changes. The type starts as the kind the library lists most under the section
-// (treeItems.ts, defaultKind). An empty section shows the
-// form right away; otherwise it opens from its button, and focus moves into it and back.
+// tree then changes. In a cover letter the type starts as narrative content; in a resume, as the
+// kind the library lists most under the section (treeItems.ts, defaultKind). An empty section
+// shows the form right away; otherwise it opens from its button, and focus moves into it and back.
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
-import type { EntryKind, NewItem, TreeSection } from '../shared/api/documents'
+import type { DocKind, EntryKind, NewItem, TreeSection } from '../shared/api/documents'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
 import { sortByName } from '../shared/sortByName'
 import {
@@ -26,11 +26,14 @@ import {
 const NEW = 'new'
 
 export default function AddContent({
+  docKind,
   section,
   library,
   onAdd,
   onWrite,
 }: {
+  // Whose section it is: a cover letter's content starts as narrative content.
+  docKind: DocKind
   section: TreeSection
   library: Library
   // A saved item, placed last in the section, with its default skills and bullets.
@@ -40,7 +43,9 @@ export default function AddContent({
 }) {
   const empty = section.entries.length === 0
   const [open, setOpen] = useState(empty)
-  const [kind, setKind] = useState<EntryKind | ''>(() => defaultKind(library, section.section_id) ?? '')
+  const [kind, setKind] = useState<EntryKind | ''>(() =>
+    docKind === 'cover_letter' ? 'narrative' : (defaultKind(library, section.section_id) ?? ''),
+  )
   const [choice, setChoice] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState<ApiError | null>(null)
@@ -138,6 +143,8 @@ export default function AddContent({
           {names.type}
           <select value={choice} {...invalid('item_id')} onChange={(event) => setChoice(event.target.value)}>
             <option value="">Choose a {names.lower}…</option>
+            {/* New comes first, so it's reached without going through every saved item. */}
+            <option value={NEW}>New {names.lower}…</option>
             {first.length > 0 && (
               <optgroup label={`Listed under ${section.title}`}>
                 {first.map((item) => (
@@ -156,7 +163,6 @@ export default function AddContent({
                 ))}
               </optgroup>
             )}
-            <option value={NEW}>New {names.lower}…</option>
           </select>
         </label>
       )}

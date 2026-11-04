@@ -1,15 +1,18 @@
-// An excerpt of narrative content's dialog: edit its text and the sections that list it (a sent
-// version keeps the original text; docs/FRONTEND_CHECKS.md, "Sent versions are locked"), add a
-// version of it, or delete it.
+// An excerpt of narrative content's dialog: edit its text and the sections that list it
+// (following "Changing a role, project, bullet, or narrative content" in docs/FRONTEND_CHECKS.md:
+// sent versions never change, and resumes and cover letters in progress change only if the user
+// picks them), add a version of it, or delete it.
 import { useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { narrativeApi, type NarrativeContent } from '../../shared/api/narrativeContent'
 import { sectionsApi } from '../../shared/api/sections'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import Checklist from '../../shared/components/Checklist'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
+import ApplyChoice from '../ApplyChoice'
+import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import UsedBy from '../UsedBy'
 import { placedNote, useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
@@ -24,6 +27,7 @@ const LOCKED_NOTE = 'A sent version uses this excerpt, so saving adds a new one.
 export default function NarrativeItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => Promise.all([narrativeApi.list(), sectionsApi.list()]))
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   // The sections checked in the form, starting with the ones that list it.
   const [chosen, setChosen] = useState<number[] | null>(null)
@@ -33,15 +37,19 @@ export default function NarrativeItem({ id }: { id: number }) {
   const sections = data[1]
   const checked = chosen ?? excerpt.sections.map((section) => section.id)
   const label = `"${shortBullet(excerpt.content)}"`
+  const { here, others } = inProgressUses(excerpt.used_by, host.placed?.where)
 
   async function update(original: NarrativeContent, { content }: ExcerptFields) {
-    const saved = await narrativeApi.update(original.content_id, content, checked)
-    await host.saved(
-      saved.content_id === original.content_id
-        ? 'Saved.'
-        : 'Saved as a new excerpt, listed right after the original. Sent versions keep the original.',
-      { kind: 'narrative', id: saved.content_id },
-    )
+    const saved = await narrativeApi.update(original.content_id, content, checked, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.content_id !== original.content_id,
+      before: shortBullet(original.content),
+      after: shortBullet(saved.content),
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'narrative', id: saved.content_id })
   }
 
   async function addVersion(original: NarrativeContent, { content }: ExcerptFields) {
@@ -93,6 +101,7 @@ export default function NarrativeItem({ id }: { id: number }) {
             selected={checked}
             onChange={setChosen}
           />
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
       }
       newVersion={(back) => (

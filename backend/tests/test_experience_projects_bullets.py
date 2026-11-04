@@ -368,6 +368,16 @@ def test_bullet_lists_every_job_that_lists_it(client: TestClient, db: Session, a
     assert [e["role_title"] for e in body["experience"]] == ["Engineer", "Senior Engineer"]
 
 
+def change_bullet(client: TestClient, bullet_id: int, content: str, apply: list[dict]) -> dict:
+    return client.put(f"/api/bullet-points/{bullet_id}",
+                      json={"content": content, "apply_to": apply}).json()
+
+
+def bullet_in(db: Session, doc: Resume) -> int:
+    return db.scalar(select(ResumeBulletPoint.bullet_id).join(ResumeSection)
+                     .where(ResumeSection.resume_id == doc.resume_id))
+
+
 def test_edit_bullet_a_sent_version_uses_saves_a_new_bullet(client: TestClient, db: Session,
                                                             account_id: int):
     first = role(db, account_id, ["Shipped it", "Tested it"])
@@ -383,11 +393,14 @@ def test_edit_bullet_a_sent_version_uses_saves_a_new_bullet(client: TestClient, 
     letter_job = add(db, CoverLetterExperience(
         cover_letter_section_id=letter_section.cover_letter_section_id,
         experience_id=first.experience_id, position=1))
-    add(db, CoverLetterBulletPoint(cover_letter_section_id=letter_section.cover_letter_section_id,
-                                   cover_letter_experience_id=letter_job.cover_letter_experience_id,
-                                   bullet_id=shipped, position=1))
+    letter_bullet = add(db, CoverLetterBulletPoint(
+        cover_letter_section_id=letter_section.cover_letter_section_id,
+        cover_letter_experience_id=letter_job.cover_letter_experience_id,
+        bullet_id=shipped, position=1))
 
-    saved = client.put(f"/api/bullet-points/{shipped}", json={"content": "Shipped it twice"}).json()
+    # Every one in progress is picked, but a sent version uses it, so it's a new bullet.
+    saved = change_bullet(client, shipped, "Shipped it twice",
+                          picked(draft) + [{"kind": "cover_letter", "id": letter.letter_id}])
     new_id = saved["bullet_id"]
     assert new_id != shipped
     assert [use["name"] for use in saved["used_by"]] == ["Draft", "Letter"]
@@ -398,15 +411,69 @@ def test_edit_bullet_a_sent_version_uses_saves_a_new_bullet(client: TestClient, 
         == [shipped, new_id]
     db.expire_all()
     assert db.get(BulletPoint, shipped).content == "Shipped it"
-    sent_bullets = db.scalars(select(ResumeBulletPoint.bullet_id).join(ResumeSection)
-                              .where(ResumeSection.resume_id == sent.resume_id)).all()
-    assert sent_bullets == [shipped]
+    assert bullet_in(db, sent) == shipped
+    assert db.get(CoverLetterBulletPoint, letter_bullet.cover_letter_bullet_point_id).bullet_id \
+        == new_id
 
 
-def test_edit_bullet_in_place_when_unsent(client: TestClient, db: Session, account_id: int):
+def test_edit_bullet_nothing_uses_in_place(client: TestClient, db: Session, account_id: int):
     shipped = bullet(db, account_id, "Shipped it").bullet_id
-    saved = client.put(f"/api/bullet-points/{shipped}", json={"content": "Shipped it!"}).json()
+    saved = change_bullet(client, shipped, "Shipped it!", [])
     assert (saved["bullet_id"], saved["content"]) == (shipped, "Shipped it!")
+
+
+def test_edit_bullet_picking_every_one_in_progress_edits_in_place(client: TestClient,
+                                                                  db: Session, account_id: int):
+    row = role(db, account_id, ["Shipped it"])
+    shipped = bullet(db, account_id, "Shipped it").bullet_id
+    docs = [resume(db, account_id, name, sent=False) for name in ("First", "Second")]
+    for doc in docs:
+        show_job(db, doc, row, ["Shipped it"])
+    saved = change_bullet(client, shipped, "Shipped it!", picked(*docs))
+    assert (saved["bullet_id"], saved["content"]) == (shipped, "Shipped it!")
+
+
+def test_edit_bullet_switches_only_the_picked_resumes(client: TestClient, db: Session,
+                                                      account_id: int):
+    row = role(db, account_id, ["Shipped it"])
+    shipped = bullet(db, account_id, "Shipped it").bullet_id
+    first, second = (resume(db, account_id, name, sent=False) for name in ("First", "Second"))
+    for doc in (first, second):
+        show_job(db, doc, row, ["Shipped it"])
+    saved = change_bullet(client, shipped, "Shipped it!", picked(first))
+    # Not every one was picked, so it's a new bullet, and only the picked one switches to it.
+    assert saved["bullet_id"] != shipped
+    db.expire_all()
+    assert (bullet_in(db, first), bullet_in(db, second)) == (saved["bullet_id"], shipped)
+    assert db.get(BulletPoint, shipped).content == "Shipped it"
+
+
+def test_edit_bullet_picking_none_keeps_every_one_on_the_original(client: TestClient,
+                                                                 db: Session, account_id: int):
+    row = role(db, account_id, ["Shipped it"])
+    shipped = bullet(db, account_id, "Shipped it").bullet_id
+    draft = resume(db, account_id, "Draft", sent=False)
+    show_job(db, draft, row, ["Shipped it"])
+    saved = change_bullet(client, shipped, "Shipped it!", [])
+    assert saved["bullet_id"] != shipped
+    assert saved["used_by"] == []
+    db.expire_all()
+    assert bullet_in(db, draft) == shipped
+
+
+def test_edit_bullet_refuses_picking_what_isnt_in_progress(client: TestClient, db: Session,
+                                                           account_id: int):
+    row = role(db, account_id, ["Shipped it"])
+    shipped = bullet(db, account_id, "Shipped it").bullet_id
+    sent = resume(db, account_id, "Sent", sent=True)
+    show_job(db, sent, row, ["Shipped it"])
+    unrelated = resume(db, account_id, "Unrelated", sent=False)
+    for doc in (sent, unrelated):
+        response = client.put(f"/api/bullet-points/{shipped}",
+                              json={"content": "Shipped it!", "apply_to": picked(doc)})
+        assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
+    db.expire_all()
+    assert db.get(BulletPoint, shipped).content == "Shipped it"
 
 
 def test_delete_bullet_removes_it_everywhere(client: TestClient, db: Session, account_id: int):

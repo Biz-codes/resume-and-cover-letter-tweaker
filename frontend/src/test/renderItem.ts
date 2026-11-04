@@ -4,8 +4,9 @@ import { expect, vi } from 'vitest'
 import { ItemHostContext, type ItemHost } from '../library/items/itemHost'
 
 // A view from library/items rendered with a stand-in for the dialog around it, so a test can
-// check what it asks the dialog to do. Resolves once the item has loaded.
-export async function renderItem(view: ReactElement) {
+// check what it asks the dialog to do (`placed` as if opened from a resume's or cover letter's
+// tree row). Resolves once the item has loaded.
+export async function renderItem(view: ReactElement, placed?: ItemHost['placed']) {
   const host = {
     open: vi.fn(),
     refresh: vi.fn(() => Promise.resolve()),
@@ -13,6 +14,7 @@ export async function renderItem(view: ReactElement) {
     deleted: vi.fn(() => Promise.resolve()),
     say: vi.fn(),
     close: vi.fn(),
+    placed,
   } satisfies ItemHost
   render(createElement('main', null, createElement(ItemHostContext.Provider, { value: host }, view)))
   await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())

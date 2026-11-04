@@ -1,14 +1,17 @@
-// A bullet's dialog: edit it (a sent version keeps the original; docs/FRONTEND_CHECKS.md, "Sent
-// versions are locked"), add a version of it, or delete it. The roles, projects, and sections
-// that list it open in the same dialog.
+// A bullet's dialog: edit it (following "Changing a role, project, bullet, or narrative
+// content" in docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters
+// in progress change only if the user picks them), add a version of it, or delete it. The roles,
+// projects, and sections that list it open in the same dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet, type Bullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { experienceLabel } from '../../shared/api/experience'
 import { projectLabel } from '../../shared/api/projects'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
+import ApplyChoice from '../ApplyChoice'
+import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
 import { placedNote, useItemHost } from './itemHost'
@@ -21,20 +24,25 @@ const LOCKED_NOTE = 'A sent version uses this bullet, so saving adds a new one. 
 export default function BulletItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => bulletsApi.list())
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
 
   const bullet = data?.find((item) => item.bullet_id === id)
   if (!data || !bullet) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = `"${shortBullet(bullet.content)}"`
+  const { here, others } = inProgressUses(bullet.used_by, host.placed?.where)
 
   async function save(original: Bullet, content: string) {
-    const saved = await bulletsApi.update(original.bullet_id, content)
-    await host.saved(
-      saved.bullet_id === original.bullet_id
-        ? 'Saved.'
-        : 'Saved as a new bullet, listed right after the original. Sent versions keep the original.',
-      { kind: 'bullet', id: saved.bullet_id },
-    )
+    const saved = await bulletsApi.update(original.bullet_id, content, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.bullet_id !== original.bullet_id,
+      before: shortBullet(original.content),
+      after: shortBullet(saved.content),
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'bullet', id: saved.bullet_id })
   }
 
   async function addVersion(original: Bullet, content: string) {
@@ -78,7 +86,9 @@ export default function BulletItem({ id }: { id: number }) {
           onSave={(content) => save(bullet, content)}
           focusOnOpen={false}
           onCancel={host.close}
-        />
+        >
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+        </NameForm>
       }
       newVersion={(back) => (
         <NameForm

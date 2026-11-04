@@ -4,11 +4,14 @@ paragraph combines the excerpts the user picks, in order.
 
 Like bullets, an excerpt is stored once and can be listed under any number of sections. A resume
 or cover letter stores only which excerpts it picked (resume_narrative_content,
-cover_letter_narrative_content), so editing an excerpt a sent version uses saves a new excerpt,
-listed right after the original in its sections. Sent versions keep the original; unsent ones
-switch to the new one. An excerpt no sent version uses is edited in place
-(docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is listed the
-same way, and nothing switches to it.
+cover_letter_narrative_content), so editing its text follows "Changing a role, project, bullet,
+or narrative content" in docs/FRONTEND_CHECKS.md:
+- Sent versions never change.
+- Resumes and cover letters in progress change only if the user picks them (apply_to). If
+  every one is picked and no sent version uses the excerpt, it's edited in place.
+- Otherwise the new text is saved as a new excerpt, listed right after the original in its
+  sections, and only the picked ones switch to it.
+A version added on purpose is listed the same way, and nothing switches to it.
 
 Creating or editing an excerpt can also choose every section that lists it. Those lists only
 drive suggestions, so changing them never makes a new excerpt; when a text edit does, the
@@ -27,7 +30,7 @@ from app.library import check_ids, list_beside, set_parents
 from app.models import NarrativeContent, Section, SectionNarrativeContent
 from app.refs import SectionRef, section_refs
 from app.schemas import RequiredText
-from app.usage import NARRATIVE_LINKS, Use, switch_unsent, used_by_sent_version, uses
+from app.usage import NARRATIVE_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
 
 router = APIRouter(prefix="/api/narrative-content", tags=["narrative content"])
 
@@ -44,6 +47,8 @@ class NewNarrative(NarrativeIn):
 class NarrativeEdit(NarrativeIn):
     # Every section that lists the excerpt after the edit. None leaves its sections as they are.
     section_ids: list[int] | None = None
+    # The resumes and cover letters in progress the user checked to get a change to the text.
+    apply_to: list[DocRef] = []
 
 
 class NarrativeOut(NarrativeIn):
@@ -116,7 +121,8 @@ def create_narrative(body: NewNarrative, db: DbSession, account_id: AccountId) -
 @router.put("/{content_id}")
 def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
                      account_id: AccountId) -> NarrativeOut:
-    """Edits the excerpt in place, unless a sent version uses it (see the module docstring).
+    """Changes the excerpt's text and sections (see the module docstring for when the text
+    is saved as a new excerpt).
 
     The response's content_id differs from the one in the url when a new excerpt was saved.
     """
@@ -125,11 +131,16 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
         check_sections(db, body.section_ids, account_id)
     saved = excerpt
     if excerpt.content != body.content:
-        if not used_by_sent_version(db, NARRATIVE_LINKS, content_id):
+        used_by = uses(db, NARRATIVE_LINKS, [content_id])[content_id]
+        sent = any(use.locked for use in used_by)
+        in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
+        chosen = chosen_in_progress(body.apply_to, used_by)
+        if not sent and chosen == in_progress:
             excerpt.content = body.content
         else:
             saved = new_version(db, excerpt, body, account_id)
-            switch_unsent(db, NARRATIVE_LINKS, content_id, saved.content_id)
+            if chosen:
+                switch_unsent(db, NARRATIVE_LINKS, content_id, saved.content_id, only=chosen)
     if body.section_ids is not None:
         list_under(db, saved, body.section_ids)
     db.flush()

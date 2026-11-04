@@ -1,9 +1,9 @@
 // When changing a library item that resumes or cover letters in progress use, asks which of them
 // get the change too: one checkbox each, none checked to start. Opened from one of them (a tree
-// row), that one gets the change anyway, so only the others are offered (`others`). Unchecked ones keep the item as it
-// is, so unless every one is checked (and nothing sent uses it), the change is saved as a new
-// version. Sent versions never change, so they aren't offered here
-// (docs/FRONTEND_CHECKS.md, "Changing a role or project").
+// row), that one gets the change anyway, so only the others are offered (`others`). Unchecked
+// ones keep the item as it is, so unless every one is checked (and nothing sent uses it), the
+// change is saved as a new version. Sent versions never change, so they aren't offered here
+// (docs/FRONTEND_CHECKS.md, "Changing a role, project, bullet, or narrative content").
 import { useId } from 'react'
 import { KIND_LABELS, type Use } from '../shared/api/usage'
 import { sortByName } from '../shared/sortByName'

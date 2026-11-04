@@ -85,7 +85,7 @@ Note: headers are library items with versions, like roles. A different headline 
 | created_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting added to db               |
 | updated_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting last updated              |
 
-Note: `url` holds a link to the posting, or, for a job with no posting online (a referral, or a description sent by email), how to reach its primary contact. It's free text: the app shows it as a link only when it's a web address, and phase 5 fetches a posting only from one.
+Note: `url` holds a link to the posting, or, for a job with no posting online (a referral, or a description sent by email), how to reach its primary contact. It's free text: the app shows it as a link only when it's a web address, and "Read posting" fetches a posting only from one (anything else needs the description pasted in, or reading returns `VALIDATION_FAILED`).
 
 Note: `description` holds the extracted text after the user has checked and corrected it, so the posting can be reviewed again after the page goes offline.
 
@@ -214,6 +214,8 @@ Note: "New version" on a resume or cover letter saves a new section with a new t
 
 Note: each row (an "excerpt" in the app) holds anything from one sentence to a full paragraph. Narrative sections, such as a resume summary or a cover letter paragraph, combine the excerpts chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. The user decides how to split text: for example, a paragraph used in many resumes with only its first sentence changed can be one row per first sentence plus one row for the rest of the paragraph. No label column is needed, because sections list their excerpts in `section_narrative_content`.
 
+Note: editing an excerpt's text in the library follows the same rules as a role, project, or bullet: resumes and cover letters in progress switch to the edited excerpt only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original in its sections (see "Changing a role, project, bullet, or narrative content" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
 Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row. A new version must differ from the original (`VALIDATION_FAILED`).
 
 ### skill_category
@@ -267,7 +269,7 @@ Note: "New version" on a resume or cover letter saves a new skill with a new nam
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db                  |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated                 |
 
-Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user picks them, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user picks them, and sent ones never do (see "Changing a role, project, bullet, or narrative content" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
@@ -288,7 +290,7 @@ Note: a project lists its skills in `project_skill` and its bullets in `project_
 
 Note: `done_for` is optional free text naming who or what the project is affiliated with, printed as written (e.g. "McGraw Hill", "Freelance", "Independent project"). Empty means the project line shows nothing there.
 
-Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user picks them, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user picks them, and sent ones never do (see "Changing a role, project, bullet, or narrative content" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the skills and bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
@@ -303,6 +305,8 @@ Note: "New version" on a resume or cover letter adds a version the same way, and
 | updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time bullet point last updated                 |
 
 Note: a bullet is listed under roles (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
+
+Note: editing a bullet's text in the library follows the same rules as a role, project, or narrative content: resumes and cover letters in progress switch to the edited bullet only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original (see "Changing a role, project, bullet, or narrative content" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume or cover letter switches to the new bullet. A new version must differ from the original (`VALIDATION_FAILED`).
 

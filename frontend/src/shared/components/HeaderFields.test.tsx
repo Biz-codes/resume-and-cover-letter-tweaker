@@ -25,9 +25,9 @@ describe('HeaderFields', () => {
   it('offers every saved value for each field, starting with the current header', async () => {
     render(<HeaderFields header={TECH} headers={[TEACHING, TECH]} readOnly={false} onSave={vi.fn()} />)
     expect(screen.getByLabelText('Headline')).toHaveValue('Front-End Engineer')
-    expect(options('Headline')).toEqual(['None', 'English Teacher', 'Front-End Engineer', 'New headline…'])
+    expect(options('Headline')).toEqual(['None', 'New headline…', 'English Teacher', 'Front-End Engineer'])
     // The name is required, so it has no "None".
-    expect(options('Name (required)')).toEqual(['Sam Rivera', 'New name…'])
+    expect(options('Name (required)')).toEqual(['New name…', 'Sam Rivera'])
     expect(screen.getByLabelText('Location')).toHaveValue('')
     // Nothing to save or undo yet.
     expect(screen.getByRole('button', { name: 'Save header' })).toHaveAttribute('aria-disabled', 'true')

@@ -178,21 +178,33 @@ def test_new_narrative_is_listed_under_the_sections_chosen(client: TestClient, d
         "CROSS_ACCOUNT_LINK"
 
 
+def show_excerpt(db: Session, doc: CoverLetter, excerpt: NarrativeContent) -> int:
+    section = add(db, CoverLetterSection(letter_id=doc.letter_id, section_id=SUMMARY_SECTION_ID,
+                                         position=1))
+    return add(db, CoverLetterNarrativeContent(
+        cover_letter_section_id=section.cover_letter_section_id,
+        content_id=excerpt.content_id, position=1)).cover_letter_narrative_content_id
+
+
+def picked_letters(*docs: CoverLetter) -> list[dict]:
+    return [{"kind": "cover_letter", "id": doc.letter_id} for doc in docs]
+
+
+def change_excerpt(client: TestClient, excerpt: NarrativeContent, content: str,
+                   apply: list[dict]) -> dict:
+    return client.put(f"/api/narrative-content/{excerpt.content_id}",
+                      json={"content": content, "apply_to": apply}).json()
+
+
 def test_edit_narrative_a_sent_letter_uses_saves_a_new_excerpt(client: TestClient, db: Session,
                                                                 account_id: int):
     intro = narrative(db, account_id, "I build tools.")
     closing = narrative(db, account_id, "Thank you.")
-    choices = {}
-    for name, sent in (("Sent", True), ("Draft", False)):
-        doc = letter(db, account_id, name, sent)
-        section = add(db, CoverLetterSection(letter_id=doc.letter_id,
-                                             section_id=SUMMARY_SECTION_ID, position=1))
-        choices[name] = add(db, CoverLetterNarrativeContent(
-            cover_letter_section_id=section.cover_letter_section_id,
-            content_id=intro.content_id, position=1)).cover_letter_narrative_content_id
+    sent, draft = letter(db, account_id, "Sent", True), letter(db, account_id, "Draft", False)
+    choices = {doc.name: show_excerpt(db, doc, intro) for doc in (sent, draft)}
 
-    saved = client.put(f"/api/narrative-content/{intro.content_id}",
-                       json={"content": "I build small tools."}).json()
+    # Every one in progress is picked, but a sent letter uses it, so it's a new excerpt.
+    saved = change_excerpt(client, intro, "I build small tools.", picked_letters(draft))
     new_id = saved["content_id"]
     assert new_id != intro.content_id
     assert [use["name"] for use in saved["used_by"]] == ["Draft"]
@@ -206,9 +218,58 @@ def test_edit_narrative_a_sent_letter_uses_saves_a_new_excerpt(client: TestClien
 
 def test_edit_narrative_in_place_when_unsent(client: TestClient, db: Session, account_id: int):
     intro = narrative(db, account_id, "I build tools.")
-    saved = client.put(f"/api/narrative-content/{intro.content_id}",
-                       json={"content": "I build tools!"}).json()
+    saved = change_excerpt(client, intro, "I build tools!", [])
     assert (saved["content_id"], saved["content"]) == (intro.content_id, "I build tools!")
+
+
+def test_edit_narrative_picking_every_one_in_progress_edits_in_place(client: TestClient,
+                                                                     db: Session,
+                                                                     account_id: int):
+    intro = narrative(db, account_id, "I build tools.")
+    docs = [letter(db, account_id, name, False) for name in ("First", "Second")]
+    for doc in docs:
+        show_excerpt(db, doc, intro)
+    saved = change_excerpt(client, intro, "I build tools!", picked_letters(*docs))
+    assert (saved["content_id"], saved["content"]) == (intro.content_id, "I build tools!")
+
+
+def test_edit_narrative_switches_only_the_picked_letters(client: TestClient, db: Session,
+                                                         account_id: int):
+    intro = narrative(db, account_id, "I build tools.")
+    first, second = (letter(db, account_id, name, False) for name in ("First", "Second"))
+    first_row, second_row = (show_excerpt(db, doc, intro) for doc in (first, second))
+    saved = change_excerpt(client, intro, "I build tools!", picked_letters(first))
+    assert saved["content_id"] != intro.content_id
+    db.expire_all()
+    assert db.get(CoverLetterNarrativeContent, first_row).content_id == saved["content_id"]
+    assert db.get(CoverLetterNarrativeContent, second_row).content_id == intro.content_id
+    assert db.get(NarrativeContent, intro.content_id).content == "I build tools."
+
+
+def test_edit_narrative_picking_none_keeps_every_one_on_the_original(client: TestClient,
+                                                                    db: Session,
+                                                                    account_id: int):
+    intro = narrative(db, account_id, "I build tools.")
+    row = show_excerpt(db, letter(db, account_id, "Draft", False), intro)
+    saved = change_excerpt(client, intro, "I build tools!", [])
+    assert (saved["content_id"] != intro.content_id, saved["used_by"]) == (True, [])
+    db.expire_all()
+    assert db.get(CoverLetterNarrativeContent, row).content_id == intro.content_id
+
+
+def test_edit_narrative_refuses_picking_what_isnt_in_progress(client: TestClient, db: Session,
+                                                              account_id: int):
+    intro = narrative(db, account_id, "I build tools.")
+    sent = letter(db, account_id, "Sent", True)
+    show_excerpt(db, sent, intro)
+    unrelated = letter(db, account_id, "Unrelated", False)
+    for doc in (sent, unrelated):
+        response = client.put(f"/api/narrative-content/{intro.content_id}",
+                              json={"content": "I build tools!",
+                                    "apply_to": picked_letters(doc)})
+        assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
+    db.expire_all()
+    assert db.get(NarrativeContent, intro.content_id).content == "I build tools."
 
 
 def test_edit_narrative_sections(client: TestClient, db: Session, account_id: int):

@@ -69,7 +69,7 @@ describe('NarrativeContentPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('warns that editing an excerpt a sent version uses saves a new excerpt', async () => {
+  it('warns that editing an excerpt a sent version uses saves a new version', async () => {
     const saved = { ...INTRO, content_id: 12, content: 'I build tools.', used_by: [] }
     const fetchMock = stub({ 'PUT /api/narrative-content/10': [{ status: 200, body: saved }] })
     render(<NarrativeContentPage />)
@@ -84,10 +84,11 @@ describe('NarrativeContentPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'I build tools.' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved as a new excerpt')
+    await expectNotice('Saved as a new version')
     expect(sentBody(fetchMock, 'PUT /api/narrative-content/10')).toEqual({
       content: 'I build tools.',
       section_ids: [1, 8],
+      apply_to: [],
     })
   })
 
@@ -140,6 +141,7 @@ describe('NarrativeContentPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/narrative-content/11')).toEqual({
       content: 'Thank you for reading.',
       section_ids: [9],
+      apply_to: [],
     })
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'View and Edit "Thank you for reading."' })).toHaveFocus(),

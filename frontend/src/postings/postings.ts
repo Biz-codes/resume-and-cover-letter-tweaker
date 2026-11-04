@@ -1,4 +1,4 @@
-// Job postings, entered by hand: the posting, its header, the resumes and cover letters made for
+// Job postings, read from their page or pasted text and checked by the user: the posting, its header, the resumes and cover letters made for
 // it, and its tracking. See backend/app/routers/job_postings.py and interviews.py, and "Headers"
 // and "Tracking an application" in docs/FRONTEND_CHECKS.md.
 import type { Field } from '../shared/components/FieldsForm'
@@ -12,6 +12,9 @@ export interface PostingFields {
   role_title: string
   description: string
 }
+
+// A posting read by Claude, before the user checks and saves it.
+export type PostingDraft = Omit<PostingFields, 'url'>
 
 export interface Posting extends PostingFields {
   job_posting_id: number
@@ -70,7 +73,7 @@ export const POSTING_FIELDS: Field<PostingFields>[] = [
   { name: 'url', label: 'Link to the posting or primary contact', required: true },
   { name: 'organization', label: 'Organization', required: true },
   { name: 'role_title', label: 'Role title', required: true },
-  { name: 'description', label: 'Job description (paste it in)', required: true, multiline: true },
+  { name: 'description', label: 'Job description', required: true, multiline: true },
 ]
 
 export const TRACKING_FIELDS: Field<TrackingFields>[] = [
@@ -103,6 +106,9 @@ export const postingsApi = {
   list: () => api.get<Posting[]>('/job-postings'),
   get: (id: number) => api.get<PostingDetail>(`/job-postings/${id}`),
   // A new posting has no header yet; the user picks one next, from the suggestion.
+  // What Claude finds in the pasted text, or else on the page at the url, for the user to check.
+  // Saves nothing. POSTING_FETCH_FAILED when the page can't be read, so it can be pasted in.
+  read: (url: string, text: string) => api.post<PostingDraft>('/job-postings/read', { url, text }),
   create: (fields: PostingFields) => api.post<PostingDetail>('/job-postings', fields),
   update: (id: number, fields: PostingFields) => api.put<PostingDetail>(`/job-postings/${id}`, fields),
   // The posting and all its resumes and cover letters point at the saved header with exactly

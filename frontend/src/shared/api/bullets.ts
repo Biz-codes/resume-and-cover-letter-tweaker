@@ -25,8 +25,12 @@ export function shortBullet(content: string, words = 6) {
 export const bulletsApi = {
   list: () => api.get<Bullet[]>('/bullet-points'),
   create: (content: string, parent: BulletParent) => api.post<Bullet>('/bullet-points', { content, ...parent }),
-  // When a sent version uses the bullet, the new text is saved as a new bullet with a new id.
-  update: (id: number, content: string) => api.put<Bullet>(`/bullet-points/${id}`, { content }),
+  // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
+  // every one in progress is picked and nothing sent uses it, the new text is saved as a new bullet
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
+  // or bullet").
+  update: (id: number, content: string, applyTo: Use[]) =>
+    api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
   addVersion: (id: number, content: string) => api.post<Bullet>(`/bullet-points/${id}/versions`, { content }),
   setHidden: (id: number, hidden: boolean) => api.put<Bullet>(`/bullet-points/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/bullet-points/${id}`),

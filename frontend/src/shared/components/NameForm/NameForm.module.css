@@ -2,19 +2,20 @@
   margin: 8px 0;
 }
 
-.form label {
+/* Only the form's own field, not controls passed in (e.g. ApplyChoice's checkboxes). */
+.form > label {
   display: block;
   margin-bottom: 8px;
 }
 
-.form input,
-.form textarea {
+.form > label > input,
+.form > label > textarea {
   display: block;
   padding: 6px;
   font: inherit;
 }
 
-.form textarea {
+.form > label > textarea {
   width: 100%;
   box-sizing: border-box;
 }

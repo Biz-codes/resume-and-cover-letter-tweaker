@@ -1,7 +1,7 @@
 // A one-field form for adding or renaming a library item, or writing a bullet (multiline).
 // Keeps the input on errors. A form that can be cancelled (renaming) opens in place of the
 // item's title, so focus moves into it.
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
 import styles from './NameForm.module.css'
 
@@ -13,6 +13,7 @@ export default function NameForm({
   submitLabel = 'Save',
   multiline = false,
   focusOnOpen = true,
+  children,
   onSave,
   onCancel,
 }: {
@@ -28,6 +29,8 @@ export default function NameForm({
   // Whether a form that can be cancelled takes focus when it opens. Off for an item's form in its
   // dialog, where the dialog's heading has focus.
   focusOnOpen?: boolean
+  // More controls, shown after the field (e.g. which resumes and cover letters get the change).
+  children?: ReactNode
   onSave: (name: string) => Promise<void>
   onCancel?: () => void
 }) {
@@ -90,6 +93,7 @@ export default function NameForm({
           />
         )}
       </label>
+      {children}
       {error && (
         <p role="alert" id={errorId}>
           {error.message}

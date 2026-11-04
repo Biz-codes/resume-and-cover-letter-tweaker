@@ -18,10 +18,16 @@ export const narrativeApi = {
   create: (content: string, sectionIds: number[]) =>
     api.post<NarrativeContent>('/narrative-content', { content, section_ids: sectionIds }),
   // sectionIds is every section that lists the excerpt afterwards: it stays in place in the ones
-  // that already list it. When a sent version uses the excerpt and the text changed, the new text
-  // is saved as a new excerpt with a new id, and the sections apply to it.
-  update: (id: number, content: string, sectionIds: number[]) =>
-    api.put<NarrativeContent>(`/narrative-content/${id}`, { content, section_ids: sectionIds }),
+  // that already list it. A changed text follows "Changing a role, project, bullet, or narrative
+  // content" (FRONTEND_CHECKS.md): unless every one in progress is picked in applyTo and nothing
+  // sent uses it, it's saved as a new excerpt with a new id, which the picked ones switch to, and
+  // the sections apply to it.
+  update: (id: number, content: string, sectionIds: number[], applyTo: Use[]) =>
+    api.put<NarrativeContent>(`/narrative-content/${id}`, {
+      content,
+      section_ids: sectionIds,
+      apply_to: applyTo.map(({ kind, id }) => ({ kind, id })),
+    }),
   addVersion: (id: number, content: string) =>
     api.post<NarrativeContent>(`/narrative-content/${id}/versions`, { content }),
   setHidden: (id: number, hidden: boolean) => api.put<NarrativeContent>(`/narrative-content/${id}/hidden`, { hidden }),

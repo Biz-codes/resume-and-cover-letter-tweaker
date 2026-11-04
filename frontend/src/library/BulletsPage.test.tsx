@@ -50,7 +50,7 @@ describe('BulletsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('warns that editing a bullet a sent version uses saves a new bullet', async () => {
+  it('warns that editing a bullet a sent version uses saves a new version', async () => {
     const saved = { ...SHIPPED, bullet_id: 12, content: 'Shipped it', used_by: [] }
     const fetchMock = stub({ 'PUT /api/bullet-points/10': [{ status: 200, body: saved }] })
     render(<BulletsPage />)
@@ -61,8 +61,8 @@ describe('BulletsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Shipped it' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved as a new bullet')
-    expect(sentBody(fetchMock, 'PUT /api/bullet-points/10')).toEqual({ content: 'Shipped it' })
+    await expectNotice('Saved as a new version')
+    expect(sentBody(fetchMock, 'PUT /api/bullet-points/10')).toEqual({ content: 'Shipped it', apply_to: [] })
   })
 
   it('adds a new version of a bullet', async () => {

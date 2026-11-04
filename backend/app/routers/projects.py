@@ -4,7 +4,8 @@ A project's row lists every skill and bullet that can go under it. A resume or c
 stores only which project, skills, and bullets it picked (resume_project,
 resume_project_skill, resume_bullet_point, and the cover letter tables), and prints
 everything about the project itself (project_title, done_for, url, dates) from this row. So
-changing a project's fields follows "Changing a role or project" in docs/FRONTEND_CHECKS.md:
+changing a project's fields follows "Changing a role, project, bullet, or narrative content"
+in docs/FRONTEND_CHECKS.md:
 
 - A sent version never changes: if one uses the project, the change is saved as a new row.
 - Resumes and cover letters in progress change only if the user picks them (apply_to). If

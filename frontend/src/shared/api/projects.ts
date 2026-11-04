@@ -40,7 +40,8 @@ export const projectsApi = {
     api.put<Project>(`/projects/${id}/bullets`, { bullet_ids: bulletIds }),
   // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
   // every one in progress is picked and nothing sent uses it, the change is saved as a new version
-  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role or project").
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
+  // bullet, or narrative content").
   update: (id: number, fields: ProjectFields, applyTo: Use[]) =>
     api.put<Project>(`/projects/${id}`, { ...fields, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
   setHidden: (id: number, hidden: boolean) => api.put<Project>(`/projects/${id}/hidden`, { hidden }),

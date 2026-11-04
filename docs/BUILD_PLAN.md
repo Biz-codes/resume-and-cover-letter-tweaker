@@ -135,7 +135,7 @@ Steps:
 ## Phase 5: Job postings and AI
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
-1. **Job posting:** fetch and extract a posting from a url, with the paste-in fallback, and let the user correct the result.
+1. [x] **Job posting:** fetch and extract a posting from a url, with the paste-in fallback, and let the user correct the result. (The user still to try it with real postings, which needs the API key.)
 2. **Suggestions**, one step at a time, per the AI integration notes in [TECH_STACK.md](TECH_STACK.md): the posting's header (headline from the role title), starting point, sections, each section's content, rewordings (saved as new rows), and the cover letter's greeting. They replace the "last used" defaults in `backend/app/defaults.py`, filling the same lists, with the rest under "More options". Add a "Build from scratch" choice that starts a document with no defaults (empty lists sent explicitly).
    - **Workshopping with Claude at every level:** a chat beside each New version form (and the add forms) to work on that piece with Claude, and at the top a review of the whole document; see "Working with Claude at every level" in [APP_FLOW.md](APP_FLOW.md). Suggestions may be new text never used before, saved as new rows only when accepted. Design the details when this step starts.
 3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone.

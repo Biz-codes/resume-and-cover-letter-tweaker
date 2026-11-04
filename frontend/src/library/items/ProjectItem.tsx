@@ -1,6 +1,6 @@
-// A project's dialog: edit it (following "Changing a role or project" in docs/FRONTEND_CHECKS.md),
-// add a version of it, delete it, and edit its ordered skill and bullet lists. Its skills,
-// bullets, and sections open in the same dialog.
+// A project's dialog: edit it (following "Changing a role, project, bullet, or narrative content" in
+// docs/FRONTEND_CHECKS.md), add a version of it, delete it, and edit its ordered skill and bullet
+// lists. Its skills, bullets, and sections open in the same dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -11,6 +11,7 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
 import ApplyChoice from '../ApplyChoice'
+import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import BulletList from '../BulletList'
 import Collapsible from '../Collapsible/Collapsible'
 import NameList from '../NameList'
@@ -43,27 +44,22 @@ export default function ProjectItem({ id }: { id: number }) {
   if (!data || !project) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const [projects, skills, bullets] = data
   const label = projectLabels(projects)(project)
-  const inProgress = project.used_by.filter((use) => !use.locked)
-  // Opened from a resume's or cover letter's tree, that one gets the change; the choice is for the others.
-  const where = host.placed?.where
-  const here = inProgress.find((use) => use.kind === where?.kind && use.id === where?.id)
-  const others = inProgress.filter((use) => use !== here)
+  const { here, others } = inProgressUses(project.used_by, host.placed?.where)
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
   }
 
   async function update(original: Project, fields: ProjectFields) {
-    const picked = here ? [here, ...applyTo] : applyTo
-    const saved = await projectsApi.update(original.project_id, fields, picked)
-    let message = 'Saved.'
-    if (saved.project_id !== original.project_id) {
-      message = here
-        ? `Saved as a new version, "${projectLabel(saved)}", which this ${host.placed?.doc} uses now${applyTo.length > 0 ? ', as do the others you checked' : ''}. Everything else keeps "${projectLabel(original)}".`
-        : picked.length > 0
-        ? `Saved as a new version, "${projectLabel(saved)}". The ones in progress you checked use it now; everything else keeps "${projectLabel(original)}".`
-        : `Saved as a new version, "${projectLabel(saved)}". Everything that used "${projectLabel(original)}" still does; pick the new version where you want it.`
-    }
+    const saved = await projectsApi.update(original.project_id, fields, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.project_id !== original.project_id,
+      before: projectLabel(original),
+      after: projectLabel(saved),
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
     await host.saved(message, { kind: 'project', id: saved.project_id })
   }
 

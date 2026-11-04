@@ -423,6 +423,7 @@ function SectionBody({
         moreChildren={
           library && (
             <AddContent
+              docKind={kind}
               section={section}
               library={library}
               onAdd={async (addKind, itemId) => {
