@@ -9,6 +9,7 @@ import { toApiError, type ApiError } from '../shared/api/client'
 import { docsApi, KINDS, type Doc, type DocKind } from '../shared/api/documents'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
+import { sortByName } from '../shared/sortByName'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
 
 const DESCRIPTIONS: Record<DocKind, string> = {
@@ -65,6 +66,7 @@ function NewBaseForm({
   const invalid = error?.field === 'name'
   const bases = docs.filter((doc) => !doc.job_posting)
   const tailored = docs.filter((doc) => doc.job_posting)
+  const nameOf = (doc: Doc) => (doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : doc.name)
 
   return (
     <form className="card stacked-form" onSubmit={submit} aria-label={`New base ${singular}`}>
@@ -83,8 +85,8 @@ function NewBaseForm({
         Start from
         <select value={from} onChange={(event) => setFrom(event.target.value)}>
           <option value="">Fresh, with the usual defaults</option>
-          {/* Base versions first, then the ones for postings, named with their organization. */}
-          {[...bases, ...tailored].map((doc) => (
+          {/* Base versions first, then the ones for postings, named with their organization, each A to Z. */}
+          {[...sortByName(bases, nameOf), ...sortByName(tailored, nameOf)].map((doc) => (
             <option key={doc.id} value={doc.id}>
               {doc.name}
               {doc.job_posting && ` (for ${doc.job_posting.organization})`}

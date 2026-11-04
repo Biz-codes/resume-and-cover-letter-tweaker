@@ -24,6 +24,10 @@ export type VersionValues = Record<string, string | null>
 export interface Placement {
   // "resume" or "cover letter".
   doc: string
+  // The resume or cover letter itself. Saving a role's or project's edit there changes it for this
+  // one, with the others in progress it's checked for (docs/FRONTEND_CHECKS.md, "Changing a role or
+  // project").
+  where: { kind: 'resume' | 'cover_letter'; id: number }
   // The row's View and Edit button, where focus goes when the dialog closes after a change.
   returnTo: string
   // Saves the new version in the item's place, and gives the notice for the page.
@@ -53,7 +57,7 @@ export interface ItemHost {
   // Set only for the item opened from a tree row, not one shown from a name inside the dialog:
   // what it's placed in, and New version, which saves the version in its place there and closes
   // the dialog with a notice on the page.
-  placed?: { doc: string; version: (values: VersionValues) => Promise<void> }
+  placed?: { doc: string; where: Placement['where']; version: (values: VersionValues) => Promise<void> }
 }
 
 // The note on a placed item's New version form.

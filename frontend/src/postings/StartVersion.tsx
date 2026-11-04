@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { KINDS, type Doc, type DocKind } from '../shared/api/documents'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
+import { sortByName } from '../shared/sortByName'
 
 export default function StartVersion({
   kind,
@@ -64,6 +65,7 @@ export default function StartVersion({
 
   const bases = docs.filter((doc) => !doc.job_posting)
   const tailored = docs.filter((doc) => doc.job_posting)
+  const nameOf = (doc: Doc) => (doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : doc.name)
 
   return (
     <form className="card stacked-form" onSubmit={submit} aria-label={`Start a ${singular} for this posting`}>
@@ -71,8 +73,8 @@ export default function StartVersion({
         Start from
         <select ref={fromRef} value={from} onChange={(event) => setFrom(event.target.value)}>
           <option value="">Fresh, with the usual defaults</option>
-          {/* Base versions first, then the ones for postings, named with their organization. */}
-          {[...bases, ...tailored].map((doc) => (
+          {/* Base versions first, then the ones for postings, named with their organization, each A to Z. */}
+          {[...sortByName(bases, nameOf), ...sortByName(tailored, nameOf)].map((doc) => (
             <option key={doc.id} value={doc.id}>
               {doc.name}
               {doc.job_posting && ` (for ${doc.job_posting.organization})`}

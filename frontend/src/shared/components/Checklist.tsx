@@ -1,5 +1,7 @@
 // A named group of checkboxes for picking any number of items, such as the sections that list
-// a narrative content excerpt. Keeps the options' order; `selected` holds the checked ids.
+// a narrative content excerpt. Lists the options A to Z; `selected` holds the checked ids.
+import { sortByName } from '../sortByName'
+
 export default function Checklist({
   legend,
   options,
@@ -19,7 +21,7 @@ export default function Checklist({
     <fieldset className="choice">
       <legend>{legend}</legend>
       {options.length === 0 && <p className="muted">None yet.</p>}
-      {options.map((option) => (
+      {sortByName(options, (option) => option.name).map((option) => (
         <label key={option.id}>
           <input
             type="checkbox"

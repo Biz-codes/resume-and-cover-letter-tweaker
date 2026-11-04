@@ -4,9 +4,9 @@ import { expectNoA11yViolations } from '../../test/axe'
 import MoreOptions from './MoreOptions'
 
 const CHOICES = [
-  { id: 'experience:7', name: 'Engineer, Acme', group: 'Role' },
-  { id: 'narrative:5', name: 'Engineer with 4 years.', group: 'Narrative content' },
   { id: 'experience:8', name: 'Tutor, Lincoln High', group: 'Role' },
+  { id: 'narrative:5', name: 'Engineer with 4 years.', group: 'Narrative content' },
+  { id: 'experience:7', name: 'Engineer, Acme', group: 'Role' },
 ]
 
 function renderOptions(onAdd = vi.fn(() => Promise.resolve(true)), choices = CHOICES) {
@@ -53,12 +53,15 @@ describe('MoreOptions', () => {
     await expectNoA11yViolations()
   })
 
-  it('adds the checked ones together, in the order offered, under their headings', async () => {
+  it('adds the checked ones together, A to Z under their headings, in the order shown', async () => {
     const onAdd = renderOptions()
     open()
     const all = screen.getByRole('group', { name: 'Choose any to add to Items in Experience' })
     const roles = within(all).getByRole('group', { name: 'Role' })
-    expect(within(roles).getAllByRole('checkbox')).toHaveLength(2)
+    expect(within(roles).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual([
+      'Engineer, Acme',
+      'Tutor, Lincoln High',
+    ])
     const add = screen.getByRole('button', { name: 'Add checked to Items in Experience' })
     expect(add).toHaveTextContent(/^Add$/)
     expect(add).toHaveAttribute('aria-disabled', 'true')

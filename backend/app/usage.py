@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
+from app.errors import AppError, ErrorCode
 from app.models import (
     CoverLetter,
     CoverLetterBulletPoint,
@@ -46,6 +47,27 @@ class Use(BaseModel):
     name: str
     # A sent version (or a posting already applied to) keeps the item as it is.
     locked: bool
+
+
+class DocRef(BaseModel):
+    """A resume or cover letter, by kind and id."""
+
+    kind: Literal["resume", "cover_letter"]
+    id: int
+
+
+def chosen_in_progress(apply_to: list[DocRef], used_by: list[Use]) -> set[tuple[str, int]]:
+    """The resumes and cover letters in progress the user chose to apply a change to.
+
+    Each must be one in progress that uses the item; anything else returns VALIDATION_FAILED.
+    """
+    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
+    chosen = {(ref.kind, ref.id) for ref in apply_to}
+    if not chosen <= in_progress:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Only resumes and cover letters in progress that use it can get the change.",
+                       "apply_to")
+    return chosen
 
 
 @dataclass(frozen=True)
@@ -183,8 +205,10 @@ def used_by_sent_version(db: Session, links: list[Link], item_id: int) -> bool:
     return any(use.locked for use in uses(db, links, [item_id])[item_id])
 
 
-def switch_unsent(db: Session, links: list[Link], old_id: int, new_id: int) -> None:
-    """Point every unsent resume and cover letter that uses old_id at new_id instead."""
+def switch_unsent(db: Session, links: list[Link], old_id: int, new_id: int,
+                  only: set[tuple[str, int]] | None = None) -> None:
+    """Point every unsent resume and cover letter that uses old_id at new_id instead, or with
+    `only`, just those (by kind and id)."""
     for link in links:
         rows = link.rows.subquery()
         row_id, row_item, row_doc = rows.c[0], rows.c[1], rows.c[2]
@@ -192,6 +216,9 @@ def switch_unsent(db: Session, links: list[Link], old_id: int, new_id: int) -> N
         unsent = (select(row_id, row_doc).join(link.doc, doc_pk == row_doc)
                   .where(row_item == old_id, ~is_locked(link.doc)))
         moved = db.execute(unsent).all()
+        if only is not None:
+            kind = "resume" if link.doc is Resume else "cover_letter"
+            moved = [(row, doc) for row, doc in moved if (kind, doc) in only]
         if not moved:
             continue
         pk = link.model.__table__.primary_key.columns[0]

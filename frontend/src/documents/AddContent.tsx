@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import type { EntryKind, NewItem, TreeSection } from '../shared/api/documents'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
+import { sortByName } from '../shared/sortByName'
 import {
   defaultKind,
   KIND_NAMES,
@@ -92,8 +93,8 @@ export default function AddContent({
   const placed = new Set(section.entries.map((entry) => placedItem(entry).id))
   const available = kind ? savedItems(library, kind).filter((item) => !placed.has(`${kind}:${item.id}`)) : []
   const listed = kind ? listedIds(library, section.section_id, kind) : []
-  const first = listed.flatMap((id) => available.filter((item) => item.id === id))
-  const rest = available.filter((item) => !listed.includes(item.id))
+  const first = sortByName(listed.flatMap((id) => available.filter((item) => item.id === id)), (item) => item.name)
+  const rest = sortByName(available.filter((item) => !listed.includes(item.id)), (item) => item.name)
   const writing = choice === NEW && kind !== ''
 
   async function submit(event: FormEvent) {
@@ -124,6 +125,7 @@ export default function AddContent({
         Type of content
         <select ref={typeRef} value={kind} onChange={(event) => reset(event.target.value as EntryKind | '')}>
           <option value="">Choose a type…</option>
+          {/* The one dropdown not A to Z: the kinds follow a resume's usual order. */}
           {KINDS_IN_ORDER.map((option) => (
             <option key={option} value={option}>
               {KIND_NAMES[option].type}

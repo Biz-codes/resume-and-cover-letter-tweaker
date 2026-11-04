@@ -25,6 +25,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
 import MoreOptions from '../MoreOptions'
+import { sortByName } from '../../sortByName'
 import styles from './OrderedList.module.css'
 
 // Ids are numbers, or strings for a list that mixes kinds of item (a section's items in a
@@ -55,7 +56,7 @@ function grouped<K extends ListKey>(choices: ListItem<K>[]) {
     const group = choice.group ?? ''
     groups.set(group, [...(groups.get(group) ?? []), choice])
   }
-  return [...groups]
+  return [...groups].map(([group, options]) => [group, sortByName(options, (choice) => choice.name)] as const)
 }
 
 export default function OrderedList<K extends ListKey = number>({

@@ -37,10 +37,11 @@ export const experienceApi = {
     api.post<Experience>(`/experience/${id}/versions`, fields),
   setBullets: (id: number, bulletIds: number[]) =>
     api.put<Experience>(`/experience/${id}/bullets`, { bullet_ids: bulletIds }),
-  // A sent version never changes, and in-progress ones change only with applyToUnsent; otherwise
-  // the change is saved as a new version with a new id (FRONTEND_CHECKS.md, "Changing a role or project").
-  update: (id: number, fields: ExperienceFields, applyToUnsent: boolean) =>
-    api.put<Experience>(`/experience/${id}`, { ...fields, apply_to_unsent: applyToUnsent }),
+  // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
+  // every one in progress is picked and nothing sent uses it, the change is saved as a new version
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role or project").
+  update: (id: number, fields: ExperienceFields, applyTo: Use[]) =>
+    api.put<Experience>(`/experience/${id}`, { ...fields, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
   setHidden: (id: number, hidden: boolean) => api.put<Experience>(`/experience/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/experience/${id}`),
 }

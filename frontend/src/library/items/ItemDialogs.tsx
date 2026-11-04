@@ -63,6 +63,7 @@ export function useItemDialogs({
       placement && stack.length === 1
         ? {
             doc: placement.doc,
+            where: placement.where,
             version: async (values) => {
               const message = await placement.version(values)
               setStack([])

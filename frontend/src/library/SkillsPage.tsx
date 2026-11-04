@@ -128,7 +128,7 @@ export default function SkillsPage() {
           <label>
             List the new category under
             <select value={newCategorySection} onChange={(event) => setNewCategorySection(event.target.value)}>
-              {offered(sections).map((section) => (
+              {sortByName(offered(sections), (section) => section.title).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>

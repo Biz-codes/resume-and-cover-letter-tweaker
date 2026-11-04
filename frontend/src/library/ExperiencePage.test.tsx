@@ -158,7 +158,7 @@ describe('ExperiencePage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({
       role_title: 'Lead Engineer',
-      apply_to_unsent: false,
+      apply_to: [],
     })
   })
 
@@ -180,21 +180,30 @@ describe('ExperiencePage', () => {
     await expectNotice('Saved.')
   })
 
-  it('asks whether to apply a change to resumes in progress', async () => {
+  it('asks which resumes and cover letters in progress get a change, none to start', async () => {
     const draft = { kind: 'resume' as const, id: 3, name: 'Draft resume', locked: false }
-    const inUse = { ...ENGINEER, used_by: [SENT, draft] }
+    const letter = { kind: 'cover_letter' as const, id: 5, name: 'Draft letter', locked: false }
+    const inUse = { ...ENGINEER, used_by: [SENT, draft, letter] }
     const saved = { ...inUse, experience_id: 7, dates: '2020 – 2023', used_by: [draft] }
     const fetchMock = stub({ 'PUT /api/experience/4': [{ status: 200, body: saved }] }, [inUse])
     render(<ExperiencePage />)
     await openItem('Engineer, Acme')
-    const choice = screen.getByRole('group', { name: /Used by: Draft resume\.$/ })
-    expect(within(choice).getByRole('radio', { name: /No, save it as a new version/ })).toBeChecked()
+    const choice = screen.getByRole('group', { name: 'Apply this change to which resumes and cover letters in progress?' })
+    // Sent versions never change, so only the ones in progress are offered.
+    expect(within(choice).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual([
+      'Cover letter: Draft letter',
+      'Resume: Draft resume',
+    ])
+    expect(within(choice).getByRole('checkbox', { name: 'Resume: Draft resume' })).not.toBeChecked()
     await expectNoA11yViolations()
-    fireEvent.click(within(choice).getByRole('radio', { name: 'Yes, change it for them too.' }))
+    fireEvent.click(within(choice).getByRole('checkbox', { name: 'Resume: Draft resume' }))
     fireEvent.change(screen.getByLabelText(/Dates/), { target: { value: '2020 – 2023' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Resumes and cover letters in progress use it now')
-    expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({ dates: '2020 – 2023', apply_to_unsent: true })
+    await expectNotice('The ones in progress you checked use it now; everything else keeps "Engineer, Acme (2020 – 2022)".')
+    expect(sentBody(fetchMock, 'PUT /api/experience/4')).toMatchObject({
+      dates: '2020 – 2023',
+      apply_to: [{ kind: 'resume', id: 3 }],
+    })
   })
 
   it("doesn't ask when nothing in progress uses the role", async () => {

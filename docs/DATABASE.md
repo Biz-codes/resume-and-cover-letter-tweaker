@@ -267,7 +267,7 @@ Note: "New version" on a resume or cover letter saves a new skill with a new nam
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db                  |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated                 |
 
-Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user picks them, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the bullets shown under it. It must change something (`VALIDATION_FAILED`).
 
@@ -288,7 +288,7 @@ Note: a project lists its skills in `project_skill` and its bullets in `project_
 
 Note: `done_for` is optional free text naming who or what the project is affiliated with, printed as written (e.g. "McGraw Hill", "Freelance", "Independent project"). Empty means the project line shows nothing there.
 
-Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user says so, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user picks them, and sent ones never do (see "Changing a role or project" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the skills and bullets shown under it. It must change something (`VALIDATION_FAILED`).
 

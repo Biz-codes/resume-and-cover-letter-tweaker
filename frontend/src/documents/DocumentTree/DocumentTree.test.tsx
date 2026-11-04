@@ -496,6 +496,35 @@ describe('DocumentTree', () => {
     await vi.waitFor(() => expect(button).toHaveFocus())
   })
 
+  it('applies a role’s edit to this resume, and asks only about the others in progress', async () => {
+    const here = { kind: 'resume' as const, id: 1, name: 'Tech base', locked: false }
+    const other = { kind: 'resume' as const, id: 4, name: 'Teaching base', locked: false }
+    const role = { ...(LIBRARY.experience[0] as object), used_by: [here, other] }
+    const fetchMock = stub(
+      {
+        'GET /api/experience': [1, 2, 3].map(() => ({ status: 200, body: [role] })),
+        'PUT /api/experience/7': [{ status: 200, body: { ...role, experience_id: 9, dates: '2021', used_by: [here] } }],
+        'GET /api/resumes/1': [{ status: 200, body: saved }],
+      },
+      2,
+    )
+    const { onNotice } = renderTree()
+    await expand('Experience')
+    fireEvent.click(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
+    const choice = within(dialog).getByRole('group', { name: 'Apply this change to which other resumes and cover letters in progress?' })
+    expect(within(choice).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual(['Resume: Teaching base'])
+    await expectNoA11yViolations()
+    fireEvent.change(within(dialog).getByLabelText(/Dates/), { target: { value: '2021' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() =>
+      expect(onNotice).toHaveBeenLastCalledWith(
+        'Saved as a new version, "Engineer, Acme (2021)", which this resume uses now. Everything else keeps "Engineer, Acme".',
+      ),
+    )
+    expect(sentBody(fetchMock, 'PUT /api/experience/7')).toMatchObject({ dates: '2021', apply_to: [{ kind: 'resume', id: 1 }] })
+  })
+
   it("keeps a new version of an item shown from a name inside the dialog in the library only", async () => {
     const fetchMock = stub(
       {

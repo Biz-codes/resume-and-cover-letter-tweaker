@@ -130,7 +130,7 @@ export default function ProjectsPage() {
           <label>
             List it under
             <select value={newSection} onChange={(event) => setNewSection(event.target.value)}>
-              {offered(sections).map((section) => (
+              {sortByName(offered(sections), (section) => section.title).map((section) => (
                 <option key={section.id} value={section.id}>
                   {section.title}
                 </option>

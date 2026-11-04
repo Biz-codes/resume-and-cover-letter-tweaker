@@ -122,7 +122,7 @@ describe('ProjectsPage', () => {
     await expectNotice(`Everything that used "${LABEL}" still does`)
   })
 
-  it('asks whether to apply a change to resumes in progress, as roles do', async () => {
+  it('asks which resumes in progress get a change, as roles do', async () => {
     const draft = { kind: 'resume' as const, id: 3, name: 'Draft resume', locked: false }
     const inUse = { ...TWEAKER, used_by: [draft] }
     const fetchMock = stub({ 'PUT /api/projects/4': [{ status: 200, body: { ...inUse, dates: '2024' } }] }, [inUse])
@@ -130,14 +130,18 @@ describe('ProjectsPage', () => {
     await openItem('Tweaker')
     // Nothing sent uses it, so there's no note on the first field.
     expect(screen.getByLabelText('Project title (required)')).not.toHaveAccessibleDescription()
-    const choice = screen.getByRole('group', { name: /Used by: Draft resume\.$/ })
-    expect(within(choice).getByRole('radio', { name: /No, save it as a new version/ })).toBeChecked()
+    const choice = screen.getByRole('group', { name: 'Apply this change to which resumes and cover letters in progress?' })
+    const box = within(choice).getByRole('checkbox', { name: 'Resume: Draft resume' })
+    expect(box).not.toBeChecked()
     await expectNoA11yViolations()
-    fireEvent.click(within(choice).getByRole('radio', { name: 'Yes, change it for them too.' }))
+    fireEvent.click(box)
     fireEvent.change(screen.getByLabelText(/Dates/), { target: { value: '2024' } })
     fireEvent.click(screen.getByText('Save'))
     await expectNotice('Saved.')
-    expect(sentBody(fetchMock, 'PUT /api/projects/4')).toMatchObject({ dates: '2024', apply_to_unsent: true })
+    expect(sentBody(fetchMock, 'PUT /api/projects/4')).toMatchObject({
+      dates: '2024',
+      apply_to: [{ kind: 'resume', id: 3 }],
+    })
   })
 
   it('adds a new version of a project', async () => {

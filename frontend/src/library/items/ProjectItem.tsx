@@ -6,7 +6,7 @@ import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { projectLabel, projectsApi, type Project, type ProjectFields } from '../../shared/api/projects'
 import { skillsApi } from '../../shared/api/skills'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
@@ -36,7 +36,7 @@ const fieldsOf = (project: Project): ProjectFields => ({
 export default function ProjectItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => Promise.all([projectsApi.list(), skillsApi.list(), bulletsApi.list()]))
-  const [applyToUnsent, setApplyToUnsent] = useState(false)
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
 
   const project = data?.[0].find((item) => item.project_id === id)
@@ -44,18 +44,24 @@ export default function ProjectItem({ id }: { id: number }) {
   const [projects, skills, bullets] = data
   const label = projectLabels(projects)(project)
   const inProgress = project.used_by.filter((use) => !use.locked)
+  // Opened from a resume's or cover letter's tree, that one gets the change; the choice is for the others.
+  const where = host.placed?.where
+  const here = inProgress.find((use) => use.kind === where?.kind && use.id === where?.id)
+  const others = inProgress.filter((use) => use !== here)
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
   }
 
   async function update(original: Project, fields: ProjectFields) {
-    const saved = await projectsApi.update(original.project_id, fields, applyToUnsent)
-    const changedThem = inProgress.length > 0 && applyToUnsent
+    const picked = here ? [here, ...applyTo] : applyTo
+    const saved = await projectsApi.update(original.project_id, fields, picked)
     let message = 'Saved.'
     if (saved.project_id !== original.project_id) {
-      message = changedThem
-        ? `Saved as a new version, "${projectLabel(saved)}". Resumes and cover letters in progress use it now; sent ones keep "${projectLabel(original)}".`
+      message = here
+        ? `Saved as a new version, "${projectLabel(saved)}", which this ${host.placed?.doc} uses now${applyTo.length > 0 ? ', as do the others you checked' : ''}. Everything else keeps "${projectLabel(original)}".`
+        : picked.length > 0
+        ? `Saved as a new version, "${projectLabel(saved)}". The ones in progress you checked use it now; everything else keeps "${projectLabel(original)}".`
         : `Saved as a new version, "${projectLabel(saved)}". Everything that used "${projectLabel(original)}" still does; pick the new version where you want it.`
     }
     await host.saved(message, { kind: 'project', id: saved.project_id })
@@ -102,7 +108,7 @@ export default function ProjectItem({ id }: { id: number }) {
           focusOnOpen={false}
           onCancel={host.close}
         >
-          {inProgress.length > 0 && <ApplyChoice uses={inProgress} apply={applyToUnsent} onChange={setApplyToUnsent} />}
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
       }
       newVersion={(back) => (

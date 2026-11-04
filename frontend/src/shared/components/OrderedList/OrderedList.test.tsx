@@ -187,7 +187,7 @@ describe('OrderedList', () => {
     await expectNoA11yViolations()
   })
 
-  it('takes string ids and shows choices under their groups', async () => {
+  it('takes string ids and shows choices under their groups, A to Z in each', async () => {
     const onChange = vi.fn(() => Promise.resolve())
     render(
       <OrderedList<string>
@@ -206,6 +206,10 @@ describe('OrderedList', () => {
     expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
       'Listed under Experience',
       'Education',
+    ])
+    expect([...select.querySelectorAll('optgroup')[0].querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'Bullet: Cut load time.',
+      'Bullet: Led the redesign.',
     ])
     await expectNoA11yViolations()
     fireEvent.change(select, { target: { value: 'bullet:2' } })

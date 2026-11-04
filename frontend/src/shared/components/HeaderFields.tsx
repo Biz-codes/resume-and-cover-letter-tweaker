@@ -8,6 +8,7 @@
 import { Fragment, useId, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import type { Header, HeaderFields as Fields } from '../api/headers'
+import { sortByName } from '../sortByName'
 
 type Field = keyof Fields
 
@@ -92,7 +93,7 @@ export default function HeaderFields({
   const saved = (name: Field) => {
     const values = headers.map((item) => item[name]).filter((value): value is string => Boolean(value))
     if (choices[name] !== NONE && choices[name] !== NEW) values.push(choices[name])
-    return [...new Set(values)]
+    return sortByName([...new Set(values)], (value) => value)
   }
 
   // Every value as chosen or typed (a new value not typed yet is empty).

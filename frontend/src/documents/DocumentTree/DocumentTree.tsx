@@ -553,6 +553,7 @@ export default function DocumentTree({
         onClick={() =>
           open(ref, {
             doc: KINDS[kind].singular,
+            where: { kind, id: doc.id },
             returnTo: id,
             version: async (values) => {
               if (same(values, current)) return 'Nothing changed, so nothing was saved.'

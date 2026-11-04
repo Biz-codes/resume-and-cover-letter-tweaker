@@ -1,12 +1,13 @@
 // "More options" under a list in a resume's or cover letter's tree: the items that could go in
 // it besides the ones it shows (its defaults), behind a level that opens and closes. The user
-// checks any number and adds them together; they go last, in the order offered. Choices with a
-// `group` are shown under that heading, in the order each group first appears. Other ways to add
+// checks any number and adds them together; they go last, in the order shown. Choices with a
+// `group` are shown under that heading, in the order each group first appears, and A to Z within it. Other ways to add
 // (`children`, such as a section's Add content) go inside it too, after the checkboxes. With
 // nothing more to offer, and nothing else inside, it says so.
 import { Fragment, useState, type ReactNode } from 'react'
 import Disclosure from './Disclosure/Disclosure'
 import type { ListItem, ListKey } from './OrderedList/OrderedList'
+import { sortByName } from '../sortByName'
 
 export default function MoreOptions<K extends ListKey>({
   label,
@@ -37,8 +38,9 @@ export default function MoreOptions<K extends ListKey>({
 
   const groups = new Map<string, ListItem<K>[]>()
   for (const choice of choices) groups.set(choice.group ?? '', [...(groups.get(choice.group ?? '') ?? []), choice])
-  // Checked ones that are still offered, in the order offered.
-  const chosen = choices.map((choice) => choice.id).filter((id) => checked.includes(id))
+  const shown = [...groups].map(([group, options]) => [group, sortByName(options, (option) => option.name)] as const)
+  // Checked ones that are still offered, in the order shown.
+  const chosen = shown.flatMap(([, options]) => options.map((option) => option.id)).filter((id) => checked.includes(id))
 
   function toggle(id: K, on: boolean) {
     setChecked(on ? [...checked, id] : checked.filter((other) => other !== id))
@@ -73,7 +75,7 @@ export default function MoreOptions<K extends ListKey>({
         <>
           <fieldset className="choice more-options">
             <legend>Choose any to add to {label}</legend>
-            {[...groups].map(([group, options]) =>
+            {shown.map(([group, options]) =>
               group ? (
                 <fieldset key={group} className="choice">
                   <legend>{group}</legend>

@@ -7,8 +7,9 @@ from this row. So changing a role's fields follows "Changing a role or project" 
 docs/FRONTEND_CHECKS.md:
 
 - A sent version never changes: if one uses the role, the change is saved as a new row.
-- Resumes and cover letters in progress change only if the user says to apply it to them
-  (apply_to_unsent); otherwise the change is saved as a new row and they keep the original.
+- Resumes and cover letters in progress change only if the user picks them (apply_to). If
+  every one is picked and nothing sent uses it, the row is edited in place; otherwise the change
+  is saved as a new row, the picked ones switch to it, and the rest keep the original.
 - A new row is listed right after the original in its sections and lists the same bullets,
   so they're stored once. Otherwise the row is edited in place.
 """
@@ -34,7 +35,7 @@ from app.models import (
 from app.refs import BulletRef, SectionRef, bullet_refs, section_refs
 from app.routers.sections import get_section
 from app.schemas import OptionalText, RequiredText
-from app.usage import EXPERIENCE_LINKS, Use, switch_unsent, uses
+from app.usage import EXPERIENCE_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
 
 router = APIRouter(prefix="/api/experience", tags=["experience"])
 
@@ -53,8 +54,8 @@ class NewExperience(ExperienceIn):
 
 
 class ExperienceChange(ExperienceIn):
-    # Whether resumes and cover letters in progress that use the role get the change.
-    apply_to_unsent: bool = False
+    # The resumes and cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 class ExperienceOut(ExperienceIn):
@@ -165,8 +166,9 @@ def update_experience(experience_id: int, body: ExperienceChange, db: DbSession,
         return one_out(db, role, account_id)
     used_by = uses(db, EXPERIENCE_LINKS, [experience_id])[experience_id]
     sent = any(use.locked for use in used_by)
-    in_progress = any(not use.locked for use in used_by)
-    if not sent and (body.apply_to_unsent or not in_progress):
+    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
+    chosen = chosen_in_progress(body.apply_to, used_by)
+    if not sent and chosen == in_progress:
         for field in FIELDS:
             setattr(role, field, getattr(values, field))
         db.flush()
@@ -174,8 +176,8 @@ def update_experience(experience_id: int, body: ExperienceChange, db: DbSession,
         return one_out(db, role, account_id)
 
     replacement = new_version(db, role, values, account_id)
-    if body.apply_to_unsent:
-        switch_unsent(db, EXPERIENCE_LINKS, experience_id, replacement.experience_id)
+    if chosen:
+        switch_unsent(db, EXPERIENCE_LINKS, experience_id, replacement.experience_id, only=chosen)
     return one_out(db, replacement, account_id)
 
 

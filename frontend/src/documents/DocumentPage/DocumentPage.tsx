@@ -35,6 +35,7 @@ import { usePageTitle } from '../../shared/hooks/usePageTitle'
 import type { ListState } from '../DocumentsPage'
 import styles from './DocumentPage.module.css'
 import { offered } from '../../shared/offered'
+import { sortByName } from '../../shared/sortByName'
 import AlertDialog from '../../shared/components/Dialog/AlertDialog'
 
 // Base versions the user chose to edit in place since the app was opened, so the warning
@@ -416,7 +417,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
               >
                 <option value="">None</option>
-                {offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id).map((item) => (
+                {sortByName(offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id), (item) => item.name).map((item) => (
                   <option key={item.tone_set_id} value={item.tone_set_id}>
                     {item.name}
                   </option>

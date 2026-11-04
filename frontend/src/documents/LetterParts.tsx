@@ -11,6 +11,7 @@ import type { SignOff } from '../shared/api/signOffs'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
 import NameForm from '../shared/components/NameForm/NameForm'
 import { offered } from '../shared/offered'
+import { sortByName } from '../shared/sortByName'
 
 type LetterFields = Partial<Pick<DocFields, 'addressee' | 'sign_off_id' | 'signature_name'>>
 
@@ -140,7 +141,7 @@ export function SignOffPart({
           }}
         >
           <option value="">No sign-off</option>
-          {offered(signOffs, (signOff) => signOff.sign_off_id === signOffId).map((signOff) => (
+          {sortByName(offered(signOffs, (signOff) => signOff.sign_off_id === signOffId), (signOff) => signOff.text).map((signOff) => (
             <option key={signOff.sign_off_id} value={signOff.sign_off_id}>
               {signOff.text}
             </option>

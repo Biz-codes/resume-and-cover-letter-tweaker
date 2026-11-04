@@ -154,14 +154,19 @@ def test_new_version_of_a_job_shares_its_bullets(client: TestClient, db: Session
     assert names == [("Engineer", "Acme"), ("Senior Engineer", "Acme"), ("Engineer", "Later Co")]
 
 
-def change_job(client: TestClient, row: Experience, apply: bool, **values) -> dict:
+def picked(*docs: Resume) -> list[dict]:
+    """The apply_to list for these resumes in progress."""
+    return [{"kind": "resume", "id": doc.resume_id} for doc in docs]
+
+
+def change_job(client: TestClient, row: Experience, apply: list[Resume], **values) -> dict:
     return client.put(f"/api/experience/{row.experience_id}",
-                      json={**ROLE, **values, "apply_to_unsent": apply}).json()
+                      json={**ROLE, **values, "apply_to": picked(*apply)}).json()
 
 
 def test_change_a_job_nothing_uses_in_place(client: TestClient, db: Session, account_id: int):
     row = role(db, account_id)
-    saved = change_job(client, row, apply=False, dates="2020")
+    saved = change_job(client, row, apply=[], dates="2020")
     assert (saved["experience_id"], saved["dates"]) == (row.experience_id, "2020")
 
 
@@ -169,8 +174,9 @@ def test_change_a_job_nothing_uses_in_place(client: TestClient, db: Session, acc
 def test_change_a_job_in_progress_resumes_use_only_if_told(client: TestClient, db: Session,
                                                            account_id: int, apply, in_place):
     row = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
-    draft_job = show_job(db, resume(db, account_id, "Draft", sent=False), row, ["Shipped it"])
-    saved = change_job(client, row, apply=apply, dates=None)
+    draft = resume(db, account_id, "Draft", sent=False)
+    draft_job = show_job(db, draft, row, ["Shipped it"])
+    saved = change_job(client, row, apply=[draft] if apply else [], dates=None)
     assert (saved["experience_id"] == row.experience_id) is in_place
     assert saved["dates"] is None
     db.expire_all()
@@ -187,8 +193,9 @@ def test_change_a_job_a_sent_version_uses_always_saves_a_new_one(client: TestCli
                                                                  account_id: int, apply):
     row = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
     show_job(db, resume(db, account_id, "Sent", sent=True), row, ["Shipped it"])
-    draft_job = show_job(db, resume(db, account_id, "Draft", sent=False), row, ["Shipped it"])
-    saved = change_job(client, row, apply=apply, role_title="Lead Engineer")
+    draft = resume(db, account_id, "Draft", sent=False)
+    draft_job = show_job(db, draft, row, ["Shipped it"])
+    saved = change_job(client, row, apply=[draft] if apply else [], role_title="Lead Engineer")
     assert saved["experience_id"] != row.experience_id
     assert saved["sections"] == [{"id": EXPERIENCE_SECTION_ID, "title": "Experience"}]
     db.expire_all()
@@ -198,6 +205,44 @@ def test_change_a_job_a_sent_version_uses_always_saves_a_new_one(client: TestCli
     # The draft's bullets stay under its role either way.
     assert db.scalar(select(ResumeBulletPoint.resume_experience_id)
                      .where(ResumeBulletPoint.resume_experience_id == draft_job)) == draft_job
+
+
+def test_change_a_job_switches_only_the_picked_resumes(client: TestClient, db: Session,
+                                                       account_id: int):
+    row = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
+    first, second = (resume(db, account_id, name, sent=False) for name in ("First", "Second"))
+    first_job, second_job = (show_job(db, doc, row, ["Shipped it"]) for doc in (first, second))
+    saved = change_job(client, row, apply=[first], dates="2021")
+    # Not every one was picked, so it's a new row, and only the picked one switches to it.
+    assert saved["experience_id"] != row.experience_id
+    db.expire_all()
+    assert db.get(ResumeExperience, first_job).experience_id == saved["experience_id"]
+    assert db.get(ResumeExperience, second_job).experience_id == row.experience_id
+    assert db.get(Experience, row.experience_id).dates == ROLE["dates"]
+
+
+def test_change_a_job_picking_every_one_in_progress_edits_in_place(client: TestClient,
+                                                                   db: Session, account_id: int):
+    row = role(db, account_id, section_id=EXPERIENCE_SECTION_ID)
+    docs = [resume(db, account_id, name, sent=False) for name in ("First", "Second")]
+    for doc in docs:
+        show_job(db, doc, row, [])
+    saved = change_job(client, row, apply=docs, dates="2021")
+    assert (saved["experience_id"], saved["dates"]) == (row.experience_id, "2021")
+
+
+def test_change_a_job_refuses_picking_what_isnt_in_progress(client: TestClient, db: Session,
+                                                            account_id: int):
+    row = role(db, account_id, section_id=EXPERIENCE_SECTION_ID)
+    sent = resume(db, account_id, "Sent", sent=True)
+    show_job(db, sent, row, [])
+    unrelated = resume(db, account_id, "Unrelated", sent=False)
+    for doc in (sent, unrelated):
+        response = client.put(f"/api/experience/{row.experience_id}",
+                              json={**ROLE, "dates": "2021", "apply_to": picked(doc)})
+        assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
+    db.expire_all()
+    assert db.get(Experience, row.experience_id).dates == ROLE["dates"]
 
 
 def test_a_version_with_nothing_changed_returns_the_original(client: TestClient, db: Session,
@@ -269,7 +314,7 @@ def test_change_a_project_a_sent_version_uses_saves_a_new_one(client: TestClient
                                    project_id=project.project_id, position=1))
     saved = client.put(f"/api/projects/{project.project_id}",
                        json={"project_title": "Resume Tweaker", "dates": "2024",
-                             "apply_to_unsent": True}).json()
+                             "apply_to": []}).json()
     assert saved["project_id"] != project.project_id
     db.expire_all()
     assert db.get(Project, project.project_id).project_title == "Tweaker"
@@ -286,7 +331,8 @@ def test_change_a_project_in_progress_resumes_use_only_if_told(client: TestClien
     chosen = add(db, ResumeProject(resume_section_id=section.resume_section_id,
                                    project_id=project.project_id, position=1))
     saved = client.put(f"/api/projects/{project.project_id}",
-                       json={"project_title": "Tweaker", "apply_to_unsent": apply}).json()
+                       json={"project_title": "Tweaker",
+                             "apply_to": picked(draft) if apply else []}).json()
     assert (saved["project_id"] == project.project_id) is in_place
     assert saved["dates"] is None
     db.expire_all()
