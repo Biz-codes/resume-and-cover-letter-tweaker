@@ -24,9 +24,9 @@ export type VersionValues = Record<string, string | null>
 export interface Placement {
   // "resume" or "cover letter".
   doc: string
-  // The resume or cover letter itself. Saving a role's, project's, or bullet's edit there changes it for this
-  // one, with the others in progress it's checked for (docs/FRONTEND_CHECKS.md, "Changing a role or
-  // project").
+  // The resume or cover letter itself. Saving a role's, project's, bullet's, or excerpt's edit there
+  // changes it for this one, with the others in progress it's checked for (docs/FRONTEND_CHECKS.md,
+  // "Changing a role, project, bullet, or narrative content").
   where: { kind: 'resume' | 'cover_letter'; id: number }
   // The row's View and Edit button, where focus goes when the dialog closes after a change.
   returnTo: string

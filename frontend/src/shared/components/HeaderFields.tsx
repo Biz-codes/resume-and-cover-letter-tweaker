@@ -14,7 +14,7 @@ type Field = keyof Fields
 
 const FIELDS: { name: Field; label: string; autoComplete: string }[] = [
   { name: 'full_name', label: 'Name', autoComplete: 'name' },
-  { name: 'headline', label: 'Headline', autoComplete: 'off' },
+  { name: 'headline', label: 'Headline', autoComplete: 'organization-title' },
   { name: 'email', label: 'Email', autoComplete: 'email' },
   { name: 'phone', label: 'Phone', autoComplete: 'tel' },
   { name: 'location', label: 'Location', autoComplete: 'address-level2' },

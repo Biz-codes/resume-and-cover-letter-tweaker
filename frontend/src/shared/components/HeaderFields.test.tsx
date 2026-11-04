@@ -76,6 +76,8 @@ describe('HeaderFields', () => {
     expect(onSave).not.toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: '\u0000new' } })
     const typed = screen.getByLabelText('New headline')
+    // A typed value says what it holds, as the library's header form does (WCAG 1.3.5).
+    expect(typed).toHaveAttribute('autocomplete', 'organization-title')
     fireEvent.change(typed, { target: { value: 'Tutor' } })
     fireEvent.submit(typed)
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ headline: 'Tutor' })))

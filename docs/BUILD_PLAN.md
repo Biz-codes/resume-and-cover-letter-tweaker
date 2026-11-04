@@ -55,7 +55,7 @@ What the pages cover:
 - Edit each parent's list of children (a section's items, a category's skills, a role's or project's bullets), show items no parent lists, and handle header and role versions, per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 - Delete warnings, built-in protections, and the skill category move to "Other", per [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
-## Phase 4: Building resumes and cover letters by hand
+## Phase 4: Building resumes and cover letters by hand (done)
 Goal: the full resume and cover letter tree works without AI.
 
 Build it in steps, each with its API endpoints, pages, and tests together:

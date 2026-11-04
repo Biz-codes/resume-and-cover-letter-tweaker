@@ -13,6 +13,12 @@ describe('HeaderForm', () => {
     expect(name).toHaveAccessibleDescription(/so saving adds a new header/)
     expect(name).toHaveAttribute('autocomplete', 'name')
     expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email')
+    // Every field for the user's own details says what it holds (WCAG 1.3.5).
+    expect(
+      ['Headline', 'Email', 'Phone', 'Location', 'LinkedIn URL', 'GitHub URL', 'Portfolio URL'].map((label) =>
+        screen.getByLabelText(label).getAttribute('autocomplete'),
+      ),
+    ).toEqual(['organization-title', 'email', 'tel', 'address-level2', 'url', 'url', 'url'])
     await expectNoA11yViolations()
   })
 

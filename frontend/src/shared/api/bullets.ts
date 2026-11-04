@@ -28,7 +28,7 @@ export const bulletsApi = {
   // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
   // every one in progress is picked and nothing sent uses it, the new text is saved as a new bullet
   // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
-  // or bullet").
+  // bullet, or narrative content").
   update: (id: number, content: string, applyTo: Use[]) =>
     api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
   addVersion: (id: number, content: string) => api.post<Bullet>(`/bullet-points/${id}/versions`, { content }),

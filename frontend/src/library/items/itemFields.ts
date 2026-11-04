@@ -60,7 +60,7 @@ export const HEADER_FIELDS: { name: keyof HeaderFields; label: string; type?: st
   { name: 'headline', label: 'Headline', autoComplete: 'organization-title' },
   { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' },
   { name: 'phone', label: 'Phone', type: 'tel', autoComplete: 'tel' },
-  { name: 'location', label: 'Location' },
+  { name: 'location', label: 'Location', autoComplete: 'address-level2' },
   { name: 'linkedin_url', label: 'LinkedIn URL', autoComplete: 'url' },
   { name: 'github_url', label: 'GitHub URL', autoComplete: 'url' },
   { name: 'portfolio_url', label: 'Portfolio URL', autoComplete: 'url' },
