@@ -28,3 +28,11 @@ Small front end choices left as they are for now. None blocks the build plan.
 12. **Skip link**: add a "Skip to content" link that appears only when it has focus? Not required, since the landmarks and the focused page heading already let keyboard and screen reader users get past the nav (see "Focus" in [TECH_STACK.md](TECH_STACK.md)), but it's a common extra.
 13. **Tabbing out mid-move**: when a keyboard user picks up an item in a reorderable list (`OrderedList`) and tabs out of the list, it stays picked up, with "Move here" buttons still showing. Should leaving the list cancel the move?
 14. ~~**`LIBRARY_PAGES` in its own file**~~: decided. Moved to `frontend/src/library/libraryPages.ts` in the front end reorganize (see [BUILD_PLAN.md](BUILD_PLAN.md)). oxlint warned that `LibraryPage.tsx` exported a list alongside its components, which only affects hot reload during development. Moving the list to its own file, as `modes.ts` is, would quiet it.
+
+## Release (phase 6)
+Recommendations are in phase 6 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these when the phase starts.
+
+15. **The user's own data online?** Recommended: no. The hosted site holds only demo data, and the user's real applications stay local.
+16. **Demo visitors:** a fresh copy of the demo for each visitor, deleted after a set time (recommended), or one shared demo account reset on a schedule?
+17. **Host:** which one (Render, Railway, Fly.io, or another), judged by price, Postgres 18 support, and deploying from GitHub. A custom domain or the host's address?
+18. **Claude in the demo:** how many Claude requests each demo account and the whole demo get per day, and the monthly spend limit in the Anthropic Console.

@@ -142,6 +142,31 @@ Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 4. **Final review** of the resume and cover letter together.
 5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.
 
-## Phase 6: Polish
+## Phase 6: Release
+Goal: a public demo that potential employers can try online: a real login, plus a "Try the demo" button that opens a demo account full of made-up data. Styling doesn't need to be finished.
+
+- [ ] **Start once the user says the MVP is ready** (phase 5's flow working end to end). Confirm the choices below with the user first, and record them in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (questions 15 to 18) and the docs they affect.
+
+Recommended (to confirm):
+- **The user's own data stays local.** The hosted site holds only demo data. The user keeps running the app on their machine for real applications, so no personal data, `db/seed_personal/`, or sent resumes go online. Moving the user's own account online can come later, since logins will already exist.
+- **Each visitor gets their own copy of the demo.** "Try the demo" creates a new account and copies the demo data into it, so visitors can add, edit, and delete freely without changing what the next visitor sees. Demo accounts are deleted after a set time (e.g. 24 hours). Every query is already scoped to the current account, so this mostly reuses what's built.
+- **Logins with server-side sessions.** An email and password for the owner (no public sign-up), with passwords hashed with Argon2 (`pwdlib` or `argon2-cffi`), and a session id in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie, checked against a `session` table. No tokens kept in the browser. `current_account_id` in `backend/app/account.py` reads the session instead of taking the first account, so no endpoint changes.
+- **One web service and one database.** FastAPI serves the built React files as well as the API, from the same address, so the cookie works without CORS. The database is a managed Postgres (matching version 18, if the host offers it). A host that deploys from GitHub and gives HTTPS by default, such as Render, Railway, or Fly.io; pick one when the phase starts, by price and Postgres version.
+- **Limits on what the demo can cost.** Demo visitors' Claude requests use the user's API key, so: a cap on Claude requests per demo account and per day across all of them (a new error code, such as `LIMIT_REACHED`, through `ask` in `backend/app/claude.py`), and a monthly spend limit set in the Anthropic Console as a backstop.
+
+Steps:
+1. [ ] **Accounts and logins** (backend): add login columns to `account` and a `session` table through `/db-table` (with a `demo` flag and an expiry for demo accounts), endpoints to log in, log out, and get the current user, `current_account_id` reading the session, a new `UNAUTHENTICATED` error code in [API_ERRORS.md](API_ERRORS.md), a command-line script to create the owner's login, and limits on failed logins. Tests for each, and for one account never reaching another's items.
+2. [ ] **Logins in the front end:** a sign-in page with "Try the demo", Sign out in the shell, and going to the sign-in page whenever a request returns `UNAUTHENTICATED`. Accessibility as usual (`/a11y`): labeled fields with `autoComplete` (`username`, `current-password`), errors read with their fields, and focus on the page heading after signing in or out.
+3. [ ] **Demo data:** a committed seed of made-up content for a fictional person (a SQL file in `db/`, or Python that builds it): a library with a few roles, projects, skills, and bullets, a base resume and cover letter, and two or three job postings at different stages, one applied to (so its versions show as locked). Nothing from `db/seed_personal/`, and the text follows [WRITING_RULES.md](WRITING_RULES.md). `/check` confirms no personal data is in it.
+4. [ ] **Demo accounts:** "Try the demo" creates an account, copies the demo data into it, and signs the visitor in. A short note on every page says it's a demo and when its changes are deleted. A cleanup job deletes expired demo accounts (on each new demo, or on a schedule), and the Claude limits above apply.
+5. [ ] **Hardening for a public site:**
+   - The posting reader fetches any address a visitor types, so block addresses inside the server's own network (`localhost`, private and link-local ranges, cloud metadata addresses), after redirects too, in `download` in `backend/app/posting_reader.py`.
+   - Check the `Origin` header on every write (against cross-site requests), and add security headers (Content-Security-Policy, HSTS).
+   - Settings for production: the database address, the session secret, the API key, and the allowed address, all from the host's environment variables, never committed.
+   - Error responses never include stack traces or SQL.
+6. [ ] **Deploy:** a production build (the React files built and served by FastAPI, or a `Dockerfile` if the host needs one), migrations run on each release, the demo seed loaded, a health check, and HTTPS on the host's address or a custom domain. Update "Running it" and the hosting rows in [TECH_STACK.md](TECH_STACK.md), and the README with the live link.
+7. [ ] **Launch check:** try the demo as a visitor on a phone and a laptop, with a screen reader and with the keyboard alone; confirm the limits and the cleanup work; run `/check`; watch the API spend for the first week.
+
+## Phase 7: Polish
 - Fix rough edges found while using the app for real applications.
 - Make past versions easy to browse and reuse.
