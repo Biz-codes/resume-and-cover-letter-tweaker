@@ -1,4 +1,4 @@
-// A project's dialog: edit it (following "Changing a role, project, bullet, or narrative content" in
+// A project's dialog: edit it (following "Changing an item" in
 // docs/FRONTEND_CHECKS.md), add a version of it, delete it, and edit its ordered skill and bullet
 // lists. Its skills, bullets, and sections open in the same dialog.
 import { useState } from 'react'

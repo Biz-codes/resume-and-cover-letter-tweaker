@@ -1,8 +1,11 @@
 """Skills. Each one is listed under at least one category, and under any projects that used it.
 
-Renaming a skill that a sent version uses saves a new skill (docs/FRONTEND_CHECKS.md, "Sent
-versions are locked"). A version added on purpose is listed the same way, and nothing switches
-to it. Names are unique (DUPLICATE).
+Renaming a skill follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions never
+change, and resumes and cover letters in progress change only if the user picks them
+(apply_to). Unless every one is picked and nothing sent uses it, the new name is saved as a new
+skill, listed right after the original in every category and project, and only the picked ones
+switch to it. A version added on purpose is listed the same way, and nothing switches to it.
+Names are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -25,13 +28,18 @@ from app.models import (
 from app.refs import ProjectRef
 from app.routers.skill_categories import get_category
 from app.schemas import RequiredText
-from app.usage import SKILL_LINKS, Use, switch_unsent, used_by_sent_version, uses
+from app.usage import SKILL_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
 class SkillIn(BaseModel):
     skill_name: RequiredText(100)
+
+
+class SkillChange(SkillIn):
+    # The resumes and cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 class NewSkill(SkillIn):
@@ -119,26 +127,27 @@ def create_skill(body: NewSkill, db: DbSession, account_id: AccountId) -> SkillO
 
 
 @router.put("/{skill_id}")
-def rename_skill(skill_id: int, body: SkillIn, db: DbSession, account_id: AccountId) -> SkillOut:
-    """Renames the skill, unless a sent version uses it.
+def rename_skill(skill_id: int, body: SkillChange, db: DbSession,
+                 account_id: AccountId) -> SkillOut:
+    """Renames the skill (see the module docstring for when that's a new skill).
 
-    Then the new name is saved as a new skill, listed right after the original in every
-    category and project, and unsent resumes and cover letters switch to it. The response's
-    skill_id differs from the one in the url then.
+    The response's skill_id differs from the one in the url when a new skill was saved.
     """
     skill = get_owned(db, Skill, skill_id, account_id)
     if skill.skill_name == body.skill_name:
         return one_out(db, skill)
     check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill",
                       exclude=Skill.skill_id != skill_id)
-    if not used_by_sent_version(db, SKILL_LINKS, skill_id):
+    in_place, chosen = edit_choice(uses(db, SKILL_LINKS, [skill_id])[skill_id], body.apply_to)
+    if in_place:
         skill.skill_name = body.skill_name
         db.flush()
         db.refresh(skill)
         return one_out(db, skill)
 
     replacement = new_version(db, skill, body, account_id)
-    switch_unsent(db, SKILL_LINKS, skill_id, replacement.skill_id)
+    if chosen:
+        switch_unsent(db, SKILL_LINKS, skill_id, replacement.skill_id, only=chosen)
     return one_out(db, replacement)
 
 

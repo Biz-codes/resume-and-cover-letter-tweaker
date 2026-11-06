@@ -1,53 +1,46 @@
-// A resume's, cover letter's, or job posting's header, one value at a time: each field offers
-// every value saved in any header, or a new one typed in (and "None" for all but the name).
-// Nothing saves until "Save header" (or Enter), so trying values out never adds headers; saving
-// points it at the saved header with exactly these values, or a new one, so no saved header
-// changes (docs/FRONTEND_CHECKS.md, "Headers"). "Undo changes" goes back to the saved values.
-// With no header yet and a suggestion (a new posting's), it starts from the suggestion and saves
-// on "Use this header". Read-only, it lists the values.
+// A resume's, cover letter's, or job posting's header, one value at a time: each field shows its
+// current value under its name, then "More [field] options", which offers every other value saved
+// in any header and "None" (for all but the name), then a "New [field]" button, which opens a
+// small modal to type one in; Apply there puts it in the form. Each change is announced ("Location
+// changed to Boston, MA"). Nothing saves until "Save header" (or Enter), so
+// trying values out never adds headers; saving points it at the saved header with exactly these
+// values, or a new one, so no saved header changes (docs/FRONTEND_CHECKS.md, "Headers"). "Undo
+// changes" goes back to the saved values. With no header yet and a suggestion (a new posting's),
+// it starts from the suggestion and saves on "Use this header". Read-only, it lists the values.
 import { Fragment, useId, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../api/client'
 import type { Header, HeaderFields as Fields } from '../api/headers'
 import { sortByName } from '../sortByName'
+import Dialog from './Dialog/Dialog'
 
 type Field = keyof Fields
 
-const FIELDS: { name: Field; label: string; autoComplete: string }[] = [
-  { name: 'full_name', label: 'Name', autoComplete: 'name' },
-  { name: 'headline', label: 'Headline', autoComplete: 'organization-title' },
-  { name: 'email', label: 'Email', autoComplete: 'email' },
-  { name: 'phone', label: 'Phone', autoComplete: 'tel' },
-  { name: 'location', label: 'Location', autoComplete: 'address-level2' },
-  { name: 'linkedin_url', label: 'LinkedIn', autoComplete: 'url' },
-  { name: 'github_url', label: 'GitHub', autoComplete: 'url' },
-  { name: 'portfolio_url', label: 'Portfolio', autoComplete: 'url' },
+// `lower` names the field mid-sentence ("More headline options").
+const FIELDS: { name: Field; label: string; lower: string; autoComplete: string }[] = [
+  { name: 'full_name', label: 'Name', lower: 'name', autoComplete: 'name' },
+  { name: 'headline', label: 'Headline', lower: 'headline', autoComplete: 'organization-title' },
+  { name: 'email', label: 'Email', lower: 'email', autoComplete: 'email' },
+  { name: 'phone', label: 'Phone', lower: 'phone', autoComplete: 'tel' },
+  { name: 'location', label: 'Location', lower: 'location', autoComplete: 'address-level2' },
+  { name: 'linkedin_url', label: 'LinkedIn', lower: 'LinkedIn', autoComplete: 'url' },
+  { name: 'github_url', label: 'GitHub', lower: 'GitHub', autoComplete: 'url' },
+  { name: 'portfolio_url', label: 'Portfolio', lower: 'portfolio', autoComplete: 'url' },
 ]
 
-// The select's value for "None" and for typing a new value. Saved values are their own text.
-const NONE = ''
-const NEW = '\u0000new'
+// The dropdown's choices besides the saved values, which are their own text. Picking one applies
+// it to the value shown above. The dropdown shows the pick while it has focus, so arrow keys
+// (which change a closed dropdown's choice on some systems) move through the options, then goes
+// back to "Choose…".
+const CHOOSE = ''
+const NONE = '\u0000none'
 
-type Choices = Record<Field, string>
+type Values = Record<Field, string | null>
 
-const noneTyped = () => Object.fromEntries(FIELDS.map(({ name }) => [name, ''])) as Record<Field, string>
-
-// The header's values, or the suggested ones: a value no saved header has starts as a new one,
-// already typed in.
-function starting(header: Header | undefined, headers: Header[], suggested: Fields | undefined) {
-  const choices = {} as Choices
-  const typed = noneTyped()
-  for (const { name } of FIELDS) {
-    const value = header?.[name] ?? (header ? null : (suggested?.[name] ?? null))
-    if (value === null) {
-      choices[name] = name === 'full_name' ? (headers[0]?.full_name ?? NEW) : NONE
-    } else if (header || headers.some((item) => item[name] === value)) {
-      choices[name] = value
-    } else {
-      choices[name] = NEW
-      typed[name] = value
-    }
-  }
-  return { choices, typed }
+// The header's values, or the suggested ones.
+function starting(header: Header | undefined, suggested: Fields | undefined): Values {
+  const values = {} as Values
+  for (const { name } of FIELDS) values[name] = header ? header[name] : (suggested?.[name] ?? null)
+  return values
 }
 
 export default function HeaderFields({
@@ -67,12 +60,17 @@ export default function HeaderFields({
   readOnly: boolean
   onSave: (fields: Fields) => Promise<void>
 }) {
-  const [start] = useState(() => starting(header, headers, suggested))
-  const [choices, setChoices] = useState(start.choices)
-  const [typed, setTyped] = useState(start.typed)
+  const [values, setValues] = useState(() => starting(header, suggested))
   const [error, setError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
-  const errorId = useId()
+  // The field whose new value is being typed in the modal.
+  const [adding, setAdding] = useState<(typeof FIELDS)[number] | null>(null)
+  // What the focused dropdown shows, until focus leaves it.
+  const [picked, setPicked] = useState<{ field: Field; choice: string } | null>(null)
+  // The last change, for screen readers.
+  const [announcement, setAnnouncement] = useState('')
+  const id = useId()
+  const errorId = `${id}-error`
   const pending = !header && Boolean(suggested)
 
   if (readOnly) {
@@ -89,28 +87,31 @@ export default function HeaderFields({
     )
   }
 
-  // Each value once, in the order the headers come (most recent first), plus the one chosen.
-  const saved = (name: Field) => {
-    const values = headers.map((item) => item[name]).filter((value): value is string => Boolean(value))
-    if (choices[name] !== NONE && choices[name] !== NEW) values.push(choices[name])
-    return sortByName([...new Set(values)], (value) => value)
-  }
+  // Each other saved value once, A to Z.
+  const others = (name: Field) =>
+    sortByName(
+      [...new Set(headers.map((item) => item[name]).filter((value): value is string => Boolean(value)))].filter(
+        (value) => value !== values[name],
+      ),
+      (value) => value,
+    )
 
-  // Every value as chosen or typed (a new value not typed yet is empty).
-  const values = {} as Record<Field, string | null>
-  for (const { name } of FIELDS) {
-    const choice = choices[name]
-    values[name] = choice === NEW ? typed[name].trim() || null : choice === NONE ? null : choice
-  }
   // Something differs from the saved header, so there's something to save. A suggestion is
   // always there to use.
   const changed = pending || FIELDS.some(({ name }) => values[name] !== (header?.[name] ?? null))
 
-  function undo() {
-    const fresh = starting(header, headers, suggested)
-    setChoices(fresh.choices)
-    setTyped(fresh.typed)
-    setError(null)
+  // `later`: a change applied in the modal is said once the modal has closed and the page can be
+  // heard again.
+  function change(field: (typeof FIELDS)[number], value: string | null, later = false) {
+    setValues({ ...values, [field.name]: value })
+    const text = `${field.label} changed to ${value ?? 'None'}.`
+    if (later) setTimeout(() => setAnnouncement(text), 100)
+    else setAnnouncement(text)
+  }
+
+  function pick(field: (typeof FIELDS)[number], choice: string) {
+    setPicked({ field: field.name, choice })
+    if (choice !== CHOOSE) change(field, choice === NONE ? null : choice)
   }
 
   async function submit(event: FormEvent) {
@@ -119,10 +120,8 @@ export default function HeaderFields({
     setSaving(true)
     setError(null)
     try {
+      // An empty name is sent as is, for the backend to refuse (VALIDATION_FAILED).
       await onSave(values as Fields)
-      // What was typed is a saved value now.
-      setChoices(Object.fromEntries(FIELDS.map(({ name }) => [name, values[name] ?? NONE])) as Choices)
-      setTyped(noneTyped())
     } catch (caught) {
       setError(toApiError(caught))
     } finally {
@@ -130,68 +129,151 @@ export default function HeaderFields({
     }
   }
 
-  const invalid = (name: Field) => ({
-    'aria-invalid': error?.field === name,
-    'aria-describedby': error?.field === name ? errorId : undefined,
-  })
+  return (
+    <>
+      <form className="stacked-form" onSubmit={submit} aria-label="Header">
+        {/* Always rendered, so each change is announced. */}
+        <p className="visually-hidden" aria-live="polite">
+          {announcement}
+        </p>
+        {FIELDS.map((field) => {
+          const { name, label, lower } = field
+          const valueId = `${id}-${name}`
+          const invalid = error?.field === name
+          // The pick stays shown while the dropdown has focus, so it's in the options too.
+          const shown = picked?.field === name ? picked.choice : CHOOSE
+          const extra = shown !== CHOOSE && shown !== NONE ? [shown] : []
+          const saved = sortByName([...new Set([...others(name), ...extra])], (value) => value)
+          const noneOffered = name !== 'full_name' && (values[name] !== null || shown === NONE)
+          return (
+            <div key={name}>
+              <p>
+                <strong>{label}</strong>
+                <br />
+                <span id={valueId}>{values[name] ?? 'None'}</span>
+              </p>
+              {/* Only when there's something else to pick. */}
+              {(noneOffered || saved.length > 0) && (
+                <label>
+                  More {lower} options
+                  <select
+                    value={shown}
+                    aria-invalid={invalid}
+                    aria-describedby={invalid ? `${valueId} ${errorId}` : valueId}
+                    onChange={(event) => pick(field, event.target.value)}
+                    onBlur={() => setPicked(null)}
+                  >
+                    <option value={CHOOSE}>Choose…</option>
+                    {noneOffered && <option value={NONE}>None</option>}
+                    {saved.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="actions">
+                <button
+                  type="button"
+                  aria-describedby={invalid ? errorId : undefined}
+                  onClick={() => setAdding(field)}
+                >
+                  New {lower}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {error && (
+          <p role="alert" id={errorId}>
+            {error.message}
+          </p>
+        )}
+        <div className="actions">
+          {/* aria-disabled, not disabled, so a focused button keeps focus while saving, and after
+              saving, when there's nothing left to save. */}
+          <button type="submit" aria-disabled={saving || !changed}>
+            {saving ? 'Saving…' : pending ? 'Use this header' : 'Save header'}
+          </button>
+          {!pending && (
+            <button
+              type="button"
+              aria-disabled={!changed}
+              onClick={() => {
+                if (!changed) return
+                setValues(starting(header, suggested))
+                setError(null)
+                setAnnouncement('Undid the header changes.')
+              }}
+            >
+              Undo changes
+            </button>
+          )}
+        </div>
+      </form>
+      {adding && (
+        <NewValue
+          field={adding}
+          onApply={(value) => {
+            change(adding, value, true)
+            setAdding(null)
+          }}
+          onClose={() => setAdding(null)}
+        />
+      )}
+    </>
+  )
+}
+
+// The small modal for typing a field's new value. Apply puts it in the header's form; nothing
+// saves until "Save header". When it closes, focus goes back to the field's "New" button.
+function NewValue({
+  field,
+  onApply,
+  onClose,
+}: {
+  field: (typeof FIELDS)[number]
+  onApply: (value: string) => void
+  onClose: () => void
+}) {
+  const [text, setText] = useState('')
+  const [empty, setEmpty] = useState(false)
+  const errorId = useId()
+
+  function apply(event: FormEvent) {
+    event.preventDefault()
+    const value = text.trim()
+    if (value) onApply(value)
+    else setEmpty(true)
+  }
 
   return (
-    <form className="stacked-form" onSubmit={submit} aria-label="Header">
-      {FIELDS.map(({ name, label, autoComplete }) => {
-        const required = name === 'full_name'
-        const isNew = choices[name] === NEW
-        return (
-          <div key={name}>
-            <label>
-              {required ? `${label} (required)` : label}
-              <select
-                value={choices[name]}
-                aria-required={required || undefined}
-                {...(isNew ? {} : invalid(name))}
-                onChange={(event) => setChoices({ ...choices, [name]: event.target.value })}
-              >
-                {!required && <option value={NONE}>None</option>}
-                {/* New comes before the saved values, so it's reached without going through them all. */}
-                <option value={NEW}>New {label.toLowerCase()}…</option>
-                {saved(name).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {isNew && (
-              <label>
-                New {label.toLowerCase()}
-                <input
-                  value={typed[name]}
-                  autoComplete={autoComplete}
-                  aria-required={required || undefined}
-                  {...invalid(name)}
-                  onChange={(event) => setTyped({ ...typed, [name]: event.target.value })}
-                />
-              </label>
-            )}
-          </div>
-        )
-      })}
-      {error && (
-        <p role="alert" id={errorId}>
-          {error.message}
-        </p>
-      )}
-      <div className="actions">
-        {/* aria-disabled, not disabled, so a focused button keeps focus while saving, and after
-            saving, when there's nothing left to save. */}
-        <button type="submit" aria-disabled={saving || !changed}>
-          {saving ? 'Saving…' : pending ? 'Use this header' : 'Save header'}
-        </button>
-        {!pending && (
-          <button type="button" aria-disabled={!changed} onClick={() => changed && undo()}>
-            Undo changes
-          </button>
+    <Dialog title={`New ${field.lower}`} onClose={onClose}>
+      <form className="stacked-form" onSubmit={apply}>
+        <label>
+          {field.label}
+          <input
+            value={text}
+            autoComplete={field.autoComplete}
+            aria-required="true"
+            aria-invalid={empty}
+            aria-describedby={empty ? errorId : undefined}
+            onChange={(event) => setText(event.target.value)}
+          />
+        </label>
+        {empty && (
+          <p role="alert" id={errorId}>
+            Type the new {field.lower}.
+          </p>
         )}
-      </div>
-    </form>
+        <div className="actions">
+          <button type="submit">Apply</button>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Dialog>
   )
 }

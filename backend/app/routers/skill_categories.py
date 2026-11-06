@@ -2,9 +2,13 @@
 
 The built-in "Other" category is shared by every account and can't be renamed or deleted.
 Deleting a category moves its skills and its resume and cover letter selections under
-"Other" first (docs/FRONTEND_CHECKS.md, "Deleting a skill category"). A new version (of any
-category, "Other" too) has a new name and lists the same skills, right after the original in its
-sections. Names are unique (DUPLICATE).
+"Other" first (docs/FRONTEND_CHECKS.md, "Deleting a skill category"). Renaming a category
+follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions never change, and resumes
+and cover letters in progress change only if the user picks them (apply_to). Unless every one
+is picked and nothing sent uses it, the new name is saved as a new category, and only the picked
+ones switch to it. "Other" is never renamed, so a new name for it is always a new category. A
+new category (of any category, "Other" too) has the new name and lists the same skills, right
+after the original in its sections. Names are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -44,13 +48,18 @@ from app.models import (
 from app.refs import SectionRef
 from app.routers.sections import get_section
 from app.schemas import RequiredText
-from app.usage import CATEGORY_LINKS, Use, switch_unsent, touch, used_by_sent_version, uses
+from app.usage import CATEGORY_LINKS, DocRef, Use, edit_choice, switch_unsent, touch, uses
 
 router = APIRouter(prefix="/api/skill-categories", tags=["skill categories"])
 
 
 class CategoryIn(BaseModel):
     category_name: RequiredText(100)
+
+
+class CategoryChange(CategoryIn):
+    # The resumes and cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 class NewCategory(CategoryIn):
@@ -180,28 +189,28 @@ def create_category(body: NewCategory, db: DbSession, account_id: AccountId) -> 
 
 
 @router.put("/{category_id}")
-def rename_category(category_id: int, body: CategoryIn, db: DbSession,
+def rename_category(category_id: int, body: CategoryChange, db: DbSession,
                     account_id: AccountId) -> CategoryOut:
-    """Renames the category, unless a sent version uses it.
+    """Renames the category (see the module docstring for when that's a new category).
 
-    Then the new name is saved as a new category, listed right after the original in its
-    sections and listing the same skills, and unsent resumes and cover letters switch to it.
-    The response's category_id differs from the one in the url then.
+    The response's category_id differs from the one in the url when a new category was saved.
     """
     category = get_category(db, category_id, account_id)
     if category.category_name == body.category_name:
         return one_out(db, category, account_id)
-    protect_other(category, "renamed")
     check_unique_name(db, SkillCategory.category_name, account_id, body.category_name,
                       "skill category", exclude=SkillCategory.category_id != category_id)
-    if not used_by_sent_version(db, CATEGORY_LINKS, category_id):
+    in_place, chosen = edit_choice(uses(db, CATEGORY_LINKS, [category_id])[category_id],
+                                   body.apply_to, fixed=category.account_id is None)
+    if in_place:
         category.category_name = body.category_name
         db.flush()
         db.refresh(category)
         return one_out(db, category, account_id)
 
     replacement = new_version(db, category, body, account_id)
-    switch_unsent(db, CATEGORY_LINKS, category_id, replacement.category_id)
+    if chosen:
+        switch_unsent(db, CATEGORY_LINKS, category_id, replacement.category_id, only=chosen)
     return one_out(db, replacement, account_id)
 
 

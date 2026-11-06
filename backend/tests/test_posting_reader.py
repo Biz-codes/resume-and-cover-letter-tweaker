@@ -2,6 +2,7 @@
 for the page fetch and for Claude, so no test reaches the network."""
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -20,19 +21,21 @@ FOUND = Extracted(found=True, organization="Acme", role_title="Engineer",
 
 
 class FakeMessages:
-    """Answers like client.beta.messages, with a reply, an error, or a stop reason."""
+    """Answers like client.beta.messages.stream, with a reply, an error, or a stop reason."""
 
-    def __init__(self) -> None:
-        self.reply: Extracted | Exception = FOUND
+    def __init__(self, reply: Any = None) -> None:
+        self.reply: Any = FOUND if reply is None else reply
         self.stop_reason = "end_turn"
         self.calls: list[dict[str, Any]] = []
 
-    def parse(self, **request: Any) -> SimpleNamespace:
+    @contextmanager
+    def stream(self, **request: Any) -> Iterator[SimpleNamespace]:
         self.calls.append(request)
         if isinstance(self.reply, Exception):
             raise self.reply
-        return SimpleNamespace(stop_reason=self.stop_reason, parsed_output=self.reply,
-                               usage={"input_tokens": 1, "output_tokens": 1})
+        message = SimpleNamespace(stop_reason=self.stop_reason, parsed_output=self.reply,
+                                  usage={"input_tokens": 1, "output_tokens": 1})
+        yield SimpleNamespace(get_final_message=lambda: message)
 
 
 @pytest.fixture

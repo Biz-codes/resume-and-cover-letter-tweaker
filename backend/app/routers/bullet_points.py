@@ -5,7 +5,7 @@ A resume or cover letter stores only which bullets it picked (resume_bullet_poin
 cover_letter_bullet_point), and they're locked once the posting is applied to; the text is
 read from this row.
 
-Editing a bullet follows "Changing a role, project, bullet, or narrative content" in
+Editing a bullet follows "Changing an item" in
 docs/FRONTEND_CHECKS.md:
 - Sent versions never change.
 - Resumes and cover letters in progress change only if the user picks them (apply_to). If
@@ -42,7 +42,7 @@ from app.refs import (
 )
 from app.routers.sections import get_section
 from app.schemas import RequiredText
-from app.usage import BULLET_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
+from app.usage import BULLET_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/bullet-points", tags=["bullet points"])
 
@@ -149,11 +149,9 @@ def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
     bullet = get_owned(db, BulletPoint, bullet_id, account_id)
     if bullet.content == body.content:
         return one_out(db, bullet, account_id)
-    used_by = uses(db, BULLET_LINKS, [bullet_id])[bullet_id]
-    sent = any(use.locked for use in used_by)
-    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
-    chosen = chosen_in_progress(body.apply_to, used_by)
-    if not sent and chosen == in_progress:
+    in_place, chosen = edit_choice(
+        uses(db, BULLET_LINKS, [bullet_id])[bullet_id], body.apply_to)
+    if in_place:
         bullet.content = body.content
         db.flush()
         db.refresh(bullet)

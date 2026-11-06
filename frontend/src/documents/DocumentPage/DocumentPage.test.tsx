@@ -303,8 +303,10 @@ describe('DocumentPage', () => {
     renderAt('/resumes/19')
     fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
     fireEvent.click(screen.getByRole('button', { name: 'Header' }))
-    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: '\u0000new' } })
-    fireEvent.change(screen.getByLabelText('New headline'), { target: { value: 'English Teacher' } })
+    fireEvent.click(screen.getByRole('button', { name: 'New headline' }))
+    const dialog = screen.getByRole('dialog', { name: 'New headline' })
+    fireEvent.change(within(dialog).getByLabelText('Headline'), { target: { value: 'English Teacher' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save header' }))
     await expectNotice('Header saved.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/19/header')).toMatchObject({

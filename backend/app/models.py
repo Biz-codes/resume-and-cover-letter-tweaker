@@ -7,6 +7,7 @@ built-in protection) and the built-in rows live in the migrations, not here.
 
 import enum
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Built-in rows created by the first migration. Never look these up by title.
@@ -148,6 +150,9 @@ class Resume(Base):
     tone_set_id: Mapped[int | None] = mapped_column(fk("tone_set.tone_set_id", "SET NULL"))
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
     based_on_resume_id: Mapped[int | None] = mapped_column(fk("resume.resume_id", "SET NULL"))
+    # Claude's suggestion awaiting the first review (app/suggestions.py). None is saved as SQL
+    # NULL, not a JSON null, so a cleared draft is empty.
+    draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -169,6 +174,7 @@ class CoverLetter(Base):
     sign_off_id: Mapped[int | None] = mapped_column(fk("sign_off.sign_off_id", "SET NULL"))
     # Empty means the header's full_name.
     signature_name: Mapped[str | None] = mapped_column(String(100))
+    draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

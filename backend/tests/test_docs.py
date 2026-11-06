@@ -11,6 +11,7 @@ import re
 
 import pytest
 from sqlalchemy import Boolean, Date, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 
 from app.config import BACKEND_DIR
@@ -64,7 +65,7 @@ def doc_type(column) -> str:
         return "SERIAL" if column.primary_key and column.autoincrement is not False and len(
             column.table.primary_key.columns) == 1 else "INTEGER"
     for sql_type, name in [(Text, "TEXT"), (TIMESTAMP, "TIMESTAMP"), (Date, "DATE"),
-                           (Boolean, "BOOLEAN")]:
+                           (Boolean, "BOOLEAN"), (JSONB, "JSONB")]:
         if isinstance(kind, sql_type):
             return name
     raise AssertionError(f"no doc name for {kind!r}")

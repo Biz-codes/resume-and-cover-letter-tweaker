@@ -76,7 +76,7 @@ def test_create_list_and_get(client: TestClient, account_id: int):
     assert response.status_code == 201
     header = response.json()
     assert header == {**NEPTUNE, **EMPTY, "header_id": header["header_id"], "hidden": False,
-                      "created_at": header["created_at"], "used_by": []}
+                      "created_at": header["created_at"], "used_by": [], "in_progress": []}
     assert client.get("/api/headers").json() == [header]
     assert client.get(f"/api/headers/{header['header_id']}").json() == header
 
@@ -116,12 +116,14 @@ def test_used_by_lists_postings_resumes_and_letters(client: TestClient, db: Sess
     sent = add_posting(db, account_id, header_id, applied=True)
     resume = add_doc(db, Resume, account_id, header_id, sent)
     letter = add_doc(db, CoverLetter, account_id, header_id, None)
-    used_by = client.get(f"/api/headers/{header_id}").json()["used_by"]
-    assert used_by == [
+    header = client.get(f"/api/headers/{header_id}").json()
+    assert header["used_by"] == [
         {"kind": "job_posting", "id": sent, "name": "Acme: Engineer", "locked": True},
         {"kind": "resume", "id": resume.resume_id, "name": resume.name, "locked": True},
         {"kind": "cover_letter", "id": letter.letter_id, "name": letter.name, "locked": False},
     ]
+    # An edit can go to the base letter; the sent posting and its resume keep the header.
+    assert header["in_progress"] == [header["used_by"][2]]
 
 
 def test_missing_header_is_not_found(client: TestClient, account_id: int):
@@ -136,7 +138,9 @@ def test_edit_in_place_when_no_sent_version_uses_it(client: TestClient, db: Sess
     header_id = add_header(db, account_id)
     posting = add_posting(db, account_id, header_id, applied=False)
     add_doc(db, Resume, account_id, header_id, posting)
-    response = client.put(f"/api/headers/{header_id}", json={**NEPTUNE, "phone": "555-0100"})
+    response = client.put(f"/api/headers/{header_id}",
+                          json={**NEPTUNE, "phone": "555-0100",
+                                "apply_to": [{"kind": "job_posting", "id": posting}]})
     assert response.status_code == 200
     assert response.json()["header_id"] == header_id
     assert response.json()["phone"] == "555-0100"
@@ -160,10 +164,36 @@ def test_edit_saves_a_new_header_when_a_sent_version_uses_it(client: TestClient,
     assert new_header["used_by"] == []
     db.expire_all()
     assert db.get(Header, header_id).phone is None  # the sent record is unchanged
-    # Nothing switches on its own: applications in progress may need different headers.
+    # Nothing was checked, so nothing switches.
     assert [doc.header_id for doc in users] == [header_id] * 4
     assert [db.get(JobPosting, posting).header_id for posting in (applied, open_posting)
             ] == [header_id] * 2
+
+
+def test_edit_switches_the_postings_and_base_documents_checked(client: TestClient, db: Session,
+                                                               account_id: int):
+    header_id = add_header(db, account_id)
+    picked, kept = (add_posting(db, account_id, header_id, applied=False) for _ in range(2))
+    posting_docs = [add_doc(db, Resume, account_id, header_id, picked),
+                    add_doc(db, CoverLetter, account_id, header_id, picked)]
+    kept_doc = add_doc(db, Resume, account_id, header_id, kept)
+    base = add_doc(db, CoverLetter, account_id, header_id, None)
+    url = f"/api/headers/{header_id}"
+    # A posting's resume goes with its posting, so it can't be picked on its own.
+    response = client.put(url, json={**NEPTUNE, "phone": "555-0100", "apply_to": [
+        {"kind": "resume", "id": kept_doc.resume_id}]})
+    assert response.json()["error"]["field"] == "apply_to"
+
+    new_header = client.put(url, json={**NEPTUNE, "phone": "555-0100", "apply_to": [
+        {"kind": "job_posting", "id": picked},
+        {"kind": "cover_letter", "id": base.letter_id}]}).json()
+    new_id = new_header["header_id"]
+    assert new_id != header_id
+    db.expire_all()
+    assert db.get(JobPosting, picked).header_id == new_id
+    assert [doc.header_id for doc in (*posting_docs, base)] == [new_id] * 3
+    assert (db.get(JobPosting, kept).header_id, kept_doc.header_id) == (header_id, header_id)
+    assert db.get(Header, header_id).phone is None
 
 
 def test_edit_reuses_an_identical_header_instead_of_adding_one(client: TestClient, db: Session,

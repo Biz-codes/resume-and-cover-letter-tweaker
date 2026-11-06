@@ -4,7 +4,7 @@ A project's row lists every skill and bullet that can go under it. A resume or c
 stores only which project, skills, and bullets it picked (resume_project,
 resume_project_skill, resume_bullet_point, and the cover letter tables), and prints
 everything about the project itself (project_title, done_for, url, dates) from this row. So
-changing a project's fields follows "Changing a role, project, bullet, or narrative content"
+changing a project's fields follows "Changing an item"
 in docs/FRONTEND_CHECKS.md:
 
 - A sent version never changes: if one uses the project, the change is saved as a new row.
@@ -38,7 +38,7 @@ from app.models import (
 from app.refs import BulletRef, SectionRef, bullet_refs, section_refs
 from app.routers.sections import get_section
 from app.schemas import OptionalText, RequiredText
-from app.usage import PROJECT_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
+from app.usage import PROJECT_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -183,11 +183,9 @@ def update_project(project_id: int, body: ProjectChange, db: DbSession,
     values = ProjectIn(**body.model_dump(include=set(FIELDS)))
     if all(getattr(project, field) == getattr(values, field) for field in FIELDS):
         return one_out(db, project, account_id)
-    used_by = uses(db, PROJECT_LINKS, [project_id])[project_id]
-    sent = any(use.locked for use in used_by)
-    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
-    chosen = chosen_in_progress(body.apply_to, used_by)
-    if not sent and chosen == in_progress:
+    in_place, chosen = edit_choice(
+        uses(db, PROJECT_LINKS, [project_id])[project_id], body.apply_to)
+    if in_place:
         for field in FIELDS:
             setattr(project, field, getattr(values, field))
         db.flush()

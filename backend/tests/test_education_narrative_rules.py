@@ -95,11 +95,14 @@ def test_another_accounts_education_is_not_found(client: TestClient, db: Session
     assert error(client.get(f"/api/education/{theirs.education_id}"))[1] == "NOT_FOUND"
 
 
-def test_edit_education_in_place_when_unsent(client: TestClient, db: Session, account_id: int):
+def test_edit_education_in_place_when_every_one_in_progress_gets_it(client: TestClient,
+                                                                    db: Session, account_id: int):
     row = entry(db, account_id)
-    show_education(db, resume(db, account_id, "Draft", sent=False), row)
+    draft = resume(db, account_id, "Draft", sent=False)
+    show_education(db, draft, row)
     saved = client.put(f"/api/education/{row.education_id}",
-                       json={**DEGREE, "graduation": "2015"}).json()
+                       json={**DEGREE, "graduation": "2015",
+                             "apply_to": [{"kind": "resume", "id": draft.resume_id}]}).json()
     assert (saved["education_id"], saved["graduation"]) == (row.education_id, "2015")
     assert [use["name"] for use in saved["used_by"]] == ["Draft"]
 
@@ -110,11 +113,14 @@ def test_edit_education_a_sent_version_uses_saves_a_new_entry(client: TestClient
     later = entry(db, account_id, degree="M.A. in English")
     sent = resume(db, account_id, "Sent", sent=True)
     draft = resume(db, account_id, "Draft", sent=False)
+    other = resume(db, account_id, "Other draft", sent=False)
     sent_choice = show_education(db, sent, row)
     draft_choice = show_education(db, draft, row)
+    other_choice = show_education(db, other, row)
 
     saved = client.put(f"/api/education/{row.education_id}",
-                       json={**DEGREE, "graduation": "2015"}).json()
+                       json={**DEGREE, "graduation": "2015",
+                             "apply_to": [{"kind": "resume", "id": draft.resume_id}]}).json()
     new_id = saved["education_id"]
     assert new_id != row.education_id
     assert listed(db, SectionEducation, "section_id", EDUCATION_SECTION_ID, "education_id") \
@@ -123,6 +129,8 @@ def test_edit_education_a_sent_version_uses_saves_a_new_entry(client: TestClient
     assert db.get(Education, row.education_id).graduation == "May 2015"
     assert db.get(ResumeEducation, sent_choice).education_id == row.education_id
     assert db.get(ResumeEducation, draft_choice).education_id == new_id
+    # Unchecked, it keeps the original.
+    assert db.get(ResumeEducation, other_choice).education_id == row.education_id
 
 
 def test_delete_education_removes_it_from_resumes(client: TestClient, db: Session,
@@ -395,36 +403,85 @@ def test_writing_rule_errors(client: TestClient, db: Session, account_id: int):
 # Tone sets
 
 
-def test_tone_set_rules_are_added_ordered_edited_and_deleted(client: TestClient,
-                                                             account_id: int):
+def tone(db: Session, account_id: int, name: str, rules: list[str]) -> ToneSet:
+    tone_set = add(db, ToneSet(account_id=account_id, name=name))
+    for position, text in enumerate(rules, start=1):
+        add(db, ToneRule(tone_set_id=tone_set.tone_set_id, rule_text=text, position=position))
+    return tone_set
+
+
+def rule_texts(body: dict) -> list[str]:
+    return [rule["rule_text"] for rule in body["rules"]]
+
+
+def test_a_tone_is_saved_whole_in_place_when_nothing_sent_uses_it(client: TestClient,
+                                                                  account_id: int):
     tone_set = client.post("/api/tone-sets", json={"name": "Tech"}).json()
     url = f"/api/tone-sets/{tone_set['tone_set_id']}"
-    client.post(f"{url}/rules", json={"rule_text": "Lead with tools."})
-    body = client.post(f"{url}/rules", json={"rule_text": "Use metrics."}).json()
+    body = client.put(url, json={"name": "Tech", "rules": [
+        {"rule_text": "Lead with tools."}, {"rule_text": "Use metrics."}]}).json()
+    assert body["tone_set_id"] == tone_set["tone_set_id"]
+    assert rule_texts(body) == ["Lead with tools.", "Use metrics."]
     first, second = (rule["tone_rule_id"] for rule in body["rules"])
-    body = client.put(f"{url}/rules", json={"tone_rule_ids": [second, first]}).json()
-    assert [rule["rule_text"] for rule in body["rules"]] == ["Use metrics.", "Lead with tools."]
-    body = client.put(f"{url}/rules/{first}", json={"rule_text": "Name the tools."}).json()
-    assert [rule["rule_text"] for rule in body["rules"]] == ["Use metrics.", "Name the tools."]
-    body = client.delete(f"{url}/rules/{second}").json()
-    assert [rule["rule_text"] for rule in body["rules"]] == ["Name the tools."]
-    assert client.put(url, json={"name": "Engineering"}).json()["name"] == "Engineering"
+    # Reordered, one edited, one deleted, one added, and renamed, in one save.
+    body = client.put(url, json={"name": "Engineering", "rules": [
+        {"tone_rule_id": second, "rule_text": "Use numbers."},
+        {"rule_text": "Keep it short."}]}).json()
+    assert (body["tone_set_id"], body["name"]) == (tone_set["tone_set_id"], "Engineering")
+    assert rule_texts(body) == ["Use numbers.", "Keep it short."]
+    assert body["rules"][0]["tone_rule_id"] == second
 
 
-def test_tone_rule_order_must_hold_every_rule_once(client: TestClient, db: Session,
-                                                   account_id: int):
-    mine = add(db, ToneSet(account_id=account_id, name="Tech"))
-    other = add(db, ToneSet(account_id=account_id, name="Teaching"))
-    rule = add(db, ToneRule(tone_set_id=mine.tone_set_id, rule_text="Lead with tools.",
-                            position=1))
-    foreign = add(db, ToneRule(tone_set_id=other.tone_set_id, rule_text="Students first.",
-                               position=1))
-    url = f"/api/tone-sets/{mine.tone_set_id}/rules"
-    for ids in ([], [rule.tone_rule_id, rule.tone_rule_id], [foreign.tone_rule_id]):
-        assert error(client.put(url, json={"tone_rule_ids": ids})) == \
-            (422, "VALIDATION_FAILED", "tone_rule_ids")
-    response = client.put(f"{url}/{foreign.tone_rule_id}", json={"rule_text": "Mine now."})
-    assert error(response)[1] == "NOT_FOUND"
+def test_a_tone_rule_must_be_its_own_once(client: TestClient, db: Session, account_id: int):
+    mine = tone(db, account_id, "Tech", ["Lead with tools."])
+    other = tone(db, account_id, "Teaching", ["Students first."])
+    rule = client.get(f"/api/tone-sets/{mine.tone_set_id}").json()["rules"][0]["tone_rule_id"]
+    foreign = client.get(f"/api/tone-sets/{other.tone_set_id}").json()["rules"][0]["tone_rule_id"]
+    url = f"/api/tone-sets/{mine.tone_set_id}"
+    for ids in ([rule, rule], [foreign]):
+        rules = [{"tone_rule_id": rule_id, "rule_text": "Mine now."} for rule_id in ids]
+        assert error(client.put(url, json={"name": "Tech", "rules": rules})) == \
+            (422, "VALIDATION_FAILED", "rules")
+
+
+def test_editing_a_tone_a_sent_resume_uses_saves_a_new_one(client: TestClient, db: Session,
+                                                           account_id: int):
+    original = tone(db, account_id, "Tech", ["Lead with tools."])
+    sent = resume(db, account_id, "Sent", sent=True)
+    draft = resume(db, account_id, "Draft", sent=False)
+    other = resume(db, account_id, "Other draft", sent=False)
+    for doc in (sent, draft, other):
+        doc.tone_set_id = original.tone_set_id
+    db.flush()
+    saved = client.put(f"/api/tone-sets/{original.tone_set_id}", json={
+        "name": "Tech", "rules": [{"rule_text": "Lead with metrics."}],
+        "apply_to": [{"kind": "resume", "id": draft.resume_id}]}).json()
+    # The copy keeps the name; its date tells the two apart.
+    assert (saved["name"], rule_texts(saved)) == ("Tech", ["Lead with metrics."])
+    assert saved["tone_set_id"] != original.tone_set_id
+    assert [use["name"] for use in saved["used_by"]] == ["Draft"]
+    assert rule_texts(client.get(f"/api/tone-sets/{original.tone_set_id}").json()) == \
+        ["Lead with tools."]
+    db.expire_all()
+    assert db.get(Resume, sent.resume_id).tone_set_id == original.tone_set_id
+    assert db.get(Resume, other.resume_id).tone_set_id == original.tone_set_id
+    # Only one in progress that uses it can be picked.
+    response = client.put(f"/api/tone-sets/{original.tone_set_id}", json={
+        "name": "Tech", "rules": [], "apply_to": [{"kind": "resume", "id": sent.resume_id}]})
+    assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
+
+
+def test_editing_a_tone_unchecked_saves_a_new_one_nothing_uses(client: TestClient, db: Session,
+                                                               account_id: int):
+    original = tone(db, account_id, "Tech", ["Lead with tools."])
+    draft = resume(db, account_id, "Draft", sent=False)
+    draft.tone_set_id = original.tone_set_id
+    db.flush()
+    saved = client.put(f"/api/tone-sets/{original.tone_set_id}",
+                       json={"name": "Tech", "rules": []}).json()
+    assert (saved["rules"], saved["used_by"]) == ([], [])
+    db.expire_all()
+    assert db.get(Resume, draft.resume_id).tone_set_id == original.tone_set_id
 
 
 def test_tone_names_are_unique_ignoring_capitals(client: TestClient, db: Session,
@@ -434,9 +491,10 @@ def test_tone_names_are_unique_ignoring_capitals(client: TestClient, db: Session
     response = client.post("/api/tone-sets", json={"name": "tech"})
     assert error(response) == (409, "DUPLICATE", "name")
     assert response.json()["error"]["message"] == 'There\'s already a tone named "Tech".'
-    response = client.put(f"/api/tone-sets/{teaching.tone_set_id}", json={"name": "TECH"})
+    response = client.put(f"/api/tone-sets/{teaching.tone_set_id}",
+                          json={"name": "TECH", "rules": []})
     assert error(response) == (409, "DUPLICATE", "name")
-    response = client.put(f"/api/tone-sets/{tech.tone_set_id}", json={"name": "TECH"})
+    response = client.put(f"/api/tone-sets/{tech.tone_set_id}", json={"name": "TECH", "rules": []})
     assert response.json()["name"] == "TECH"
 
 
@@ -480,21 +538,40 @@ def test_edit_sign_off_a_sent_letter_uses_saves_a_new_one(client: TestClient, db
     sincerely = add(db, SignOff(account_id=account_id, text="Sincerely"))
     sent = letter(db, account_id, "Sent", sent=True, sign_off_id=sincerely.sign_off_id)
     draft = letter(db, account_id, "Draft", sent=False, sign_off_id=sincerely.sign_off_id)
+    other = letter(db, account_id, "Other draft", sent=False, sign_off_id=sincerely.sign_off_id)
     saved = client.put(f"/api/sign-offs/{sincerely.sign_off_id}",
-                       json={"text": "Best regards"}).json()
+                       json={"text": "Best regards",
+                             "apply_to": [{"kind": "cover_letter", "id": draft.letter_id}]}).json()
     assert saved["sign_off_id"] != sincerely.sign_off_id
     assert [use["name"] for use in saved["used_by"]] == ["Draft"]
     db.expire_all()
     assert db.get(SignOff, sincerely.sign_off_id).text == "Sincerely"
     assert db.get(CoverLetter, sent.letter_id).sign_off_id == sincerely.sign_off_id
     assert db.get(CoverLetter, draft.letter_id).sign_off_id == saved["sign_off_id"]
+    assert db.get(CoverLetter, other.letter_id).sign_off_id == sincerely.sign_off_id
+
+
+def test_edit_sign_off_unchecked_saves_a_new_one_nothing_uses(client: TestClient, db: Session,
+                                                              account_id: int):
+    sincerely = add(db, SignOff(account_id=account_id, text="Sincerely"))
+    draft = letter(db, account_id, "Draft", sent=False, sign_off_id=sincerely.sign_off_id)
+    saved = client.put(f"/api/sign-offs/{sincerely.sign_off_id}",
+                       json={"text": "Best regards"}).json()
+    assert (saved["text"], saved["used_by"]) == ("Best regards", [])
+    db.expire_all()
+    assert db.get(CoverLetter, draft.letter_id).sign_off_id == sincerely.sign_off_id
+    # Only one in progress that uses it can be picked.
+    response = client.put(f"/api/sign-offs/{sincerely.sign_off_id}",
+                          json={"text": "Warmly", "apply_to": [{"kind": "resume", "id": 1}]})
+    assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
 
 
 def test_edit_sign_off_in_place_when_unsent(client: TestClient, db: Session, account_id: int):
     sincerely = add(db, SignOff(account_id=account_id, text="Sincerely"))
-    letter(db, account_id, "Draft", sent=False, sign_off_id=sincerely.sign_off_id)
+    draft = letter(db, account_id, "Draft", sent=False, sign_off_id=sincerely.sign_off_id)
     saved = client.put(f"/api/sign-offs/{sincerely.sign_off_id}",
-                       json={"text": "Best regards"}).json()
+                       json={"text": "Best regards",
+                             "apply_to": [{"kind": "cover_letter", "id": draft.letter_id}]}).json()
     assert (saved["sign_off_id"], saved["text"]) == (sincerely.sign_off_id, "Best regards")
 
 

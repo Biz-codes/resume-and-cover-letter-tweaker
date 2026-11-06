@@ -6,11 +6,13 @@ backend/.env), and the front end only ever talks to FastAPI.
 
 Each step is one request with a structured response: the reply's shape is a Pydantic model,
 which the SDK checks, so the app gets data it can use directly instead of text to pick apart.
+Every request streams, so a long one (a whole resume, at high effort) never hits an HTTP
+timeout, and the app waits for the whole reply.
 """
 
 import logging
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import anthropic
 from fastapi import Depends
@@ -22,7 +24,8 @@ from app.errors import AppError, ErrorCode
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-opus-5-5"
-# Room for the longest reply a step gives (a long job description copied word for word).
+# Room for a step's thinking and reply (a long job description copied word for word). A step
+# with a longer reply passes its own.
 MAX_TOKENS = 16000
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -42,14 +45,17 @@ def get_client() -> anthropic.Anthropic:
 Claude = Annotated[anthropic.Anthropic, Depends(get_client)]
 
 
-def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str, system: str, content: str,
-                      reply: type[T], effort: Effort) -> T:
-    """One request for one step, returning the reply as `reply`. Any failure, after the SDK's
-    own retries, is AI_UNAVAILABLE (docs/API_ERRORS.md), and the user's work is kept."""
+def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str,
+                      system: str | list[dict[str, Any]], content: str, reply: type[T],
+                      effort: Effort, max_tokens: int = MAX_TOKENS) -> T:
+    """One request for one step, returning the reply as `reply`. `system` is the instructions,
+    or a list of text blocks, where one marked with cache_control caches everything up to it.
+    Any failure, after the SDK's own retries, is AI_UNAVAILABLE (docs/API_ERRORS.md), and the
+    user's work is kept."""
     try:
-        response = client.beta.messages.parse(
+        with client.beta.messages.stream(
             model=MODEL,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": content}],
             # Opus 5.5 always thinks; effort sets how much (lower for simple steps).
@@ -60,7 +66,8 @@ def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str, system: str, co
             # Anthropic recommends for that case, inside the same call.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-        )
+        ) as stream:
+            response = stream.get_final_message()
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as error:
         raise AppError(ErrorCode.AI_UNAVAILABLE,
                        "Claude didn't accept the API key. Check it in backend/.env, then "

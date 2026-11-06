@@ -87,9 +87,9 @@ describe('PostingPage', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'English Teacher at Lincoln High Application' })).toBeInTheDocument()
     await vi.waitFor(() => expect(document.title).toBe('English Teacher at Lincoln High Application – Resume Tweaker'))
     await expectNotice('Next, create a header.')
-    // The suggestion: the latest header, with the role title typed in as a new headline.
-    expect(screen.getByLabelText('Name (required)')).toHaveValue('Sam Rivera')
-    expect(screen.getByLabelText('New headline')).toHaveValue('English Teacher')
+    // The suggestion: the latest header, with the role title as the headline.
+    expect(screen.getByRole('form', { name: 'Header' })).toHaveTextContent('NameSam Rivera')
+    expect(screen.getByRole('form', { name: 'Header' })).toHaveTextContent('HeadlineEnglish Teacher')
     expect(screen.getByRole('heading', { level: 3, name: 'Header' })).toBeInTheDocument()
     expect(screen.getByRole('form', { name: 'Header' })).toBeInTheDocument()
     // Nothing starts until the posting has a header.
@@ -113,9 +113,9 @@ describe('PostingPage', () => {
     // Opened again, it shows the values just saved.
     fireEvent.click(toggle)
     expect(screen.queryByRole('button', { name: 'Use this header' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Name (required)')).toHaveValue('Sam Rivera')
-    expect(screen.getByLabelText('Headline')).toHaveValue('English Teacher')
-    expect(screen.getByLabelText('Email')).toHaveValue('sam@example.com')
+    expect(screen.getByRole('form', { name: 'Header' })).toHaveTextContent('NameSam Rivera')
+    expect(screen.getByRole('form', { name: 'Header' })).toHaveTextContent('HeadlineEnglish Teacher')
+    expect(screen.getByLabelText('More email options')).toHaveAccessibleDescription('sam@example.com')
   })
 
   it('links to its resume and cover letter, with nothing more to start', async () => {

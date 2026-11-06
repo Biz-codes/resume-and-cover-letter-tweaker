@@ -1,5 +1,5 @@
 // An excerpt of narrative content's dialog: edit its text and the sections that list it
-// (following "Changing a role, project, bullet, or narrative content" in docs/FRONTEND_CHECKS.md:
+// (following "Changing an item" in docs/FRONTEND_CHECKS.md:
 // sent versions never change, and resumes and cover letters in progress change only if the user
 // picks them), add a version of it, or delete it.
 import { useState } from 'react'

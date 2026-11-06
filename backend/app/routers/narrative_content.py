@@ -4,8 +4,8 @@ paragraph combines the excerpts the user picks, in order.
 
 Like bullets, an excerpt is stored once and can be listed under any number of sections. A resume
 or cover letter stores only which excerpts it picked (resume_narrative_content,
-cover_letter_narrative_content), so editing its text follows "Changing a role, project, bullet,
-or narrative content" in docs/FRONTEND_CHECKS.md:
+cover_letter_narrative_content), so editing its text follows "Changing an item" in
+docs/FRONTEND_CHECKS.md:
 - Sent versions never change.
 - Resumes and cover letters in progress change only if the user picks them (apply_to). If
   every one is picked and no sent version uses the excerpt, it's edited in place.
@@ -30,7 +30,7 @@ from app.library import check_ids, list_beside, set_parents
 from app.models import NarrativeContent, Section, SectionNarrativeContent
 from app.refs import SectionRef, section_refs
 from app.schemas import RequiredText
-from app.usage import NARRATIVE_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
+from app.usage import NARRATIVE_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/narrative-content", tags=["narrative content"])
 
@@ -131,11 +131,9 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
         check_sections(db, body.section_ids, account_id)
     saved = excerpt
     if excerpt.content != body.content:
-        used_by = uses(db, NARRATIVE_LINKS, [content_id])[content_id]
-        sent = any(use.locked for use in used_by)
-        in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
-        chosen = chosen_in_progress(body.apply_to, used_by)
-        if not sent and chosen == in_progress:
+        in_place, chosen = edit_choice(
+            uses(db, NARRATIVE_LINKS, [content_id])[content_id], body.apply_to)
+        if in_place:
             excerpt.content = body.content
         else:
             saved = new_version(db, excerpt, body, account_id)

@@ -8,6 +8,7 @@ Reading a posting (app/posting_reader.py) only fills the form: the user corrects
 it with create. Its interviews are added and changed in app/routers/interviews.py.
 """
 
+import re
 from datetime import date, datetime
 
 from fastapi import APIRouter, status
@@ -149,15 +150,27 @@ def lone_interviews(db: Session, posting_id: int) -> list[int]:
                                   links.interview_id.not_in(shared))))
 
 
+def job_title(posting: JobPosting) -> str:
+    """The role title without the organization's name after it ("Full Stack Engineer at
+    Cascadience" is "Full Stack Engineer"), as a headline shows it."""
+    title, organization = posting.role_title.strip(), posting.organization.strip()
+    if organization:
+        pattern = rf"\s*(?:\bat\b|@|[-–—|,:])\s*{re.escape(organization)}\s*$"
+        trimmed = re.sub(pattern, "", title, flags=re.IGNORECASE).strip()
+        if trimmed:
+            return trimmed
+    return title
+
+
 def suggested_header(db: Session, posting: JobPosting) -> HeaderIn | None:
-    """The most recently used header, with the posting's role title as the headline. Phase 5
-    suggests a headline from the posting instead."""
+    """The most recently used header, with the posting's job title as the headline (the title
+    only, never the organization: docs/FRONTEND_CHECKS.md, "Headers")."""
     header_id = latest_header_id(db, posting.account_id)
     if header_id is None:
         return None
     header = db.get(Header, header_id)
     values = {field: getattr(header, field) for field in HEADER_FIELDS}
-    return HeaderIn(**{**values, "headline": posting.role_title})
+    return HeaderIn(**{**values, "headline": job_title(posting)})
 
 
 def detail(db: Session, posting: JobPosting) -> PostingDetail:
@@ -221,8 +234,17 @@ def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
                  account_id: AccountId) -> PostingDetail:
     """Replaces the applied, rejected, and hired dates and the contacts, which can change at any
     time. An applied date locks the posting's versions, and clearing it unlocks them
-    (docs/FRONTEND_CHECKS.md, "Sent versions are locked")."""
+    (docs/FRONTEND_CHECKS.md, "Sent versions are locked"). It can't be set while one of them
+    has a suggestion still to review, so a sent version is never an unreviewed draft
+    (docs/FRONTEND_CHECKS.md, "Claude's suggestions")."""
     posting = get_owned(db, JobPosting, posting_id, account_id)
+    if posting.applied_on is None and body.applied_on is not None:
+        for model, what in ((Resume, "resume"), (CoverLetter, "cover letter")):
+            if db.scalar(select(model.draft.is_not(None))
+                         .where(model.job_posting_id == posting_id)):
+                raise AppError(ErrorCode.VALIDATION_FAILED,
+                               f"Finish reviewing Claude's suggestion for the {what} first.",
+                               "applied_on")
     for name, value in body.model_dump().items():
         setattr(posting, name, value)
     return refreshed(db, posting)

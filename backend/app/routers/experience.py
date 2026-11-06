@@ -3,8 +3,8 @@
 A role's row lists every bullet that can go under it. A resume or cover letter stores only
 which role and bullets it picked (resume_experience, resume_bullet_point, and the cover letter
 tables), and prints everything about the role itself (role_title, organization, location, dates)
-from this row. So changing a role's fields follows "Changing a role, project, bullet, or
-narrative content" in docs/FRONTEND_CHECKS.md:
+from this row. So changing a role's fields follows "Changing an item" in
+docs/FRONTEND_CHECKS.md:
 
 - A sent version never changes: if one uses the role, the change is saved as a new row.
 - Resumes and cover letters in progress change only if the user picks them (apply_to). If
@@ -35,7 +35,7 @@ from app.models import (
 from app.refs import BulletRef, SectionRef, bullet_refs, section_refs
 from app.routers.sections import get_section
 from app.schemas import OptionalText, RequiredText
-from app.usage import EXPERIENCE_LINKS, DocRef, Use, chosen_in_progress, switch_unsent, uses
+from app.usage import EXPERIENCE_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/experience", tags=["experience"])
 
@@ -164,11 +164,9 @@ def update_experience(experience_id: int, body: ExperienceChange, db: DbSession,
     values = ExperienceIn(**body.model_dump(include=set(FIELDS)))
     if all(getattr(role, field) == getattr(values, field) for field in FIELDS):
         return one_out(db, role, account_id)
-    used_by = uses(db, EXPERIENCE_LINKS, [experience_id])[experience_id]
-    sent = any(use.locked for use in used_by)
-    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
-    chosen = chosen_in_progress(body.apply_to, used_by)
-    if not sent and chosen == in_progress:
+    in_place, chosen = edit_choice(
+        uses(db, EXPERIENCE_LINKS, [experience_id])[experience_id], body.apply_to)
+    if in_place:
         for field in FIELDS:
             setattr(role, field, getattr(values, field))
         db.flush()

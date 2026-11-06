@@ -3,7 +3,7 @@
 // row), that one gets the change anyway, so only the others are offered (`others`). Unchecked
 // ones keep the item as it is, so unless every one is checked (and nothing sent uses it), the
 // change is saved as a new version. Sent versions never change, so they aren't offered here
-// (docs/FRONTEND_CHECKS.md, "Changing a role, project, bullet, or narrative content").
+// (docs/FRONTEND_CHECKS.md, "Changing an item").
 import { useId } from 'react'
 import { KIND_LABELS, type Use } from '../shared/api/usage'
 import { sortByName } from '../shared/sortByName'

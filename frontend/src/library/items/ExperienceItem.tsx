@@ -1,4 +1,4 @@
-// A role's dialog: edit it (following "Changing a role, project, bullet, or narrative content" in
+// A role's dialog: edit it (following "Changing an item" in
 // docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters in progress
 // change only if the user picks them), add a version of it, delete it, and edit its ordered bullet list. Its
 // bullets and sections open in the same dialog.

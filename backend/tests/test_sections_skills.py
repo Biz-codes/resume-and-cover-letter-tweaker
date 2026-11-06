@@ -117,11 +117,27 @@ def test_section_titles_are_unique_ignoring_capitals(client: TestClient, db: Ses
     assert "already a section named" in response.json()["error"]["message"]
 
 
-@pytest.mark.parametrize(("method", "kwargs"), [("put", {"json": {"title": "Abilities"}}),
-                                                ("delete", {})])
-def test_built_in_sections_are_protected(client: TestClient, account_id: int, method, kwargs):
-    response = client.request(method, f"/api/sections/{SKILLS_SECTION_ID}", **kwargs)
+def test_built_in_sections_are_protected(client: TestClient, account_id: int):
+    response = client.delete(f"/api/sections/{SKILLS_SECTION_ID}")
     assert error(response) == (409, "BUILT_IN_PROTECTED", None)
+
+
+def test_a_new_title_for_a_built_in_section_saves_a_new_one(client: TestClient, db: Session,
+                                                           account_id: int):
+    doc = resume(db, account_id, "Draft", sent=False)
+    other = resume(db, account_id, "Other draft", sent=False)
+    picked = add(db, ResumeSection(resume_id=doc.resume_id, section_id=SKILLS_SECTION_ID,
+                                   position=1))
+    kept = add(db, ResumeSection(resume_id=other.resume_id, section_id=SKILLS_SECTION_ID,
+                                 position=1))
+    # Even with every one in progress checked, the built-in section keeps its title.
+    new = client.put(f"/api/sections/{SKILLS_SECTION_ID}",
+                     json={"title": "Abilities",
+                           "apply_to": [{"kind": "resume", "id": doc.resume_id}]}).json()
+    assert (new["title"], new["built_in"]) == ("Abilities", False)
+    db.expire_all()
+    assert db.get(Section, SKILLS_SECTION_ID).title == "Skills"
+    assert (picked.section_id, kept.section_id) == (new["id"], SKILLS_SECTION_ID)
 
 
 def test_rename_section_in_place_when_no_sent_version_uses_it(client: TestClient, db: Session,
@@ -129,7 +145,9 @@ def test_rename_section_in_place_when_no_sent_version_uses_it(client: TestClient
     section = add(db, Section(account_id=account_id, title="Volunteer"))
     doc = resume(db, account_id, "Draft", sent=False)
     add(db, ResumeSection(resume_id=doc.resume_id, section_id=section.id, position=1))
-    response = client.put(f"/api/sections/{section.id}", json={"title": "Volunteering"})
+    response = client.put(f"/api/sections/{section.id}",
+                          json={"title": "Volunteering",
+                                "apply_to": [{"kind": "resume", "id": doc.resume_id}]})
     assert (response.json()["id"], response.json()["title"]) == (section.id, "Volunteering")
 
 
@@ -139,9 +157,12 @@ def test_rename_section_a_sent_version_uses_saves_a_new_one(client: TestClient, 
     tools = category(db, account_id, "Tools", ["Git"], section_id=section.id)
     sent = add(db, ResumeSection(resume_id=resume(db, account_id, "Sent", True).resume_id,
                                  section_id=section.id, position=1))
-    draft = add(db, ResumeSection(resume_id=resume(db, account_id, "Draft", False).resume_id,
-                                  section_id=section.id, position=1))
-    new = client.put(f"/api/sections/{section.id}", json={"title": "Consulting"}).json()
+    draft_doc = resume(db, account_id, "Draft", False)
+    draft = add(db, ResumeSection(resume_id=draft_doc.resume_id, section_id=section.id,
+                                  position=1))
+    new = client.put(f"/api/sections/{section.id}",
+                     json={"title": "Consulting",
+                           "apply_to": [{"kind": "resume", "id": draft_doc.resume_id}]}).json()
     assert new["id"] != section.id
     assert [c["category_id"] for c in new["skill_categories"]] == [tools.category_id]
     db.expire_all()
@@ -235,11 +256,17 @@ def test_category_names_are_unique_ignoring_capitals(client: TestClient, db: Ses
     assert error(response) == (409, "DUPLICATE", "category_name")
 
 
-@pytest.mark.parametrize(("method", "kwargs"), [("put", {"json": {"category_name": "Misc"}}),
-                                                ("delete", {})])
-def test_other_is_protected(client: TestClient, account_id: int, method, kwargs):
-    response = client.request(method, f"/api/skill-categories/{OTHER_CATEGORY_ID}", **kwargs)
+def test_other_is_protected(client: TestClient, account_id: int):
+    response = client.delete(f"/api/skill-categories/{OTHER_CATEGORY_ID}")
     assert error(response) == (409, "BUILT_IN_PROTECTED", None)
+
+
+def test_a_new_name_for_other_saves_a_new_category(client: TestClient, db: Session,
+                                                   account_id: int):
+    new = client.put(f"/api/skill-categories/{OTHER_CATEGORY_ID}",
+                     json={"category_name": "Misc"}).json()
+    assert (new["category_name"], new["built_in"]) == ("Misc", False)
+    assert db.get(SkillCategory, OTHER_CATEGORY_ID).category_name == "Other"
 
 
 def test_rename_category_a_sent_version_uses_saves_a_new_one(client: TestClient, db: Session,
@@ -248,14 +275,18 @@ def test_rename_category_a_sent_version_uses_saves_a_new_one(client: TestClient,
     old = category(db, account_id, "Backend", ["Go", "Python"])
     last = category(db, account_id, "Tools", ["Git"])
     sent = show_skills(db, resume(db, account_id, "Sent", True), old, ["Go"])
-    draft = show_skills(db, resume(db, account_id, "Draft", False), old, ["Python"])
+    draft_doc = resume(db, account_id, "Draft", False)
+    draft = show_skills(db, draft_doc, old, ["Python"])
+    kept = show_skills(db, resume(db, account_id, "Other draft", False), old, ["Go"])
 
     new = client.put(f"/api/skill-categories/{old.category_id}",
-                     json={"category_name": "Back End"}).json()
+                     json={"category_name": "Back End",
+                           "apply_to": [{"kind": "resume", "id": draft_doc.resume_id}]}).json()
     assert new["category_id"] != old.category_id
     assert [s["skill_name"] for s in new["skills"]] == ["Go", "Python"]
     db.expire_all()
     assert (sent.category_id, draft.category_id) == (old.category_id, new["category_id"])
+    assert kept.category_id == old.category_id
     assert shown(db, draft.resume_skill_category_id) == ["Python"]
     in_skills = list(db.scalars(select(SectionSkillCategory.category_id)
                                 .where(SectionSkillCategory.section_id == SKILLS_SECTION_ID)
@@ -420,7 +451,9 @@ def test_rename_skill_a_sent_version_uses_saves_a_new_one(client: TestClient, db
     add(db, ResumeProjectSkill(resume_project_id=draft_project.resume_project_id,
                                skill_id=claude, position=1))
 
-    new = client.put(f"/api/skills/{claude}", json={"skill_name": "Claude Code"}).json()
+    new = client.put(f"/api/skills/{claude}",
+                     json={"skill_name": "Claude Code",
+                           "apply_to": [{"kind": "resume", "id": draft_doc.resume_id}]}).json()
     assert new["skill_id"] != claude
     assert [c["category_name"] for c in new["categories"]] == ["AI"]
     assert [p["project_title"] for p in new["projects"]] == ["App"]

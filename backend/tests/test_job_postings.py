@@ -4,6 +4,7 @@ posting", and "Tracking an application")."""
 
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.models import (
     Resume,
     SignOff,
 )
+from app.routers.job_postings import job_title
 from tests.test_documents import SAM, build_resume, header, posting
 from tests.test_sections_skills import add, error
 
@@ -54,6 +56,19 @@ def test_another_accounts_posting_is_not_found(client: TestClient, db: Session,
     assert error(client.post("/api/resumes", json={
         "name": "Mine", "job_posting_id": theirs.job_posting_id})) == (
         404, "NOT_FOUND", "job_posting_id")
+
+
+@pytest.mark.parametrize(("role_title", "headline"), [
+    ("Full Stack Engineer at Cascadience", "Full Stack Engineer"),
+    ("Full Stack Engineer - cascadience", "Full Stack Engineer"),
+    ("Full Stack Engineer | Cascadience", "Full Stack Engineer"),
+    ("Full Stack Engineer @ Cascadience", "Full Stack Engineer"),
+    ("Cascadience Engineer", "Cascadience Engineer"),
+    ("Cascadience", "Cascadience"),
+])
+def test_the_suggested_headline_is_the_job_title_only(role_title, headline):
+    posting = JobPosting(role_title=role_title, organization="Cascadience")
+    assert job_title(posting) == headline
 
 
 def test_the_header_is_suggested_then_picked(client: TestClient, db: Session, account_id: int):

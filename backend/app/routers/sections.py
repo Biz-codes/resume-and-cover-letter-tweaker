@@ -1,9 +1,11 @@
 """Sections: the headings of a resume, or the topics of a cover letter.
 
 The five built-in sections are shared by every account and can't be renamed or deleted.
-Renaming a section that a sent version uses saves a new section (docs/FRONTEND_CHECKS.md,
-"Sent versions are locked"). A new version (of any section, built-in ones too) has a new title
-and the same lists. Titles are unique (DUPLICATE).
+Renaming a section follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions never
+change, and resumes and cover letters in progress change only if the user picks them
+(apply_to). Unless every one is picked and nothing sent uses it, the new title is saved as a new
+section with the same lists, and only the picked ones switch to it. A built-in section is never
+renamed, so a new title for one is always a new section. Titles are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status
@@ -47,12 +49,17 @@ from app.refs import (
     project_refs,
 )
 from app.schemas import RequiredText
-from app.usage import SECTION_LINKS, Use, switch_unsent, used_by_sent_version, uses
+from app.usage import SECTION_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/sections", tags=["sections"])
 
 class SectionIn(BaseModel):
     title: RequiredText(100)
+
+
+class SectionChange(SectionIn):
+    # The resumes and cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 class CategoryRef(BaseModel):
@@ -200,27 +207,28 @@ def create_section(body: SectionIn, db: DbSession, account_id: AccountId) -> Sec
 
 
 @router.put("/{section_id}")
-def rename_section(section_id: int, body: SectionIn, db: DbSession,
+def rename_section(section_id: int, body: SectionChange, db: DbSession,
                    account_id: AccountId) -> SectionOut:
-    """Renames the section, unless a sent version uses it.
+    """Renames the section (see the module docstring for when that's a new section).
 
-    Then the new title is saved as a new section with the same lists, and unsent resumes and
-    cover letters switch to it. The response's id differs from the one in the url then.
+    The response's id differs from the one in the url when a new section was saved.
     """
     section = get_section(db, section_id, account_id)
     if section.title == body.title:
         return one_out(db, section, account_id)
-    protect_built_in(section, "renamed")
     check_unique_name(db, Section.title, account_id, body.title, "section",
                       exclude=Section.id != section_id)
-    if not used_by_sent_version(db, SECTION_LINKS, section_id):
+    in_place, chosen = edit_choice(uses(db, SECTION_LINKS, [section_id])[section_id],
+                                   body.apply_to, fixed=section.account_id is None)
+    if in_place:
         section.title = body.title
         db.flush()
         db.refresh(section)
         return one_out(db, section, account_id)
 
     replacement = new_version(db, section, body, account_id)
-    switch_unsent(db, SECTION_LINKS, section_id, replacement.id)
+    if chosen:
+        switch_unsent(db, SECTION_LINKS, section_id, replacement.id, only=chosen)
     return one_out(db, replacement, account_id)
 
 

@@ -1,10 +1,11 @@
 """Sign-offs: the closing before the name at the end of a cover letter ("Sincerely").
 
-A cover letter points to its sign-off (sign_off_id) and prints its text. So editing a sign-off
-a sent cover letter uses saves a new sign-off; sent letters keep the original and unsent ones
-switch to the new one. A sign-off no sent letter uses is edited in place
-(docs/FRONTEND_CHECKS.md, "Sent versions are locked"). A version added on purpose is a new
-sign-off nothing switches to. Deleting one leaves the letters that used it with no closing.
+A cover letter points to its sign-off (sign_off_id) and prints its text. So editing one
+follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent letters never change, and letters
+in progress change only if the user picks them (apply_to). Unless every one is picked and no
+sent letter uses it, the new text is saved as a new sign-off, and only the picked ones switch to
+it. A version added on purpose is a new sign-off nothing switches to. Deleting one leaves the
+letters that used it with no closing.
 """
 
 from fastapi import APIRouter, Response, status
@@ -17,7 +18,7 @@ from app.db import DbSession
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.models import CoverLetter, SignOff
 from app.schemas import RequiredText
-from app.usage import Use, column_uses, switch_unsent_column
+from app.usage import DocRef, Use, column_uses, edit_choice, switch_unsent_column
 
 router = APIRouter(prefix="/api/sign-offs", tags=["sign-offs"])
 
@@ -26,6 +27,11 @@ USED_BY = [CoverLetter.sign_off_id]
 
 class SignOffIn(BaseModel):
     text: RequiredText(100)
+
+
+class SignOffChange(SignOffIn):
+    # The cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 class SignOffOut(SignOffIn):
@@ -71,24 +77,27 @@ def create_sign_off(body: SignOffIn, db: DbSession, account_id: AccountId) -> Si
 
 
 @router.put("/{sign_off_id}")
-def update_sign_off(sign_off_id: int, body: SignOffIn, db: DbSession,
+def update_sign_off(sign_off_id: int, body: SignOffChange, db: DbSession,
                     account_id: AccountId) -> SignOffOut:
-    """Edits it in place, unless a sent cover letter uses it (see the module docstring).
+    """Changes its text (see the module docstring for when that's a new sign-off).
 
     The response's sign_off_id differs from the one in the url when a new one was saved.
     """
     sign_off = get_owned(db, SignOff, sign_off_id, account_id)
     if sign_off.text == body.text:
         return one_out(db, sign_off)
-    used_by = column_uses(db, USED_BY, [sign_off_id])[sign_off_id]
-    if not any(use.locked for use in used_by):
+    in_place, chosen = edit_choice(column_uses(db, USED_BY, [sign_off_id])[sign_off_id],
+                                   body.apply_to)
+    if in_place:
         sign_off.text = body.text
         db.flush()
         db.refresh(sign_off)
         return one_out(db, sign_off)
 
     replacement = new_version(db, body, account_id)
-    switch_unsent_column(db, CoverLetter.sign_off_id, sign_off_id, replacement.sign_off_id)
+    if chosen:
+        switch_unsent_column(db, CoverLetter.sign_off_id, sign_off_id, replacement.sign_off_id,
+                             only=chosen)
     return one_out(db, replacement)
 
 

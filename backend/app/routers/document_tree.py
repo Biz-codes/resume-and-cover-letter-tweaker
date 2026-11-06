@@ -10,6 +10,9 @@ its defaults (app/defaults.py).
 
 Undo and redo on the document's page send a whole earlier tree back (restore_tree).
 
+A posting's document gets Claude's suggestion through POST .../suggestion (app/suggestions.py),
+which is stored in its draft for the user to review.
+
 Like the library lists, a change to a list sends the whole list in its new order. Rows that stay
 keep their ids, so what's under them stays too; rows left out are removed with everything under
 them. A sent version can't change (VERSION_LOCKED), and every change updates the document's
@@ -25,6 +28,7 @@ from sqlalchemy import ColumnElement, delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude
 from app.db import DbSession
 from app.defaults import (
     SECTION_LISTS,
@@ -72,6 +76,7 @@ from app.routers.skill_categories import new_version as category_version
 from app.routers.skills import SkillIn
 from app.routers.skills import new_version as skill_version
 from app.schemas import RequiredText
+from app.suggestions import Suggestion, suggest
 from app.usage import touch
 
 
@@ -436,6 +441,23 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         db.flush()
         db.refresh(doc)
         return detail(db, doc)
+
+    @router.post("/{doc_id}/suggestion")
+    def make_suggestion(doc_id: int, db: DbSession, account_id: AccountId,
+                        client: Claude) -> Suggestion:
+        """Claude's suggestion for a posting's document, stored in its draft for the user to
+        review (docs/FRONTEND_CHECKS.md, "Claude's suggestions"). Nothing else changes."""
+        doc = editable(db, doc_id, account_id)
+        if doc.job_posting_id is None:
+            raise AppError(ErrorCode.VALIDATION_FAILED,
+                           "Claude suggests content only for a posting's resume or cover letter.")
+        if doc.draft is not None:
+            raise AppError(ErrorCode.VALIDATION_FAILED,
+                           "There's already a suggestion to review.")
+        suggestion = suggest(db, client, kind, account_id, doc)
+        doc.draft = suggestion.model_dump()
+        db.flush()
+        return suggestion
 
     @router.put("/{doc_id}/header")
     def set_header(doc_id: int, body: HeaderIn, db: DbSession, account_id: AccountId):

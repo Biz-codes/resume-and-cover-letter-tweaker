@@ -2,11 +2,11 @@
 
 A resume or cover letter stores only which entries it picked (resume_education,
 cover_letter_education) and prints the degree, institution, details, and graduation from this
-row. So editing an entry a sent version uses saves a new entry, listed right after the
-original in its sections; sent versions keep the original and unsent ones switch to the new
-one. An entry no sent version uses is edited in place (docs/FRONTEND_CHECKS.md, "Sent
-versions are locked"). A version added on purpose is listed the same way, and nothing switches
-to it.
+row. So editing an entry follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions
+never change, and resumes and cover letters in progress change only if the user picks them
+(apply_to). Unless every one is picked and nothing sent uses it, the change is saved as a new
+entry, listed right after the original in its sections, and only the picked ones switch to it.
+A version added on purpose is listed the same way, and nothing switches to it.
 """
 
 from datetime import datetime
@@ -24,7 +24,7 @@ from app.models import EDUCATION_SECTION_ID, Education, SectionEducation
 from app.refs import SectionRef, section_refs
 from app.routers.sections import get_section
 from app.schemas import OptionalText, RequiredText
-from app.usage import EDUCATION_LINKS, Use, switch_unsent, used_by_sent_version, uses
+from app.usage import EDUCATION_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 
 router = APIRouter(prefix="/api/education", tags=["education"])
 
@@ -49,6 +49,11 @@ class EducationOut(EducationIn):
     created_at: datetime
     sections: list[SectionRef]
     used_by: list[Use]
+
+
+class EducationChange(EducationIn):
+    # The resumes and cover letters in progress that get the change; the rest keep the original.
+    apply_to: list[DocRef] = []
 
 
 FIELDS = list(EducationIn.model_fields)
@@ -111,16 +116,18 @@ def create_education(body: NewEducation, db: DbSession, account_id: AccountId) -
 
 
 @router.put("/{education_id}")
-def update_education(education_id: int, body: EducationIn, db: DbSession,
+def update_education(education_id: int, body: EducationChange, db: DbSession,
                      account_id: AccountId) -> EducationOut:
-    """Edits the entry in place, unless a sent version uses it (see the module docstring).
+    """Changes the entry's fields (see the module docstring for when that's a new entry).
 
     The response's education_id differs from the one in the url when a new entry was saved.
     """
     entry = get_owned(db, Education, education_id, account_id)
     if all(getattr(entry, field) == getattr(body, field) for field in FIELDS):
         return one_out(db, entry)
-    if not used_by_sent_version(db, EDUCATION_LINKS, education_id):
+    in_place, chosen = edit_choice(
+        uses(db, EDUCATION_LINKS, [education_id])[education_id], body.apply_to)
+    if in_place:
         for field in FIELDS:
             setattr(entry, field, getattr(body, field))
         db.flush()
@@ -128,7 +135,8 @@ def update_education(education_id: int, body: EducationIn, db: DbSession,
         return one_out(db, entry)
 
     replacement = new_version(db, entry, body, account_id)
-    switch_unsent(db, EDUCATION_LINKS, education_id, replacement.education_id)
+    if chosen:
+        switch_unsent(db, EDUCATION_LINKS, education_id, replacement.education_id, only=chosen)
     return one_out(db, replacement)
 
 
