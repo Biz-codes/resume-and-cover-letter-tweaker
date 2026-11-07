@@ -11,7 +11,7 @@ A version added on purpose is listed the same way, and nothing switches to it.
 
 from datetime import datetime
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -138,18 +138,6 @@ def update_education(education_id: int, body: EducationChange, db: DbSession,
     if chosen:
         switch_unsent(db, EDUCATION_LINKS, education_id, replacement.education_id, only=chosen)
     return one_out(db, replacement)
-
-
-@router.post("/{education_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(education_id: int, body: EducationIn, response: Response, db: DbSession,
-                account_id: AccountId) -> EducationOut:
-    """Adds another version of the entry on purpose. Nothing switches to it. With nothing
-    changed, the original is returned (status 200) instead of adding a copy."""
-    original = get_owned(db, Education, education_id, account_id)
-    if all(getattr(original, field) == getattr(body, field) for field in FIELDS):
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original)
-    return one_out(db, new_version(db, original, body, account_id))
 
 
 @router.put("/{education_id}/hidden")

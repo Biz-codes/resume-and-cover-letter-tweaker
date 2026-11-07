@@ -8,7 +8,7 @@ it. A version added on purpose is a new sign-off nothing switches to. Deleting o
 letters that used it with no closing.
 """
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -99,18 +99,6 @@ def update_sign_off(sign_off_id: int, body: SignOffChange, db: DbSession,
         switch_unsent_column(db, CoverLetter.sign_off_id, sign_off_id, replacement.sign_off_id,
                              only=chosen)
     return one_out(db, replacement)
-
-
-@router.post("/{sign_off_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(sign_off_id: int, body: SignOffIn, response: Response, db: DbSession,
-                account_id: AccountId) -> SignOffOut:
-    """Adds another version of the sign-off on purpose. Nothing switches to it. With the text
-    unchanged, the original is returned (status 200) instead of adding a copy."""
-    original = get_owned(db, SignOff, sign_off_id, account_id)
-    if original.text == body.text:
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original)
-    return one_out(db, new_version(db, body, account_id))
 
 
 @router.put("/{sign_off_id}/hidden")

@@ -18,6 +18,7 @@ from app.models import (
     NarrativeContent,
     Project,
     Resume,
+    ResumeExperience,
     ResumeSection,
     Section,
     SectionExperience,
@@ -145,13 +146,19 @@ def test_a_hidden_header_or_sign_off_isnt_a_default(client: TestClient, db: Sess
     assert (created["header_id"], created["sign_off_id"]) == (None, None)
 
 
-def test_a_new_version_of_a_hidden_item_starts_unhidden(client: TestClient, db: Session,
-                                                        account_id: int):
+def test_a_hidden_item_saved_as_a_new_row_starts_unhidden(client: TestClient, db: Session,
+                                                          account_id: int):
     role = add(db, Experience(account_id=account_id, role_title="Engineer", organization="Acme"))
     add(db, SectionExperience(section_id=EXPERIENCE_SECTION_ID, experience_id=role.experience_id,
                               position=1))
     client.put(f"/api/experience/{role.experience_id}/hidden", json={"hidden": True})
-    version = client.post(f"/api/experience/{role.experience_id}/versions",
-                          json={"role_title": "Senior Engineer", "organization": "Acme",
-                                "location": None, "dates": None})
-    assert version.json()["hidden"] is False
+    sent = resume(db, account_id, "Sent", sent=True)
+    section = add(db, ResumeSection(resume_id=sent.resume_id, section_id=EXPERIENCE_SECTION_ID,
+                                    position=1))
+    add(db, ResumeExperience(resume_section_id=section.resume_section_id,
+                             experience_id=role.experience_id, position=1))
+    saved = client.put(f"/api/experience/{role.experience_id}",
+                       json={"role_title": "Senior Engineer", "organization": "Acme",
+                             "location": None, "dates": None, "apply_to": []}).json()
+    assert saved["experience_id"] != role.experience_id
+    assert saved["hidden"] is False

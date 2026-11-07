@@ -214,26 +214,22 @@ def test_delete_section_removes_it_from_resumes(client: TestClient, db: Session,
     assert db.get(ResumeSection, placed_id) is None
 
 
-def test_a_version_of_a_built_in_section_copies_only_the_accounts_lists(
+def test_a_new_title_for_a_built_in_section_lists_only_the_accounts_items(
         client: TestClient, db: Session, account_id: int):
     category(db, add(db, Account()).account_id, "Theirs")
     mine = category(db, account_id, "Mine")
-    response = client.post(f"/api/sections/{SKILLS_SECTION_ID}/versions",
-                           json={"title": "Technical Skills"})
-    assert response.status_code == 201
-    version = response.json()
-    assert (version["title"], version["built_in"], version["used_by"]) == (
-        "Technical Skills", False, [])
-    assert version["skill_categories"] == [{"category_id": mine.category_id,
-                                            "category_name": "Mine"}]
+    new = client.put(f"/api/sections/{SKILLS_SECTION_ID}",
+                     json={"title": "Technical Skills"}).json()
+    assert (new["title"], new["built_in"], new["used_by"]) == ("Technical Skills", False, [])
+    assert new["skill_categories"] == [{"category_id": mine.category_id,
+                                        "category_name": "Mine"}]
 
 
-def test_a_version_of_a_section_needs_a_new_title(client: TestClient, db: Session,
-                                                  account_id: int):
+def test_a_section_cant_take_another_sections_title(client: TestClient, db: Session,
+                                                    account_id: int):
     section = add(db, Section(account_id=account_id, title="Volunteer"))
-    for title in ("Volunteer", "skills"):
-        response = client.post(f"/api/sections/{section.id}/versions", json={"title": title})
-        assert error(response) == (409, "DUPLICATE", "title"), title
+    response = client.put(f"/api/sections/{section.id}", json={"title": "skills"})
+    assert error(response) == (409, "DUPLICATE", "title")
 
 
 # Skill categories
@@ -378,36 +374,25 @@ def test_delete_category_moves_cover_letter_selections_too(client: TestClient, d
     assert db.scalars(select(CoverLetterSkill.skill_id)).all() == [skill_id(db, "Go")]
 
 
-def test_a_version_of_a_category_lists_the_same_skills_right_after_it(
-        client: TestClient, db: Session, account_id: int):
-    original = category(db, account_id, "Front End", ["React", "CSS"])
-    later = category(db, account_id, "Tools")
-    response = client.post(f"/api/skill-categories/{original.category_id}/versions",
-                           json={"category_name": "Web"})
-    assert response.status_code == 201
-    version = response.json()
-    assert [s["skill_name"] for s in version["skills"]] == ["React", "CSS"]
-    assert version["used_by"] == []
-    in_section = list(db.scalars(select(SectionSkillCategory.category_id)
-                                 .where(SectionSkillCategory.section_id == SKILLS_SECTION_ID)
-                                 .order_by(SectionSkillCategory.position)))
-    assert in_section == [original.category_id, version["category_id"], later.category_id]
-    response = client.post(f"/api/skill-categories/{original.category_id}/versions",
-                           json={"category_name": "front end"})
-    assert error(response) == (409, "DUPLICATE", "category_name")
-
-
-def test_a_version_of_other_lists_only_the_accounts_skills(client: TestClient, db: Session,
-                                                           account_id: int):
+def test_a_new_name_for_other_lists_only_the_accounts_skills(client: TestClient, db: Session,
+                                                              account_id: int):
     theirs = add(db, Skill(account_id=add(db, Account()).account_id, skill_name="Theirs"))
     mine = add(db, Skill(account_id=account_id, skill_name="Mine"))
     for skill in (theirs, mine):
         add(db, SkillCategorySkill(category_id=OTHER_CATEGORY_ID, skill_id=skill.skill_id,
                                    position=skill.skill_id))
-    response = client.post(f"/api/skill-categories/{OTHER_CATEGORY_ID}/versions",
-                           json={"category_name": "Misc"})
-    assert (response.json()["built_in"], [s["skill_name"] for s in response.json()["skills"]]) == (
-        False, ["Mine"])
+    new = client.put(f"/api/skill-categories/{OTHER_CATEGORY_ID}",
+                     json={"category_name": "Misc"}).json()
+    assert (new["built_in"], [s["skill_name"] for s in new["skills"]]) == (False, ["Mine"])
+
+
+def test_a_category_cant_take_another_categorys_name(client: TestClient, db: Session,
+                                                     account_id: int):
+    category(db, account_id, "Front End")
+    tools = category(db, account_id, "Tools")
+    response = client.put(f"/api/skill-categories/{tools.category_id}",
+                          json={"category_name": "front end"})
+    assert error(response) == (409, "DUPLICATE", "category_name")
 
 
 # Skills
@@ -481,16 +466,8 @@ def test_delete_skill(client: TestClient, db: Session, account_id: int):
     assert listed(db, row.category_id, account_id) == []
 
 
-def test_a_version_of_a_skill_is_listed_right_after_it(client: TestClient, db: Session,
-                                                       account_id: int):
-    row = category(db, account_id, "Front End", ["JS", "CSS"])
-    project = add(db, Project(account_id=account_id, project_title="Tweaker"))
-    add(db, ProjectSkill(project_id=project.project_id, skill_id=skill_id(db, "JS"), position=1))
-    response = client.post(f"/api/skills/{skill_id(db, 'JS')}/versions",
-                           json={"skill_name": "JavaScript"})
-    assert response.status_code == 201
-    assert (response.json()["used_by"], [p["project_title"] for p in response.json()["projects"]]
-            ) == ([], ["Tweaker"])
-    assert listed(db, row.category_id, account_id) == ["JS", "JavaScript", "CSS"]
-    response = client.post(f"/api/skills/{skill_id(db, 'JS')}/versions", json={"skill_name": "css"})
+def test_a_skill_cant_take_another_skills_name(client: TestClient, db: Session,
+                                               account_id: int):
+    category(db, account_id, "Front End", ["JS", "CSS"])
+    response = client.put(f"/api/skills/{skill_id(db, 'JS')}", json={"skill_name": "css"})
     assert error(response) == (409, "DUPLICATE", "skill_name")

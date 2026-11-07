@@ -16,7 +16,7 @@ docs/FRONTEND_CHECKS.md:
 
 from datetime import datetime
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -136,21 +136,6 @@ def create_experience(body: NewExperience, db: DbSession,
         append(db, SectionExperience, "section_id", body.section_id, "experience_id",
                experience.experience_id)
     return one_out(db, experience, account_id)
-
-
-@router.post("/{experience_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(experience_id: int, body: ExperienceIn, response: Response, db: DbSession,
-                account_id: AccountId) -> ExperienceOut:
-    """Adds another version of the role on purpose, sharing its bullets.
-
-    Nothing switches to it. With nothing changed, the original is returned (status 200)
-    instead of adding a copy.
-    """
-    original = get_owned(db, Experience, experience_id, account_id)
-    if all(getattr(original, field) == getattr(body, field) for field in FIELDS):
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original, account_id)
-    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.put("/{experience_id}")

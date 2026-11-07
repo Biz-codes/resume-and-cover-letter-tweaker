@@ -18,7 +18,7 @@ drive suggestions, so changing them never makes a new excerpt; when a text edit 
 sections chosen apply to the new excerpt, and the original keeps its own.
 """
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -144,18 +144,6 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
     db.flush()
     db.refresh(saved)
     return one_out(db, saved)
-
-
-@router.post("/{content_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(content_id: int, body: NarrativeIn, response: Response, db: DbSession,
-                account_id: AccountId) -> NarrativeOut:
-    """Adds another version of the excerpt on purpose. Nothing switches to it. With the text
-    unchanged, the original is returned (status 200) instead of adding a copy."""
-    original = get_owned(db, NarrativeContent, content_id, account_id)
-    if original.content == body.content:
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original)
-    return one_out(db, new_version(db, original, body, account_id))
 
 
 @router.put("/{content_id}/hidden")

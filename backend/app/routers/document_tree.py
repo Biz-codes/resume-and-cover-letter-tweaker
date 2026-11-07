@@ -4,9 +4,8 @@ kinds, in one order), a category's or project's skills, and a role's or project'
 Writing a new item in place (narrative content, a bullet, a role, a project, an education entry,
 a skill category, or a skill under a category or project) saves it to the library, listed under
 its section, category, role, or project (docs/FRONTEND_CHECKS.md, "New items are listed under
-their parent"), and places it; a new version of a bullet or narrative content takes the
-original's place. A section added, or an item placed without its skills or bullets, starts with
-its defaults (app/defaults.py).
+their parent"), and places it. A section added, or an item placed without its skills or bullets,
+starts with its defaults (app/defaults.py).
 
 Undo and redo on the document's page send a whole earlier tree back (restore_tree).
 
@@ -48,7 +47,7 @@ from app.documents import (
     standalone_bullets,
 )
 from app.errors import AppError, ErrorCode
-from app.library import append, check_ids, check_unique_name, list_beside
+from app.library import append, check_ids, check_unique_name
 from app.models import (
     OTHER_CATEGORY_ID,
     BulletPoint,
@@ -56,25 +55,15 @@ from app.models import (
     ProjectBulletPoint,
     ProjectSkill,
     Section,
-    SectionNarrativeContent,
     Skill,
     SkillCategory,
     SkillCategorySkill,
 )
-from app.routers.bullet_points import BULLET_LISTS
 from app.routers.education import EducationIn
-from app.routers.education import new_version as education_version
 from app.routers.experience import ExperienceIn
-from app.routers.experience import new_version as role_version
 from app.routers.headers import HeaderIn, find_or_add
 from app.routers.projects import ProjectIn
-from app.routers.projects import new_version as project_version
-from app.routers.sections import SectionIn
-from app.routers.sections import new_version as section_version
 from app.routers.skill_categories import CategoryIn
-from app.routers.skill_categories import new_version as category_version
-from app.routers.skills import SkillIn
-from app.routers.skills import new_version as skill_version
 from app.schemas import RequiredText
 from app.suggestions import Suggestion, suggest
 from app.usage import touch
@@ -130,9 +119,6 @@ class BulletList(BaseModel):
 class WrittenText(BaseModel):
     kind: Literal["narrative", "bullet"]
     content: RequiredText()
-    # A new version of an item of this kind placed directly in the section: the new one takes
-    # its place there, and the original stays in the library.
-    replaces: int | None = None
 
 
 class WrittenRole(ExperienceIn):
@@ -151,25 +137,9 @@ class WrittenCategory(CategoryIn):
     kind: Literal["category"]
 
 
-# A new version of a role, project, education entry, or skill category placed in a section, with
-# its kind's own fields.
-Versioned = Annotated[WrittenRole | WrittenProject | WrittenEducation | WrittenCategory,
-                      Field(discriminator="kind")]
-
-
-class VersionedTitle(BaseModel):
-    title: RequiredText(100)
-
-
 # A new library item of any kind, written in a section, with that kind's own fields.
 Written = Annotated[WrittenText | WrittenRole | WrittenProject | WrittenEducation
                     | WrittenCategory, Field(discriminator="kind")]
-
-
-# Every library list a new version of text is listed in, right after the original, as when
-# editing text a sent version uses.
-VERSION_LISTS: dict[EntryKind, list[tuple[Any, str]]] = {
-    "bullet": BULLET_LISTS, "narrative": [(SectionNarrativeContent, "section_id")]}
 
 
 class WrittenSkill(BaseModel):
@@ -182,9 +152,6 @@ class WrittenSection(BaseModel):
 
 class WrittenBullet(BaseModel):
     content: RequiredText()
-    # A new version of a bullet shown under this role or project: the new one takes its place
-    # here, and the original stays in the library.
-    replaces: int | None = None
 
 
 def _pk(model) -> Any:
@@ -268,20 +235,6 @@ def _check_bullets_once(db: Session, kind: Kind, section_row: int, bullet_ids: l
         raise AppError(ErrorCode.DUPLICATE,
                        f'"{taken}" is already in this section. A bullet can be in a section once.',
                        field=field)
-
-
-def _unchanged(field: str | None) -> AppError:
-    """A new version must differ from the item it's a version of (VALIDATION_FAILED), so saving
-    an unchanged copy never adds a duplicate to the library."""
-    return AppError(ErrorCode.VALIDATION_FAILED,
-                    "That's the same as the original. Change something to save a new version.",
-                    field=field)
-
-
-def _check_changed(db: Session, library, item_column: str, item_id: int, content: str) -> None:
-    original = db.scalar(select(library.content).where(getattr(library, item_column) == item_id))
-    if original is not None and original.strip() == content:
-        raise _unchanged("content")
 
 
 def apply_skills(db: Session, kind: Kind, entry_kind: str, row_id: int, item_id: int,
@@ -582,41 +535,21 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                          account_id: AccountId):
         """A new library item of any kind (narrative content, a bullet, a role, a project, an
         education entry, or a skill category), listed last under the section, and placed last
-        in it here. A skill category's name must be new (DUPLICATE). A new version of narrative
-        content or a bullet placed here (`replaces`) is listed right after the original wherever
-        the original is listed (and under the section), and takes its place here; it must differ
-        from the original (VALIDATION_FAILED)."""
+        in it here. A skill category's name must be new (DUPLICATE)."""
         doc = editable(db, doc_id, account_id)
         section_id = _section_row(db, kind, doc_id, row_id)
         if body.kind == "category":
             check_unique_name(db, SkillCategory.category_name, account_id, body.category_name,
                               "skill category")
         library, item_column, _ = LIBRARY[body.kind]
-        model = entry_kinds[body.kind]
-        table = model.__table__
-        replaces = getattr(body, "replaces", None)
-        replaced_row = None
-        if replaces is not None:
-            replaced_row = db.scalar(select(_pk(model)).where(
-                in_section(kind, model, row_id), table.c[item_column] == replaces))
-            if replaced_row is None:
-                raise AppError(ErrorCode.NOT_FOUND, field="replaces")
-            _check_changed(db, library, item_column, replaces, body.content)
-        item = library(account_id=account_id, **body.model_dump(exclude={"kind", "replaces"}))
+        item = library(account_id=account_id, **body.model_dump(exclude={"kind"}))
         db.add(item)
         db.flush()
         item_id = getattr(item, item_column)
-        if replaced_row is not None:
-            for link, parent_col in VERSION_LISTS[body.kind]:
-                list_beside(db, link, parent_col, item_column, replaces, item_id)
         append(db, SECTION_LISTS[body.kind], "section_id", section_id, item_column, item_id)
-        if replaced_row is None:
-            db.execute(insert(table).values({
-                kind.column("section"): row_id, item_column: item_id,
-                "position": _next_position(db, kind, row_id)}))
-        else:
-            db.execute(update(table).where(_pk(model) == replaced_row)
-                       .values({item_column: item_id}))
+        db.execute(insert(entry_kinds[body.kind].__table__).values({
+            kind.column("section"): row_id, item_column: item_id,
+            "position": _next_position(db, kind, row_id)}))
         return changed(db, doc)
 
     @router.post("/{doc_id}/items/{entry_kind}/{row_id}/written",
@@ -624,120 +557,21 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
     def write_bullet(doc_id: int, entry_kind: Literal["experience", "project"], row_id: int,
                      body: WrittenBullet, db: DbSession, account_id: AccountId):
         """A new bullet, saved to the library, listed last under the role or project, and shown
-        last under it here. A new version of a bullet shown here (`replaces`) is listed right
-        after the original under every role, project, and section that lists it, and takes its
-        place here; it must differ from the original (VALIDATION_FAILED)."""
+        last under it here."""
         doc = editable(db, doc_id, account_id)
         section_row, item_id = _entry_row(db, kind, doc_id, entry_kind, row_id)
         table = kind.bullet.__table__
         parent = table.c[kind.column(entry_kind)]
-        replaced_row = None
-        if body.replaces is not None:
-            replaced_row = db.scalar(select(_pk(kind.bullet)).where(
-                parent == row_id, table.c.bullet_id == body.replaces))
-            if replaced_row is None:
-                raise AppError(ErrorCode.NOT_FOUND, field="replaces")
-            _check_changed(db, BulletPoint, "bullet_id", body.replaces, body.content)
         bullet = BulletPoint(account_id=account_id, content=body.content)
         db.add(bullet)
         db.flush()
         link, parent_col = ((ExperienceBulletPoint, "experience_id") if entry_kind == "experience"
                             else (ProjectBulletPoint, "project_id"))
-        if replaced_row is not None:
-            for version_link, version_col in BULLET_LISTS:
-                list_beside(db, version_link, version_col, "bullet_id", body.replaces,
-                            bullet.bullet_id)
         append(db, link, parent_col, item_id, "bullet_id", bullet.bullet_id)
-        if replaced_row is None:
-            last = db.scalar(select(func.max(table.c.position)).where(parent == row_id))
-            db.execute(insert(table).values({
-                kind.column("section"): section_row, kind.column(entry_kind): row_id,
-                "bullet_id": bullet.bullet_id, "position": (last or 0) + 1}))
-        else:
-            db.execute(update(table).where(_pk(kind.bullet) == replaced_row)
-                       .values(bullet_id=bullet.bullet_id))
-        return changed(db, doc)
-
-    # New versions at every level (docs/FRONTEND_CHECKS.md, "New versions in a resume or cover
-    # letter"): each must differ from the original, is saved next to it wherever it's listed,
-    # and takes its place in this document only, keeping what's under it here. Narrative content
-    # and bullets go through the written endpoints, with `replaces`.
-
-    @router.post("/{doc_id}/sections/{row_id}/version", status_code=status.HTTP_201_CREATED)
-    def version_section(doc_id: int, row_id: int, body: VersionedTitle, db: DbSession,
-                        account_id: AccountId):
-        """A new version of one of the document's sections: a new section with this title
-        (which must be new, DUPLICATE) and the same lists (only the account's items, for a
-        built-in section)."""
-        doc = editable(db, doc_id, account_id)
-        section_id = _section_row(db, kind, doc_id, row_id)
-        if db.get(Section, section_id).title == body.title:
-            raise _unchanged("title")
-        check_unique_name(db, Section.title, account_id, body.title, "section")
-        version = section_version(db, db.get(Section, section_id), SectionIn(title=body.title),
-                                  account_id)
-        db.execute(update(kind.section.__table__).where(_pk(kind.section) == row_id)
-                   .values(section_id=version.id))
-        return changed(db, doc)
-
-    @router.post("/{doc_id}/items/{row_id}/version", status_code=status.HTTP_201_CREATED)
-    def version_item(doc_id: int, row_id: int, body: Versioned, db: DbSession,
-                     account_id: AccountId):
-        """A new version of a role, project, education entry, or skill category placed in one
-        of the document's sections, with these values. A role or project lists the same bullets
-        (and a project the same skills), and a category the same skills (only the account's,
-        for "Other"); a category's name must be new (DUPLICATE)."""
-        doc = editable(db, doc_id, account_id)
-        _, item_id = _entry_row(db, kind, doc_id, body.kind, row_id)
-        library, item_column, _ = LIBRARY[body.kind]
-        original = db.get(library, item_id)
-        values = body.model_dump(exclude={"kind"})
-        if all(getattr(original, name) == value for name, value in values.items()):
-            raise _unchanged(None)
-        if body.kind == "experience":
-            version_id = role_version(db, original, ExperienceIn(**values),
-                                      account_id).experience_id
-        elif body.kind == "project":
-            version_id = project_version(db, original, ProjectIn(**values), account_id).project_id
-        elif body.kind == "education":
-            version_id = education_version(db, original, EducationIn(**values),
-                                           account_id).education_id
-        else:
-            check_unique_name(db, SkillCategory.category_name, account_id,
-                              body.category_name, "skill category")
-            version_id = category_version(db, original, CategoryIn(**values),
-                                          account_id).category_id
-        model = entry_kinds[body.kind]
-        db.execute(update(model.__table__).where(_pk(model) == row_id)
-                   .values({item_column: version_id}))
-        return changed(db, doc)
-
-    @router.post("/{doc_id}/skills/{parent}/{row_id}/version",
-                 status_code=status.HTTP_201_CREATED)
-    def version_skill(doc_id: int, parent: Literal["category", "project"], row_id: int,
-                      body: WrittenSkill, db: DbSession, account_id: AccountId):
-        """A new version of a skill shown under a placed category or project: a new skill with
-        this name (which must be new, DUPLICATE), listed right after the original in every
-        category and project that lists it."""
-        doc = editable(db, doc_id, account_id)
-        model = kind.skill if parent == "category" else kind.project_skill
-        table = model.__table__
-        entry_model = entry_kinds[parent]
-        entries, sections = entry_model.__table__, kind.section.__table__
-        parent_col = kind.column("skill_category" if parent == "category" else "project")
-        skill_id = db.scalar(
-            select(table.c.skill_id)
-            .join(entries, _pk(entry_model) == table.c[parent_col])
-            .join(sections, _pk(kind.section) == entries.c[kind.column("section")])
-            .where(_pk(model) == row_id, sections.c[kind.doc_id] == doc_id))
-        if skill_id is None:
-            raise AppError(ErrorCode.NOT_FOUND)
-        if db.get(Skill, skill_id).skill_name == body.skill_name:
-            raise _unchanged("skill_name")
-        check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill")
-        skill = skill_version(db, db.get(Skill, skill_id), SkillIn(skill_name=body.skill_name),
-                              account_id)
-        db.execute(update(table).where(_pk(model) == row_id).values(skill_id=skill.skill_id))
+        last = db.scalar(select(func.max(table.c.position)).where(parent == row_id))
+        db.execute(insert(table).values({
+            kind.column("section"): section_row, kind.column(entry_kind): row_id,
+            "bullet_id": bullet.bullet_id, "position": (last or 0) + 1}))
         return changed(db, doc)
 
     @router.post("/{doc_id}/items/{entry_kind}/{row_id}/skills/written",

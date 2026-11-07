@@ -188,14 +188,3 @@ def delete_set(tone_set_id: int, db: DbSession, account_id: AccountId) -> None:
     item = get_owned(db, ToneSet, tone_set_id, account_id)
     refuse_delete_if_sent(column_uses(db, USED_BY, [tone_set_id])[tone_set_id], "tone")
     db.delete(item)
-
-
-@router.post("/{tone_set_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(tone_set_id: int, body: ToneSetIn, db: DbSession,
-                account_id: AccountId) -> ToneSetOut:
-    """Adds another version of the set on purpose: a new set with this name and a copy of each
-    rule, in order. Nothing switches to it."""
-    original = get_owned(db, ToneSet, tone_set_id, account_id)
-    check_unique_name(db, ToneSet.name, account_id, body.name, "tone")
-    return one_out(db, add_set(db, account_id, body.name,
-                               [rule.rule_text for rule in rules_of(db, original.tone_set_id)]))

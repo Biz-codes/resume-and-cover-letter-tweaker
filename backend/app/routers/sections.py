@@ -232,16 +232,6 @@ def rename_section(section_id: int, body: SectionChange, db: DbSession,
     return one_out(db, replacement, account_id)
 
 
-@router.post("/{section_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(section_id: int, body: SectionIn, db: DbSession,
-                account_id: AccountId) -> SectionOut:
-    """Adds another version of the section on purpose, with a new title (DUPLICATE otherwise).
-    Nothing switches to it."""
-    original = get_section(db, section_id, account_id)
-    check_unique_name(db, Section.title, account_id, body.title, "section")
-    return one_out(db, new_version(db, original, body, account_id), account_id)
-
-
 @router.put("/{section_id}/narrative-content")
 def set_section_narrative(section_id: int, body: NarrativeList, db: DbSession,
                           account_id: AccountId) -> SectionOut:

@@ -15,7 +15,7 @@ docs/FRONTEND_CHECKS.md:
 A version added on purpose is listed the same way, and nothing switches to it.
 """
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -161,18 +161,6 @@ def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
     if chosen:
         switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id, only=chosen)
     return one_out(db, replacement, account_id)
-
-
-@router.post("/{bullet_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(bullet_id: int, body: BulletIn, response: Response, db: DbSession,
-                account_id: AccountId) -> BulletOut:
-    """Adds another version of the bullet on purpose. Nothing switches to it. With the text
-    unchanged, the original is returned (status 200) instead of adding a copy."""
-    original = get_owned(db, BulletPoint, bullet_id, account_id)
-    if original.content == body.content:
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original, account_id)
-    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.put("/{bullet_id}/hidden")

@@ -151,15 +151,6 @@ def rename_skill(skill_id: int, body: SkillChange, db: DbSession,
     return one_out(db, replacement)
 
 
-@router.post("/{skill_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(skill_id: int, body: SkillIn, db: DbSession, account_id: AccountId) -> SkillOut:
-    """Adds another version of the skill on purpose, with a new name (DUPLICATE otherwise).
-    Nothing switches to it."""
-    original = get_owned(db, Skill, skill_id, account_id)
-    check_unique_name(db, Skill.skill_name, account_id, body.skill_name, "skill")
-    return one_out(db, new_version(db, original, body, account_id))
-
-
 @router.put("/{skill_id}/hidden")
 def set_skill_hidden(skill_id: int, body: HiddenIn, db: DbSession,
                      account_id: AccountId) -> SkillOut:

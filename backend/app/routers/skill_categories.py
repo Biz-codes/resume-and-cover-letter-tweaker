@@ -214,17 +214,6 @@ def rename_category(category_id: int, body: CategoryChange, db: DbSession,
     return one_out(db, replacement, account_id)
 
 
-@router.post("/{category_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(category_id: int, body: CategoryIn, db: DbSession,
-                account_id: AccountId) -> CategoryOut:
-    """Adds another version of the category on purpose, with a new name (DUPLICATE otherwise).
-    Nothing switches to it."""
-    original = get_category(db, category_id, account_id)
-    check_unique_name(db, SkillCategory.category_name, account_id, body.category_name,
-                      "skill category")
-    return one_out(db, new_version(db, original, body, account_id), account_id)
-
-
 @router.put("/{category_id}/skills")
 def set_category_skills(category_id: int, body: SkillList, db: DbSession,
                         account_id: AccountId) -> CategoryOut:

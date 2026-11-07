@@ -135,21 +135,20 @@ def test_job_bullet_list_errors(client: TestClient, db: Session, account_id: int
     assert error(client.put(url, json={"bullet_ids": [999999]}))[1] == "NOT_FOUND"
 
 
-def test_new_version_of_a_job_shares_its_bullets(client: TestClient, db: Session,
-                                                 account_id: int):
+def test_a_job_saved_as_a_new_row_shares_its_bullets(client: TestClient, db: Session,
+                                                     account_id: int):
     original = role(db, account_id, ["Shipped it", "Tested it"], section_id=EXPERIENCE_SECTION_ID)
     later = role(db, account_id, section_id=EXPERIENCE_SECTION_ID, organization="Later Co")
     doc = resume(db, account_id, "Draft", sent=False)
     show_job(db, doc, original, ["Shipped it"])
-    response = client.post(f"/api/experience/{original.experience_id}/versions",
-                           json={**ROLE, "role_title": "Senior Engineer"})
-    assert response.status_code == 201
-    version = response.json()
-    assert contents(response) == ["Shipped it", "Tested it"]
-    assert version["used_by"] == []  # nothing switches to a new version
+    # The draft isn't checked, so it keeps the original and the change is a new row.
+    saved = change_job(client, original, apply=[], role_title="Senior Engineer")
+    assert saved["experience_id"] != original.experience_id
+    assert contents_of(saved) == ["Shipped it", "Tested it"]
+    assert saved["used_by"] == []
     in_section = listed(db, SectionExperience, "section_id", EXPERIENCE_SECTION_ID,
                         "experience_id")
-    assert in_section == [original.experience_id, version["experience_id"], later.experience_id]
+    assert in_section == [original.experience_id, saved["experience_id"], later.experience_id]
     names = [(e["role_title"], e["organization"]) for e in client.get("/api/experience").json()]
     assert names == [("Engineer", "Acme"), ("Senior Engineer", "Acme"), ("Engineer", "Later Co")]
 
@@ -245,13 +244,6 @@ def test_change_a_job_refuses_picking_what_isnt_in_progress(client: TestClient, 
     assert db.get(Experience, row.experience_id).dates == ROLE["dates"]
 
 
-def test_a_version_with_nothing_changed_returns_the_original(client: TestClient, db: Session,
-                                                             account_id: int):
-    row = role(db, account_id)
-    response = client.post(f"/api/experience/{row.experience_id}/versions", json=ROLE)
-    assert (response.status_code, response.json()["experience_id"]) == (200, row.experience_id)
-
-
 def test_delete_job_removes_it_and_its_bullets_from_resumes(client: TestClient, db: Session,
                                                             account_id: int):
     row = role(db, account_id, ["Shipped it"])
@@ -287,8 +279,8 @@ def test_project_skills_and_bullets(client: TestClient, db: Session, account_id:
     assert contents(response) == ["Shipped it"]
 
 
-def test_new_version_of_a_project_shares_skills_and_bullets(client: TestClient, db: Session,
-                                                            account_id: int):
+def test_a_project_saved_as_a_new_row_shares_skills_and_bullets(client: TestClient,
+                                                                db: Session, account_id: int):
     project = add(db, Project(account_id=account_id, project_title="Tweaker"))
     add(db, SectionProject(section_id=PROJECTS_SECTION_ID, project_id=project.project_id,
                            position=1))
@@ -297,8 +289,15 @@ def test_new_version_of_a_project_shares_skills_and_bullets(client: TestClient, 
     add(db, ProjectBulletPoint(project_id=project.project_id,
                                bullet_id=bullet(db, account_id, "Shipped it").bullet_id,
                                position=1))
-    version = client.post(f"/api/projects/{project.project_id}/versions",
-                          json={"project_title": "Tweaker", "done_for": "Acme"}).json()
+    draft = resume(db, account_id, "Draft", sent=False)
+    section = add(db, ResumeSection(resume_id=draft.resume_id, section_id=PROJECTS_SECTION_ID,
+                                    position=1))
+    add(db, ResumeProject(resume_section_id=section.resume_section_id,
+                          project_id=project.project_id, position=1))
+    version = client.put(f"/api/projects/{project.project_id}",
+                         json={"project_title": "Tweaker", "done_for": "Acme",
+                               "apply_to": []}).json()
+    assert version["project_id"] != project.project_id
     assert [skill["skill_name"] for skill in version["skills"]] == ["Python"]
     assert [b["content"] for b in version["bullets"]] == ["Shipped it"]
     assert version["sections"] == [{"id": PROJECTS_SECTION_ID, "title": "Projects"}]
@@ -485,24 +484,6 @@ def test_delete_bullet_removes_it_everywhere(client: TestClient, db: Session, ac
     assert db.scalar(select(ResumeBulletPoint)
                      .where(ResumeBulletPoint.resume_experience_id == chosen)) is None
     assert db.get(ResumeExperience, chosen) is not None
-
-
-def test_a_version_of_a_bullet_is_listed_right_after_it_everywhere(client: TestClient,
-                                                                  db: Session, account_id: int):
-    row = role(db, account_id, ["Shipped it", "Tested it"])
-    shipped = bullet(db, account_id, "Shipped it").bullet_id
-    doc = resume(db, account_id, "Draft", sent=False)
-    show_job(db, doc, row, ["Shipped it"])
-    response = client.post(f"/api/bullet-points/{shipped}/versions",
-                           json={"content": "Shipped it on time"})
-    assert response.status_code == 201
-    version = response.json()
-    assert version["used_by"] == []
-    assert listed(db, ExperienceBulletPoint, "experience_id", row.experience_id, "bullet_id") == [
-        shipped, version["bullet_id"], bullet(db, account_id, "Tested it").bullet_id]
-    unchanged = client.post(f"/api/bullet-points/{shipped}/versions",
-                            json={"content": "Shipped it"})
-    assert (unchanged.status_code, unchanged.json()["bullet_id"]) == (200, shipped)
 
 
 # Section lists

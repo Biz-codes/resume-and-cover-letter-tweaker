@@ -17,7 +17,7 @@ in docs/FRONTEND_CHECKS.md:
 
 from datetime import datetime
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -155,21 +155,6 @@ def create_project(body: NewProject, db: DbSession, account_id: AccountId) -> Pr
         append(db, SectionProject, "section_id", body.section_id, "project_id",
                project.project_id)
     return one_out(db, project, account_id)
-
-
-@router.post("/{project_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(project_id: int, body: ProjectIn, response: Response, db: DbSession,
-                account_id: AccountId) -> ProjectOut:
-    """Adds another version of the project on purpose, sharing its skills and bullets.
-
-    Nothing switches to it. With nothing changed, the original is returned (status 200)
-    instead of adding a copy.
-    """
-    original = get_owned(db, Project, project_id, account_id)
-    if all(getattr(original, field) == getattr(body, field) for field in FIELDS):
-        response.status_code = status.HTTP_200_OK
-        return one_out(db, original, account_id)
-    return one_out(db, new_version(db, original, body, account_id), account_id)
 
 
 @router.put("/{project_id}")

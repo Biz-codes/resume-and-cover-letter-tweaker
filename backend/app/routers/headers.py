@@ -166,16 +166,6 @@ def create_header(body: HeaderIn, response: Response, db: DbSession,
     return one_out(db, header)
 
 
-@router.post("/{header_id}/versions", status_code=status.HTTP_201_CREATED)
-def add_version(header_id: int, body: HeaderIn, response: Response, db: DbSession,
-                account_id: AccountId) -> HeaderOut:
-    """Adds another version of the header on purpose. Nothing switches to it. When a header
-    with exactly these values exists (the original, with nothing changed), it's returned
-    (status 200) instead."""
-    get_owned(db, Header, header_id, account_id)
-    return create_header(body, response, db, account_id)
-
-
 @router.put("/{header_id}")
 def update_header(header_id: int, body: HeaderChange, db: DbSession,
                   account_id: AccountId) -> HeaderOut:
