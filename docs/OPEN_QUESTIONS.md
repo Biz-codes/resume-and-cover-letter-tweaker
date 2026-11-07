@@ -37,3 +37,12 @@ Recommendations are in phase 6 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these w
 17. **Demo visitors:** a fresh copy of the demo for each visitor, deleted after a set time (recommended), or one shared demo account reset on a schedule?
 18. **Host:** which one (Render, Railway, Fly.io, or another), judged by price, Postgres 18 support, and deploying from GitHub. A custom domain or the host's address?
 19. **Claude in the demo:** how many Claude requests each demo account and the whole demo get per day, and the monthly spend limit in the Anthropic Console.
+
+## A product for other job seekers (phase 8)
+Long term. The outline is in phase 8 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these when the phase starts.
+
+20. **How it makes money:** a monthly subscription with a free tier, short passes sized to a job search (a week, a month, three months), credits per tailored application, bring-your-own API key, or licenses sold to career centers and bootcamps? Several can be combined.
+21. **Who it's for first:** job seekers directly, or the organizations that help them (university career centers, bootcamps, outplacement firms, workforce agencies)?
+22. **Free tier:** how many tailored applications a month, and is it enough to show the value without costing more in API usage than it brings in?
+23. **The user's own data:** move the user's local account online at this point, or keep it local?
+24. **Name:** keep "Resume and Cover Letter Tweaker", or a product name (checked for trademarks and a free domain)?

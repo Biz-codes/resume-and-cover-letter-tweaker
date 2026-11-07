@@ -153,6 +153,15 @@ Steps:
 4. [ ] **Docs:** FRONTEND_CHECKS.md ("Changing an item" for every item, tones in "Writing rules" no longer edited in place, "Sent versions are locked", "Headers", "Item dialogs", and "New versions in a resume or cover letter" removed), the DATABASE.md notes, APP_FLOW.md, TECH_STACK.md ("Item versions"), and README.md, then `/check`.
 5. [x] **A resume's or cover letter's page, edited in place** (asked for during step 3): no "Edit this one" step, Rename, or Done editing. A base version, or one in progress, is edited right away, its name is changed under Contents with "New title", in a modal (a base version's title ends in "Base Resume", shown that way everywhere, so there's no "Base resume" line; name fields show the suffix beside them), and a note above Copy and Delete says what editing does. A sent one shows only its name to edit, with Copy and Hide (or Unhide): it can't be deleted (`VERSION_LOCKED`). Resumes and cover letters get `hidden`, with a "Hidden (n)" group on their list pages, and hidden ones aren't offered to start from.
 
+## Alongside phase 5: show the project early
+Goal: recruiters can see the project from its GitHub page before there's a live demo (phase 6). They read the README and watch a short video far more often than they sign in to try an app, and a live site needs logins and hardening first.
+
+Steps 1 and 2 don't depend on phase 5, so do them before phase 5 continues. Step 3 waits until reviewing a suggestion works (phase 5 step 2, sub-step 2), since that's the part worth showing.
+
+1. [ ] **CI with GitHub Actions:** a workflow that runs the same checks as `scripts/check.sh` on every push and pull request, with a Postgres 18 service container for the backend tests, and a passing badge at the top of the README. `check.sh` looks for Homebrew's Postgres on port 5433 and a local `.venv`, so either it learns to run on the CI machine or the workflow runs the checks itself. It needs no secrets: nothing in it calls Claude or reads `db/seed_personal/`. Commits from VS Code's commit box skip the pre-commit hook, so CI also catches what they let through.
+2. [ ] **Demo data:** a committed seed of made-up content for a fictional person (a SQL file in `db/`, or Python that builds it): a library with a few roles, projects, skills, and bullets, a base resume and cover letter, and two or three job postings at different stages, one applied to (so its versions show as locked). Nothing from `db/seed_personal/`, and the text follows [WRITING_RULES.md](WRITING_RULES.md). `/check` confirms no personal data is in it. It loads into its own local database, so screenshots and recordings never show the user's real applications. Phase 6 reuses it for demo accounts.
+3. [ ] **Walkthrough and README:** with the demo data, a 2 to 3 minute recorded walkthrough (paste in a posting, see what's extracted, review Claude's suggestion, finish the resume, and show that every version is saved and reused) and a few screenshots or a GIF. The README opens with what the app does and why in a sentence or two, then the video, then what stands out in how it's built (accessibility tested in every state, structured Claude output checked before it's shown, docs checked against the code). The repo is public and pinned on the user's GitHub profile, and linked from their LinkedIn and resume (the user does these).
+
 ## Phase 5: Job postings and AI
 Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
@@ -193,7 +202,7 @@ Recommended (to confirm):
 Steps:
 1. [ ] **Accounts and logins** (backend): add login columns to `account` and a `session` table through `/db-table` (with a `demo` flag and an expiry for demo accounts), endpoints to log in, log out, and get the current user, `current_account_id` reading the session, a new `UNAUTHENTICATED` error code in [API_ERRORS.md](API_ERRORS.md), a command-line script to create the owner's login, and limits on failed logins. Tests for each, and for one account never reaching another's items.
 2. [ ] **Logins in the front end:** a sign-in page with "Try the demo", Sign out in the shell, and going to the sign-in page whenever a request returns `UNAUTHENTICATED`. Accessibility as usual (`/a11y`): labeled fields with `autoComplete` (`username`, `current-password`), errors read with their fields, and focus on the page heading after signing in or out.
-3. [ ] **Demo data:** a committed seed of made-up content for a fictional person (a SQL file in `db/`, or Python that builds it): a library with a few roles, projects, skills, and bullets, a base resume and cover letter, and two or three job postings at different stages, one applied to (so its versions show as locked). Nothing from `db/seed_personal/`, and the text follows [WRITING_RULES.md](WRITING_RULES.md). `/check` confirms no personal data is in it.
+3. [ ] **Demo data:** bring the seed from "Show the project early" up to date with anything phase 5 added (drafts, chats), so a demo account shows every part of the app.
 4. [ ] **Demo accounts:** "Try the demo" creates an account, copies the demo data into it, and signs the visitor in. A short note on every page says it's a demo and when its changes are deleted. A cleanup job deletes expired demo accounts (on each new demo, or on a schedule), and the Claude limits above apply.
 5. [ ] **Hardening for a public site:**
    - The posting reader fetches any address a visitor types, so block addresses inside the server's own network (`localhost`, private and link-local ranges, cloud metadata addresses), after redirects too, in `download` in `backend/app/posting_reader.py`.
@@ -201,8 +210,20 @@ Steps:
    - Settings for production: the database address, the session secret, the API key, and the allowed address, all from the host's environment variables, never committed.
    - Error responses never include stack traces or SQL.
 6. [ ] **Deploy:** a production build (the React files built and served by FastAPI, or a `Dockerfile` if the host needs one), migrations run on each release, the demo seed loaded, a health check, and HTTPS on the host's address or a custom domain. Update "Running it" and the hosting rows in [TECH_STACK.md](TECH_STACK.md), and the README with the live link.
-7. [ ] **Launch check:** try the demo as a visitor on a phone and a laptop, with a screen reader and with the keyboard alone; confirm the limits and the cleanup work; run `/check`; watch the API spend for the first week.
+7. [ ] **CD with GitHub Actions:** a workflow that deploys `main` to the host once CI (from "Show the project early") passes, with the host's deploy key in GitHub's encrypted secrets, never committed. Migrations run as part of the release, as in step 6. Note it in "Running it" in [TECH_STACK.md](TECH_STACK.md) and in the README.
+8. [ ] **Launch check:** try the demo as a visitor on a phone and a laptop, with a screen reader and with the keyboard alone; confirm the limits and the cleanup work; run `/check`; watch the API spend for the first week.
 
 ## Phase 7: Polish
 - Fix rough edges found while using the app for real applications.
 - Make past versions easy to browse and reuse.
+
+## Phase 8 (long term): a product for other job seekers
+Goal: anyone can sign up, bring their own resumes, and pay for the app if it's worth it to them. An outline to plan in detail when the phase starts; the questions are in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (questions 20 to 24).
+
+1. [ ] **Check there's demand:** use it for real applications first (phase 7), then put it in front of a handful of other job seekers and watch where they get stuck. Compare with the tools already out there (Teal, Jobscan, Rezi, Kickresume, Huntr, and others) and write down what this one does differently: every version saved and reused, the user approving every change, writing rules against AI-sounding text, and accessibility.
+2. [ ] **Sign-up and onboarding:** public sign-up with email verification and password reset on top of phase 6's logins (every query is already scoped to the account). A new user's first step is uploading or pasting an existing resume (phase 5 step 2, sub-step 4), so the library fills itself.
+3. [ ] **Real users' data online:** a privacy policy and terms of service, encrypted backups, exporting all of an account's data, and deleting an account and everything in it. Check the Anthropic commercial terms and usage policy for sending users' resumes to the API, and the privacy laws for where users live (GDPR, CCPA).
+4. [ ] **What users take away:** formatted PDF and Word downloads that applicant tracking systems read well, since most users won't paste plain text into their own template (APP_FLOW.md says no export for now).
+5. [ ] **Paying:** plans and limits set from phase 5's cost check (what one tailored application costs in API usage), billing through a payment provider such as Stripe, and Claude requests counted against each account's plan.
+6. [ ] **Running it as a service:** error tracking, uptime monitoring, a support email, and a business set up to take payments (the user decides the legal side, such as an LLC).
+7. [ ] **Launch:** a landing page with the walkthrough, and posts where job seekers and career coaches already gather.
