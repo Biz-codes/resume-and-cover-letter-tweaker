@@ -1,6 +1,5 @@
-// Library page for headers: list and add them, and open each one's dialog (HeaderItem) to edit it,
-// add a version of it, or delete it, with the version rules from "Headers" and "Sent versions are
-// locked" in docs/FRONTEND_CHECKS.md.
+// Library page for headers: list and add them, and open each one's dialog (HeaderItem) to edit or
+// delete it, following "Headers" and "Changing an item" in docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { headersApi, type Header, type HeaderFields } from '../shared/api/headers'

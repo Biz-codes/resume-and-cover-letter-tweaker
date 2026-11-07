@@ -65,22 +65,6 @@ describe('BulletsPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/bullet-points/10')).toEqual({ content: 'Shipped it', apply_to: [] })
   })
 
-  it('adds a new version of a bullet', async () => {
-    const version = { ...SHIPPED, bullet_id: 13, content: 'Shipped the checkout flow', used_by: [] }
-    const fetchMock = stub({ 'POST /api/bullet-points/10/versions': [{ status: 201, body: version }] })
-    render(<BulletsPage />)
-    fireEvent.click(within(await openItem(SHIPPED.content)).getByRole('button', { name: /^New version of / }))
-    const field = screen.getByLabelText("New version's text")
-    expect(field).toHaveFocus()
-    expect(field).toHaveValue(SHIPPED.content)
-    await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Shipped the checkout flow' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added a new version, listed right after the original.')
-    expect(sentBody(fetchMock, 'POST /api/bullet-points/10/versions')).toEqual({ content: 'Shipped the checkout flow' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/bullet-points/10': [{ status: 204 }] }, [unsent(SHIPPED), LOOSE])
     render(<BulletsPage />)

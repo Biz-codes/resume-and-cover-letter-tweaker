@@ -5,8 +5,9 @@
 // for a posting" in docs/FRONTEND_CHECKS.md.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
-import { KINDS, type Doc, type DocKind } from '../shared/api/documents'
+import { KINDS, shownName, type Doc, type DocKind } from '../shared/api/documents'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
+import { offered } from '../shared/offered'
 import { sortByName } from '../shared/sortByName'
 
 export default function StartVersion({
@@ -63,9 +64,11 @@ export default function StartVersion({
     }
   }
 
-  const bases = docs.filter((doc) => !doc.job_posting)
-  const tailored = docs.filter((doc) => doc.job_posting)
-  const nameOf = (doc: Doc) => (doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : doc.name)
+  // Hidden ones aren't offered ("Hiding").
+  const bases = offered(docs).filter((doc) => !doc.job_posting)
+  const tailored = offered(docs).filter((doc) => doc.job_posting)
+  const nameOf = (doc: Doc) =>
+    doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : shownName(kind, doc)
 
   return (
     <form className="card stacked-form" onSubmit={submit} aria-label={`Start a ${singular} for this posting`}>
@@ -76,8 +79,7 @@ export default function StartVersion({
           {/* Base versions first, then the ones for postings, named with their organization, each A to Z. */}
           {[...sortByName(bases, nameOf), ...sortByName(tailored, nameOf)].map((doc) => (
             <option key={doc.id} value={doc.id}>
-              {doc.name}
-              {doc.job_posting && ` (for ${doc.job_posting.organization})`}
+              {nameOf(doc)}
             </option>
           ))}
         </select>

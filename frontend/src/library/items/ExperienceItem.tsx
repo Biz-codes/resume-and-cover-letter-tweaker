@@ -1,7 +1,7 @@
-// A role's dialog: edit it (following "Changing an item" in
-// docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters in progress
-// change only if the user picks them), add a version of it, delete it, and edit its ordered bullet list. Its
-// bullets and sections open in the same dialog.
+// A role's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md: sent
+// versions never change, and resumes and cover letters in progress change only if the user picks
+// them), delete it, and edit its ordered bullet list. Its bullets and sections open in the same
+// dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -10,11 +10,11 @@ import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import ApplyChoice from '../ApplyChoice'
-import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import BulletList from '../BulletList'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -62,17 +62,6 @@ export default function ExperienceItem({ id }: { id: number }) {
     await host.saved(message, { kind: 'experience', id: saved.experience_id })
   }
 
-  async function addVersion(original: Experience, fields: ExperienceFields) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ ...fields })
-    const version = await experienceApi.addVersion(original.experience_id, fields)
-    await host.saved(
-      version.experience_id === original.experience_id
-        ? 'Nothing changed, so no new version was added.'
-        : `Added a new version, "${experienceLabel(version)}". Resumes and cover letters keep "${experienceLabel(original)}" until you pick the new one.`,
-      { kind: 'experience', id: version.experience_id },
-    )
-  }
 
   async function confirmDelete(original: Experience) {
     setDeleteError(null)
@@ -98,7 +87,7 @@ export default function ExperienceItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={ROLE_FIELDS}
           initial={fieldsOf(role)}
-          note={anyLocked(role.used_by) ? SENT_NOTE : undefined}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(role.used_by) ? SENT_NOTE : undefined)}
           onSave={(fields) => update(role, fields)}
           focusOnOpen={false}
           onCancel={host.close}
@@ -106,17 +95,6 @@ export default function ExperienceItem({ id }: { id: number }) {
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
       }
-      newVersion={(back) => (
-        <FieldsForm
-          label={`New version of "${label}"`}
-          fields={ROLE_FIELDS}
-          initial={fieldsOf(role)}
-          note={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(fields) => addVersion(role, fields)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={`"${label}"`}

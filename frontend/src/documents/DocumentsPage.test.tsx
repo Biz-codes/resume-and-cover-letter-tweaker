@@ -6,14 +6,14 @@ import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../tes
 import DocumentsPage from './DocumentsPage'
 import { expectNotice } from '../test/notice'
 
-const INFO = { header_id: 1, tone_set_id: null, based_on: null, copies: [], updated_at: null }
-const TECH = { ...INFO, resume_id: 1, name: 'Tech base', job_posting: null, locked: false }
+const INFO = { header_id: 1, tone_set_id: null, based_on: null, hidden: false, copies: [], updated_at: null }
+const TECH = { ...INFO, resume_id: 1, name: 'Tech', job_posting: null, locked: false }
 const ACME = {
   ...INFO,
   resume_id: 2,
   name: 'Acme resume',
   job_posting: { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' },
-  based_on: { id: 1, name: 'Tech base' },
+  based_on: { id: 1, name: 'Tech Base Resume' },
   locked: true,
 }
 
@@ -38,43 +38,72 @@ describe('DocumentsPage', () => {
     renderPage()
     expect(document.title).toBe('Resumes – Resume Tweaker')
     const [bases, tailored] = await screen.findAllByRole('list')
-    expect(bases).toHaveTextContent('Tech base')
-    expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
-    expect(tailored).toHaveTextContent('Acme resumesent for Acme: Engineer (copied from Tech base)')
+    expect(bases).toHaveTextContent('Tech Base Resume')
+    expect(screen.getByRole('link', { name: 'Tech Base Resume' })).toHaveAttribute('href', '/resumes/1')
+    expect(tailored).toHaveTextContent('Acme resumesent for Acme: Engineer (copied from Tech Base Resume)')
     await expectNoA11yViolations()
   })
 
+  it('lists hidden ones under Hidden, closed, and unhides one', async () => {
+    const hidden = { ...ACME, hidden: true }
+    const fetchMock = stub(
+      {
+        'PUT /api/resumes/2/hidden': [{ status: 200, body: ACME }],
+        'GET /api/resumes': [{ status: 200, body: [TECH, hidden] }, { status: 200, body: [TECH, ACME] }],
+      },
+    )
+    renderPage()
+    const group = await screen.findByRole('button', { name: 'Hidden (1)' })
+    expect(group).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText('No resumes for job postings yet.')).toBeInTheDocument()
+    fireEvent.click(group)
+    await expectNoA11yViolations()
+    // Not offered to start from.
+    fireEvent.click(screen.getByRole('button', { name: 'New base resume' }))
+    expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'Fresh, with the usual defaults',
+      'Tech Base Resume',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Unhide "Acme resume"' }))
+    await expectNotice('Unhid "Acme resume".')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/2/hidden')).toEqual({ hidden: false })
+    expect(screen.queryByRole('button', { name: 'Hidden (1)' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('link', { name: 'Acme resume' })).toHaveFocus())
+  })
+
   it('creates a base version and opens it', async () => {
-    const created = { ...TECH, resume_id: 3, name: 'Teaching base', output: { parts: [], text: '' } }
+    const created = { ...TECH, resume_id: 3, name: 'Teaching', output: { parts: [], text: '' } }
     const fetchMock = stub({ 'POST /api/resumes': [{ status: 201, body: created }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    const field = screen.getByLabelText('Name of the new base resume (required)')
+    const field = screen.getByRole('textbox', { name: 'Name of the new base resume (required)' })
     await vi.waitFor(() => expect(field).toHaveFocus())
+    // What the app adds after the name is shown beside the field, and read with it.
+    expect(field).toHaveAccessibleDescription('Followed by "Base Resume".')
     // Fresh unless another is picked: base versions first, then the ones for postings.
     expect(screen.getByLabelText('Start from')).toHaveValue('')
     expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
       'Fresh, with the usual defaults',
-      'Tech base',
+      'Tech Base Resume',
       'Acme resume (for Acme)',
     ])
     await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Teaching base' } })
+    fireEvent.change(field, { target: { value: 'Teaching' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
-    expect(sentBody(fetchMock, 'POST /api/resumes')).toEqual({ name: 'Teaching base' })
+    expect(sentBody(fetchMock, 'POST /api/resumes')).toEqual({ name: 'Teaching' })
   })
 
   it('keeps the name and highlights it when creating fails', async () => {
     stub({ 'POST /api/resumes': [{ status: 422, body: errorBody('VALIDATION_FAILED', 'Name is required.', 'name') }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    const field = screen.getByLabelText('Name of the new base resume (required)')
+    const field = screen.getByRole('textbox', { name: 'Name of the new base resume (required)' })
     fireEvent.change(field, { target: { value: ' ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.')
     expect(field).toHaveAttribute('aria-invalid', 'true')
-    expect(field).toHaveAccessibleDescription('Name is required.')
+    expect(field).toHaveAccessibleDescription('Followed by "Base Resume". Name is required.')
     expect(field).toHaveValue(' ')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -86,7 +115,7 @@ describe('DocumentsPage', () => {
     const fetchMock = stub({ 'POST /api/resumes/2/copies': [{ status: 201, body: copied }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    fireEvent.change(screen.getByLabelText('Name of the new base resume (required)'), { target: { value: 'Acme base' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name of the new base resume (required)' }), { target: { value: 'Acme base' } })
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
@@ -104,7 +133,7 @@ describe('DocumentsPage', () => {
     )
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
-    fireEvent.change(screen.getByLabelText('Name of the new base resume (required)'), { target: { value: 'Draft' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name of the new base resume (required)' }), { target: { value: 'Draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('button', { name: 'Creating…' })).toHaveAttribute('aria-disabled', 'true')
     await expectNoA11yViolations()
@@ -147,6 +176,6 @@ describe('DocumentsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('link', { name: 'Tech base' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Tech Base Resume' })).toBeInTheDocument()
   })
 })

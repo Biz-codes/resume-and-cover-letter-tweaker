@@ -1,5 +1,5 @@
 // Library page for experience (roles): add roles, and open each one's dialog (ExperienceItem) to
-// edit it, add a version of it, delete it, and edit its bullets.
+// edit it, delete it, and edit its bullets.
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { experienceApi, experienceLabel, type Experience, type ExperienceFields } from '../shared/api/experience'

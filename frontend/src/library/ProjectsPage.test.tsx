@@ -128,8 +128,8 @@ describe('ProjectsPage', () => {
     const fetchMock = stub({ 'PUT /api/projects/4': [{ status: 200, body: { ...inUse, dates: '2024' } }] }, [inUse])
     render(<ProjectsPage />)
     await openItem('Tweaker')
-    // Nothing sent uses it, so there's no note on the first field.
-    expect(screen.getByLabelText('Project title (required)')).not.toHaveAccessibleDescription()
+    // Nothing sent uses it, so the note only says what Save does.
+    expect(screen.getByLabelText('Project title (required)')).toHaveAccessibleDescription('Saving changes it only in the ones you check below; the rest keep it as it is.')
     const choice = screen.getByRole('group', { name: 'Apply this change to which resumes and cover letters in progress?' })
     const box = within(choice).getByRole('checkbox', { name: 'Resume: Draft resume' })
     expect(box).not.toBeChecked()
@@ -142,19 +142,6 @@ describe('ProjectsPage', () => {
       dates: '2024',
       apply_to: [{ kind: 'resume', id: 3 }],
     })
-  })
-
-  it('adds a new version of a project', async () => {
-    const version = { ...TWEAKER, project_id: 8, dates: 'Fall 2024', used_by: [] }
-    const fetchMock = stub({ 'POST /api/projects/4/versions': [{ status: 201, body: version }] })
-    render(<ProjectsPage />)
-    fireEvent.click(within(await openItem('Tweaker')).getByRole('button', { name: /^New version of / }))
-    const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
-    expect(within(form).getByLabelText(/Affiliation/)).toHaveValue('Freelance')
-    fireEvent.change(within(form).getByLabelText(/Dates/), { target: { value: 'Fall 2024' } })
-    fireEvent.click(within(form).getByText('Add version'))
-    await expectNotice(`keep "${LABEL}" until you pick the new one`)
-    expect(sentBody(fetchMock, 'POST /api/projects/4/versions')).toMatchObject({ dates: 'Fall 2024' })
   })
 
   it('lists what a delete affects', async () => {

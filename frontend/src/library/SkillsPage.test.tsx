@@ -75,8 +75,8 @@ describe('SkillsPage', () => {
     fireEvent.click(within(ai).getByRole('button', { name: 'Close' }))
     const other = await categoryCard('Other')
     expect(within(other).queryByText('Delete')).not.toBeInTheDocument()
-    expect(within(other).queryByLabelText('Category name')).not.toBeInTheDocument()
-    expect(within(other).getByRole('button', { name: /^New version of / })).toBeInTheDocument()
+    expect(within(other).getByLabelText('Category name')).toHaveAccessibleDescription(/^"Other" is built in and keeps its name/)
+    expect(within(other).queryByRole('button', { name: /New version/ })).not.toBeInTheDocument()
   })
 
   it('saves a reordered skill list', async () => {
@@ -122,7 +122,7 @@ describe('SkillsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Skill name'), { target: { value: 'Claude Code' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Sent versions keep "Claude".')
+    await expectNotice('Saved as a new version, "Claude Code". Everything that used "Claude" still does')
   })
 
   it('explains that deleting a category keeps its skills under "Other"', async () => {
@@ -180,23 +180,4 @@ describe('SkillsPage', () => {
     await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: /^Delete "/ })).toHaveFocus())
   })
 
-  it('adds a new version of a category, and of a skill', async () => {
-    const fetchMock = stub({
-      'POST /api/skill-categories/6/versions': [{ status: 201, body: { ...AI, category_id: 8, category_name: 'ML' } }],
-      'POST /api/skills/10/versions': [{ status: 201, body: { ...CLAUDE, skill_id: 13, skill_name: 'Claude Code' } }],
-    })
-    render(<SkillsPage />)
-    fireEvent.click(within(await categoryCard('AI')).getByRole('button', { name: /^New version of / }))
-    expect(screen.getByLabelText("New version's name")).toHaveFocus()
-    await expectNoA11yViolations()
-    fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'ML' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added "ML", with the same skills.')
-    expect(sentBody(fetchMock, 'POST /api/skill-categories/6/versions')).toEqual({ category_name: 'ML' })
-    fireEvent.click(within(await openItem('Claude')).getByRole('button', { name: /^New version of / }))
-    fireEvent.change(screen.getByLabelText("New version's name"), { target: { value: 'Claude Code' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added "Claude Code", listed right after "Claude".')
-    expect(sentBody(fetchMock, 'POST /api/skills/10/versions')).toEqual({ skill_name: 'Claude Code' })
-  })
 })

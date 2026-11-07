@@ -1,10 +1,13 @@
-// A header's dialog: edit it (a sent version keeps the original, and identical headers are reused;
-// docs/FRONTEND_CHECKS.md, "Headers"), add a version of it, or delete it.
+// A header's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md: a sent
+// version keeps the original, and postings and base resumes and cover letters in progress change
+// only if the user picks them; identical headers are reused, "Headers") or delete it.
 import { useState } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { headersApi, type Header, type HeaderFields } from '../../shared/api/headers'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
+import ApplyChoice from '../ApplyChoice'
+import { changeNote, savedMessage } from '../applyChange'
 import UsedBy from '../UsedBy'
 import HeaderForm from './HeaderForm'
 import { useItemHost } from './itemHost'
@@ -14,40 +17,38 @@ import { useItemData } from './useItemData'
 import { headerLabels } from './itemFields'
 
 
+const SENT_NOTE = 'A sent version uses this header, so saving adds a new header. The sent version keeps this one.'
+
 const fieldsOf = (header: Header): HeaderFields => {
-  const { header_id: _id, created_at: _added, used_by: _usedBy, ...fields } = header
+  const { header_id: _id, hidden: _hidden, created_at: _added, used_by: _usedBy, in_progress: _inProgress, ...fields } = header
   return fields
 }
 
 export default function HeaderItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => headersApi.list())
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
 
   const header = data?.find((item) => item.header_id === id)
   if (!data || !header) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = headerLabels(data)(header)
-  const known = new Set(data.map((item) => item.header_id))
+  // A posting's resumes and cover letters share its header, so the posting is what's checked.
+  const offeredUses = header.in_progress
 
   async function update(original: Header, fields: HeaderFields) {
-    const saved = await headersApi.update(original.header_id, fields)
-    await host.saved(
-      saved.header_id === original.header_id
-        ? 'Saved.'
-        : 'Saved as a new header. Everything that used the original still uses it.',
-      { kind: 'header', id: saved.header_id },
-    )
+    const saved = await headersApi.update(original.header_id, fields, applyTo)
+    const message = savedMessage({
+      newVersion: saved.header_id !== original.header_id,
+      before: headerLabels(data ?? [])(original),
+      after: headerLabels([...(data ?? []), saved])(saved),
+      here: undefined,
+      doc: undefined,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'header', id: saved.header_id })
   }
 
-  async function addVersion(original: Header, fields: HeaderFields) {
-    const version = await headersApi.addVersion(original.header_id, fields)
-    await host.saved(
-      known.has(version.header_id)
-        ? 'A header with those values already exists, so no new one was added.'
-        : 'Added a new header. Everything keeps the header it uses until you pick the new one.',
-      { kind: 'header', id: version.header_id },
-    )
-  }
 
   async function confirmDelete() {
     setDeleteError(null)
@@ -72,21 +73,14 @@ export default function HeaderItem({ id }: { id: number }) {
         <HeaderForm
           label="Edit header"
           initial={fieldsOf(header)}
-          locked={anyLocked(header.used_by)}
+          note={changeNote(undefined, offeredUses, undefined, anyLocked(header.used_by) ? SENT_NOTE : undefined)}
           onSave={(fields) => update(header, fields)}
           focusOnOpen={false}
           onCancel={host.close}
-        />
+        >
+          {offeredUses.length > 0 && <ApplyChoice uses={offeredUses} applyTo={applyTo} onChange={setApplyTo} />}
+        </HeaderForm>
       }
-      newVersion={(back) => (
-        <HeaderForm
-          label="New version of the header"
-          initial={fieldsOf(header)}
-          submitLabel="Add version"
-          onSave={(fields) => addVersion(header, fields)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={`"${label}"`}

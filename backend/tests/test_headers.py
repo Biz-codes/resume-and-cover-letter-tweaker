@@ -120,7 +120,8 @@ def test_used_by_lists_postings_resumes_and_letters(client: TestClient, db: Sess
     assert header["used_by"] == [
         {"kind": "job_posting", "id": sent, "name": "Acme: Engineer", "locked": True},
         {"kind": "resume", "id": resume.resume_id, "name": resume.name, "locked": True},
-        {"kind": "cover_letter", "id": letter.letter_id, "name": letter.name, "locked": False},
+        {"kind": "cover_letter", "id": letter.letter_id, "name": f"{letter.name} Base Cover Letter",
+         "locked": False},
     ]
     # An edit can go to the base letter; the sent posting and its resume keep the header.
     assert header["in_progress"] == [header["used_by"][2]]

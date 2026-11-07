@@ -3,7 +3,7 @@
 // item in the same dialog, never a second one, with "Back to [the item before]"; Close closes the
 // whole dialog, and focus goes back to where it was first opened. Each view reads what it needs,
 // and tells the page (`reload`, `notify`) when something changed. Opened from a row of a resume's
-// or cover letter's tree (with a Placement), the item's New version takes its place there.
+// or cover letter's tree (with a Placement), saving an edit changes it there.
 import { useCallback, useState } from 'react'
 import Dialog from '../../shared/components/Dialog/Dialog'
 import { PAGE_HEADING_ID, useFocusLater } from '../../shared/hooks/useFocusLater'
@@ -59,19 +59,7 @@ export function useItemDialogs({
     },
     say: setNotice,
     close: () => setStack([]),
-    placed:
-      placement && stack.length === 1
-        ? {
-            doc: placement.doc,
-            where: placement.where,
-            version: async (values) => {
-              const message = await placement.version(values)
-              setStack([])
-              notify(message)
-              focusLater(placement.returnTo)
-            },
-          }
-        : undefined,
+    placed: placement && stack.length === 1 ? { doc: placement.doc, where: placement.where } : undefined,
   }
 
   const top = stack.at(-1)

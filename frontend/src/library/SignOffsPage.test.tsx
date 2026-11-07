@@ -68,8 +68,8 @@ describe('SignOffsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Sincerely yours' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved as a new sign-off, "Sincerely yours". Sent cover letters keep "Sincerely".',)
-    expect(sentBody(fetchMock, 'PUT /api/sign-offs/1')).toEqual({ text: 'Sincerely yours' })
+    await expectNotice('Saved as a new version, "Sincerely yours". Everything that used "Sincerely" still does')
+    expect(sentBody(fetchMock, 'PUT /api/sign-offs/1')).toEqual({ text: 'Sincerely yours', apply_to: [] })
   })
 
   it('shows a validation error on the field, keeping the input', async () => {
@@ -94,20 +94,6 @@ describe('SignOffsPage', () => {
     fireEvent.click(within(await loadedDialog()).getByText('Cancel'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(edit).toHaveFocus()
-  })
-
-  it('adds a new version of a sign-off', async () => {
-    const version = { ...SINCERELY, sign_off_id: 7, text: 'Sincerely yours', used_by: [] }
-    const fetchMock = stub({ 'POST /api/sign-offs/1/versions': [{ status: 201, body: version }] })
-    render(<SignOffsPage />)
-    fireEvent.click(within(await openItem('Sincerely')).getByRole('button', { name: /^New version of / }))
-    const field = screen.getByLabelText("New version's sign-off")
-    expect(field).toHaveFocus()
-    await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Sincerely yours' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added "Sincerely yours". Cover letters keep "Sincerely" until you pick the new one.',)
-    expect(sentBody(fetchMock, 'POST /api/sign-offs/1/versions')).toEqual({ text: 'Sincerely yours' })
   })
 
   it('lists what a delete affects, then deletes', async () => {

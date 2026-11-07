@@ -1,7 +1,7 @@
 // Library page for tones: named groups of tone rules (docs/WRITING_RULES.md, "Tone rules"). The
 // database and API call a tone a tone set (tone_set); the app says "tone". Add tones, and open
-// each one's dialog (ToneItem) to rename it, add a version of it, delete it, and edit its rules.
-// A resume or cover letter can use one tone.
+// each one's dialog (ToneItem) to edit its name and rules or delete it. Tones with the same name
+// show when each was added. A resume or cover letter can use one tone.
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { toneSetsApi, type ToneSet } from '../shared/api/toneSets'
@@ -10,6 +10,7 @@ import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
+import { toneLabels } from './items/itemFields'
 import HiddenItems, { UnhideButton } from './HiddenItems'
 import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
@@ -49,19 +50,20 @@ export default function ToneSetsPage() {
 
   // `hidden`: a card in the Hidden group, with Unhide.
   function card(toneSet: ToneSet, hidden = false) {
+    const title = labelOf(toneSet)
     return (
       <LibraryCard
         key={toneSet.tone_set_id}
-        title={toneSet.name}
+        title={title}
         heading={hidden ? 4 : 3}
         editId={editId('tone', toneSet.tone_set_id)}
-        editLabel={`View and Edit "${toneSet.name}"`}
-        onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title: toneSet.name })}
+        editLabel={`View and Edit "${title}"`}
+        onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title })}
         actions={
           hidden && (
             <UnhideButton
-              name={toneSet.name}
-              onUnhide={() => unhide('tone', toneSet.tone_set_id, toneSet.name, () => toneSetsApi.setHidden(toneSet.tone_set_id, false))}
+              name={title}
+              onUnhide={() => unhide('tone', toneSet.tone_set_id, title, () => toneSetsApi.setHidden(toneSet.tone_set_id, false))}
             />
           )
         }
@@ -71,7 +73,8 @@ export default function ToneSetsPage() {
     )
   }
 
-  const all = sortByName(sets ?? [], (toneSet) => toneSet.name)
+  const labelOf = toneLabels(sets ?? [])
+  const all = sortByName(sets ?? [], labelOf)
   const shown = all.filter((toneSet) => !toneSet.hidden)
   const hiddenOnes = all.filter((toneSet) => toneSet.hidden)
 

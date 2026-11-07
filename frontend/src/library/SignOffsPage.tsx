@@ -1,5 +1,5 @@
 // Library page for sign-offs: the closing before the name in a cover letter ("Sincerely"). Add
-// them, and open each one's dialog (SignOffItem) to edit it, add a version of it, or delete it.
+// them, and open each one's dialog (SignOffItem) to edit or delete it.
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { signOffsApi, type SignOff } from '../shared/api/signOffs'

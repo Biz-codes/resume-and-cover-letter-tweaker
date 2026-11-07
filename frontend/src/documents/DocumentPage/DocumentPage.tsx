@@ -2,12 +2,11 @@
 // and close (Header; Sections, each opening to its items, and those to their skills and bullets;
 // and for a letter, Greeting and Sign-off), then its plain text to preview and copy
 // (docs/APP_FLOW.md, "Output"). A version for a posting shows the posting's header, which is
-// changed on the posting. Renaming, copying, "Done editing", and deleting sit under its
-// name. See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a sent version
-// is shown read-only and can only be renamed, and a base version is shown read-only until the
-// user chooses to edit it in place rather than copy it, once per version while the app is open,
-// until "Done editing" shows it read-only again.
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+// changed on the posting. A note on what editing does, and Copy and Delete (a sent one: Hide or
+// Unhide), sit under its title; its title is changed under Contents, in a modal opened by "New
+// title". See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a base version
+// or one in progress is edited in place, and a sent one is shown read-only and can only be renamed.
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import {
@@ -16,6 +15,7 @@ import {
   docsApi,
   fieldsOf,
   KINDS,
+  shownName,
   treeShape,
   type DocDetail,
   type DocFields,
@@ -24,6 +24,7 @@ import {
 import { headersApi, type Header } from '../../shared/api/headers'
 import { signOffsApi, type SignOff } from '../../shared/api/signOffs'
 import { toneSetsApi, type ToneSet } from '../../shared/api/toneSets'
+import { toneLabels } from '../../library/items/itemFields'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
@@ -37,42 +38,37 @@ import styles from './DocumentPage.module.css'
 import { offered } from '../../shared/offered'
 import { sortByName } from '../../shared/sortByName'
 import AlertDialog from '../../shared/components/Dialog/AlertDialog'
+import Dialog from '../../shared/components/Dialog/Dialog'
 
-// Base versions the user chose to edit in place since the app was opened, so the warning
-// isn't repeated ("Warn before editing a base resume / cover letter").
-const editingInPlace = new Set<string>()
-
-// The buttons that open each form, where focus returns when it closes, the tone picker, where
-// focus goes once editing starts, and "Edit this one", where it goes once editing is done.
-const BUTTON_IDS = { rename: 'doc-rename', copy: 'doc-copy', delete: 'doc-delete' }
+// The buttons that open each form, where focus returns when it closes.
+const BUTTON_IDS = { copy: 'doc-copy', delete: 'doc-delete', title: 'doc-title' }
 const TONE_ID = 'doc-tone'
-const EDIT_ID = 'doc-edit'
 
-type Mode = 'rename' | 'copy' | 'delete'
+type Mode = 'copy' | 'delete' | 'title'
 
-// Shown on a base version until the user chooses: edits can't be undone.
-function BaseWarning({ singular, onEdit, onCopy }: { singular: string; onEdit: () => void; onCopy: () => void }) {
-  const questionId = useId()
-  return (
-    <div className="confirm" role="group" aria-labelledby={questionId}>
-      <p id={questionId}>
-        This is a base {singular}, so changes save right away and its earlier state can't be recovered. Edit it in
-        place, or make a copy to edit instead?
+// What editing does, above the buttons: one in progress saves as it's edited, and a sent one
+// keeps everything but its name.
+function EditNote({ singular, sent }: { singular: string; sent: boolean }) {
+  return sent ? (
+    <div className="note">
+      <p>
+        This {singular} has already been sent with a submitted application, so the only field you can edit is the title
+        below.
       </p>
-      <div className="actions">
-        <button type="button" id={EDIT_ID} onClick={onEdit}>
-          Edit this one
-        </button>
-        <button type="button" onClick={onCopy}>
-          Make a copy instead
-        </button>
-      </div>
+      <p>If you want to use this {singular} as a template for a new application, select "Copy".</p>
+    </div>
+  ) : (
+    <div className="note">
+      <p>Edits to the {singular} below save instantly.</p>
+      <p>The undo and redo buttons can make changes only while you stay on this page.</p>
+      <p>If you want to preserve this version, select "Copy" instead.</p>
+      <p>The versions already attached to a submitted application will not be changed.</p>
     </div>
   )
 }
 
 export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
-  const { path, singular, plural } = KINDS[kind]
+  const { path, singular, plural, title: kindTitle } = KINDS[kind]
   const location = useLocation()
   const navigate = useNavigate()
   const [doc, setDoc] = useState<DocDetail | null>(null)
@@ -85,9 +81,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const [copyError, setCopyError] = useState<string | null>(null)
   const [toneError, setToneError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [inPlace, setInPlace] = useState(() => editingInPlace.has(`${kind}-${id}`))
+  const [hiding, setHiding] = useState(false)
+  const [hideError, setHideError] = useState<ApiError | null>(null)
   const focusLater = useFocusLater()
-  const title = doc ? `${doc.name} ${capitalize(singular)}` : capitalize(singular)
+  // A base version's title ends in "Base Resume", one for a posting's in "Resume".
+  const titleKind = doc && !doc.job_posting ? `Base ${kindTitle}` : kindTitle
+  const title = doc ? `${doc.name} ${titleKind}` : capitalize(singular)
   usePageTitle(title)
 
   const load = useCallback(
@@ -146,18 +145,23 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     focusLater(BUTTON_IDS[returnTo])
   }
 
-  function editInPlace() {
-    editingInPlace.add(`${kind}-${id}`)
-    setInPlace(true)
-    focusLater(TONE_ID)
-  }
-
-  // Back to showing it, as before editing. Every change is already saved.
-  function doneEditing() {
-    editingInPlace.delete(`${kind}-${id}`)
-    setInPlace(false)
-    setNotice(`Done editing. Your changes to this ${singular} are saved.`)
-    focusLater(EDIT_ID)
+  // Hide and Unhide keep focus on their button, whose text changes. Hiding changes nothing it shows,
+  // so it isn't a change to undo.
+  async function setHidden(current: DocDetail, hidden: boolean) {
+    if (hiding) return
+    setHiding(true)
+    setHideError(null)
+    try {
+      await docsApi(kind).setHidden(id, hidden)
+      const next = { ...current, hidden }
+      latest.current = next
+      setDoc(next)
+      setNotice(`${hidden ? 'Hid' : 'Unhid'} "${shownName(kind, current)}".`)
+    } catch (error) {
+      setHideError(toApiError(error))
+    } finally {
+      setHiding(false)
+    }
   }
 
   // Saves some of the document's own fields, keeping the rest. Changes save as they're made, so
@@ -254,9 +258,17 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     ).catch((error: unknown) => setHistoryError(toApiError(error)))
   }
 
+  // The modal closes as the notice opens, so the notice never shows over it; focus goes back to
+  // "New title" once the notice closes.
   async function rename(name: string) {
-    await update({ name }, 'Renamed.')
-    close('rename')
+    await inTurn(
+      (current) => docsApi(kind).update(id, { ...fieldsOf(kind, current), name }),
+      `Renamed to "${name} ${titleKind}".`,
+      (next) => {
+        record(next)
+        close('title')
+      },
+    )
   }
 
   async function changeTone(toneSetId: number | null) {
@@ -277,7 +289,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   async function copy(name: string) {
     const copied = await docsApi(kind).copy(id, name)
     navigate(`${path}/${copied.id}`, {
-      state: { notice: `Copied to a new base ${singular}, "${copied.name}". The original is unchanged.` },
+      state: { notice: `Copied to "${shownName(kind, copied)}". The original is unchanged.` },
     })
   }
 
@@ -285,7 +297,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     setDeleteError(null)
     try {
       await docsApi(kind).delete(id)
-      navigate(path, { state: { notice: `Deleted "${current.name}".` } satisfies ListState })
+      navigate(path, { state: { notice: `Deleted "${shownName(kind, current)}".` } satisfies ListState })
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -303,9 +315,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
   const header = headers.find((item) => item.header_id === doc?.header_id)
   const toneSet = toneSets.find((item) => item.tone_set_id === doc?.tone_set_id)
-  // Sent versions never change; base versions wait for the user's choice.
-  const needsChoice = Boolean(doc && !doc.locked && !doc.job_posting && !inPlace)
-  const readOnly = !doc || doc.locked || needsChoice
+  // Tones with the same name show when each was added.
+  const toneLabel = toneLabels(toneSets)
+  // Sent versions never change.
+  const readOnly = !doc || doc.locked
 
   return (
     <section>
@@ -331,10 +344,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
 
       {doc && (
         <>
-          {(!doc.job_posting || doc.locked) && (
+          {(doc.locked || doc.hidden) && (
             <p>
-              {!doc.job_posting && `Base ${singular}`}
               {doc.locked && <span className="tag">sent</span>}
+              {doc.hidden && <span className="tag">hidden</span>}
             </p>
           )}
           {doc.based_on && (
@@ -342,28 +355,14 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               Copied from <Link to={`${path}/${doc.based_on.id}`}>{doc.based_on.name}</Link>
             </p>
           )}
-          {doc.locked && (
-            <p className="note">
-              This {singular} was sent, so it's a record of what went out. You can rename it, or make a copy to
-              change it.
-            </p>
-          )}
+          <EditNote singular={singular} sent={doc.locked} />
 
-          {mode === 'rename' && (
-            <NameForm
-              label={`New name for "${doc.name}"`}
-              field="name"
-              initial={doc.name}
-              submitLabel="Rename"
-              onSave={(name) => rename(name)}
-              onCancel={() => close('rename')}
-            />
-          )}
           {mode === 'copy' && copyNameFor !== null && (
             <NameForm
               label="Name of the copy"
               field="name"
               initial={copyNameFor ?? `Copy of ${doc.name}`.slice(0, 204)}
+              suffix={`Base ${kindTitle}`}
               submitLabel="Make copy"
               onSave={copy}
               onCancel={() => close('copy')}
@@ -371,12 +370,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === 'delete' && (
             <ConfirmDelete
-              what={`"${doc.name}"`}
+              what={`"${shownName(kind, doc)}"`}
               uses={doc.copies}
               usesLabel="Copies made from it"
               effect="They're kept."
-              locked={doc.locked}
-              lockedNote="This version was sent, so deleting it removes the record of what you sent."
               error={deleteError}
               onConfirm={() => void confirmDelete(doc)}
               onCancel={() => close('delete')}
@@ -384,29 +381,52 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
-              <button type="button" id={BUTTON_IDS.rename} onClick={() => open('rename')}>
-                Rename
+              {/* Named for what it makes, since the page's other Copy buttons copy text. */}
+              <button
+                type="button"
+                id={BUTTON_IDS.copy}
+                aria-label={`Copy to a new base ${singular}`}
+                onClick={() => void openCopy()}
+              >
+                Copy
               </button>
-              <button type="button" id={BUTTON_IDS.copy} onClick={() => void openCopy()}>
-                Make a copy
-              </button>
-              {inPlace && !readOnly && (
-                <button type="button" onClick={doneEditing}>
-                  Done editing
+              {doc.locked ? (
+                // aria-disabled, not disabled, so the button keeps focus while it saves.
+                <button type="button" aria-disabled={hiding} onClick={() => void setHidden(doc, !doc.hidden)}>
+                  {doc.hidden ? (hiding ? 'Unhiding…' : 'Unhide') : hiding ? 'Hiding…' : 'Hide'}
+                </button>
+              ) : (
+                <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
+                  Delete
                 </button>
               )}
-              <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
-                Delete
-              </button>
             </div>
           )}
+          {hideError && <p role="alert">{hideError.message}</p>}
 
           <h3>Contents</h3>
-          {needsChoice && mode !== 'copy' && (
-            <BaseWarning singular={singular} onEdit={editInPlace} onCopy={() => void openCopy()} />
+          <div className={styles.title}>
+            <p>Title</p>
+            <p>{title}</p>
+            <button type="button" id={BUTTON_IDS.title} onClick={() => open('title')}>
+              New title
+            </button>
+          </div>
+          {mode === 'title' && (
+            <Dialog title="New title" onClose={() => close('title')}>
+              <NameForm
+                label="Title"
+                field="name"
+                initial={doc.name}
+                suffix={titleKind}
+                focusOnOpen={false}
+                onSave={rename}
+                onCancel={() => close('title')}
+              />
+            </Dialog>
           )}
           {readOnly ? (
-            <p>Tone: {toneSet?.name ?? 'None'}</p>
+            <p>Tone: {toneSet ? toneLabel(toneSet) : 'None'}</p>
           ) : (
             <label className={styles.tone}>
               Tone
@@ -417,9 +437,9 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
               >
                 <option value="">None</option>
-                {sortByName(offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id), (item) => item.name).map((item) => (
+                {sortByName(offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id), toneLabel).map((item) => (
                   <option key={item.tone_set_id} value={item.tone_set_id}>
-                    {item.name}
+                    {toneLabel(item)}
                   </option>
                 ))}
               </select>

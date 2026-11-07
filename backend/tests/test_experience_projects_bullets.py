@@ -403,7 +403,7 @@ def test_edit_bullet_a_sent_version_uses_saves_a_new_bullet(client: TestClient, 
                           picked(draft) + [{"kind": "cover_letter", "id": letter.letter_id}])
     new_id = saved["bullet_id"]
     assert new_id != shipped
-    assert [use["name"] for use in saved["used_by"]] == ["Draft", "Letter"]
+    assert [use["name"] for use in saved["used_by"]] == ["Draft", "Letter Base Cover Letter"]
     tested = bullet(db, account_id, "Tested it").bullet_id
     assert listed(db, ExperienceBulletPoint, "experience_id", first.experience_id, "bullet_id") \
         == [shipped, new_id, tested]

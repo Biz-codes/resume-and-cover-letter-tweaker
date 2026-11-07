@@ -8,16 +8,16 @@ describe('UsedBy', () => {
     render(
       <UsedBy
         uses={[
-          { kind: 'resume', id: 1, name: 'Tech base', locked: false },
+          { kind: 'resume', id: 1, name: 'Tech Base Resume', locked: false },
           { kind: 'cover_letter', id: 2, name: 'Acme letter', locked: true },
         ]}
       />,
     )
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'Resume: Tech base',
+      'Resume: Tech Base Resume',
       'Cover letter: Acme lettersent',
     ])
-    expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
+    expect(screen.getByRole('link', { name: 'Tech Base Resume' })).toHaveAttribute('href', '/resumes/1')
     expect(screen.getByRole('link', { name: 'Acme letter' })).toHaveAttribute('href', '/cover-letters/2')
     await expectNoA11yViolations()
   })

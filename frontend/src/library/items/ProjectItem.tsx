@@ -1,6 +1,6 @@
-// A project's dialog: edit it (following "Changing an item" in
-// docs/FRONTEND_CHECKS.md), add a version of it, delete it, and edit its ordered skill and bullet
-// lists. Its skills, bullets, and sections open in the same dialog.
+// A project's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md), delete
+// it, and edit its ordered skill and bullet lists. Its skills, bullets, and sections open in the
+// same dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -11,12 +11,12 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
 import ApplyChoice from '../ApplyChoice'
-import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import BulletList from '../BulletList'
 import Collapsible from '../Collapsible/Collapsible'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -63,17 +63,6 @@ export default function ProjectItem({ id }: { id: number }) {
     await host.saved(message, { kind: 'project', id: saved.project_id })
   }
 
-  async function addVersion(original: Project, fields: ProjectFields) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ ...fields })
-    const version = await projectsApi.addVersion(original.project_id, fields)
-    await host.saved(
-      version.project_id === original.project_id
-        ? 'Nothing changed, so no new version was added.'
-        : `Added a new version, "${projectLabel(version)}". Resumes and cover letters keep "${projectLabel(original)}" until you pick the new one.`,
-      { kind: 'project', id: version.project_id },
-    )
-  }
 
   async function confirmDelete(original: Project) {
     setDeleteError(null)
@@ -99,7 +88,7 @@ export default function ProjectItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={PROJECT_FIELDS}
           initial={fieldsOf(project)}
-          note={anyLocked(project.used_by) ? SENT_NOTE : undefined}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(project.used_by) ? SENT_NOTE : undefined)}
           onSave={(fields) => update(project, fields)}
           focusOnOpen={false}
           onCancel={host.close}
@@ -107,17 +96,6 @@ export default function ProjectItem({ id }: { id: number }) {
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
       }
-      newVersion={(back) => (
-        <FieldsForm
-          label={`New version of "${label}"`}
-          fields={PROJECT_FIELDS}
-          initial={fieldsOf(project)}
-          note={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(fields) => addVersion(project, fields)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={`"${label}"`}

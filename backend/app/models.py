@@ -153,6 +153,7 @@ class Resume(Base):
     # Claude's suggestion awaiting the first review (app/suggestions.py). None is saved as SQL
     # NULL, not a JSON null, so a cleared draft is empty.
     draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -175,6 +176,7 @@ class CoverLetter(Base):
     # Empty means the header's full_name.
     signature_name: Mapped[str | None] = mapped_column(String(100))
     draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

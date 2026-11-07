@@ -1,7 +1,6 @@
-// A bullet's dialog: edit it (following "Changing a role, project, bullet, or narrative
-// content" in docs/FRONTEND_CHECKS.md: sent versions never change, and resumes and cover letters
-// in progress change only if the user picks them), add a version of it, or delete it. The roles,
-// projects, and sections that list it open in the same dialog.
+// A bullet's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md: sent
+// versions never change, and resumes and cover letters in progress change only if the user picks
+// them) or delete it. The roles, projects, and sections that list it open in the same dialog.
 import { useState } from 'react'
 import { bulletsApi, shortBullet, type Bullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -11,10 +10,10 @@ import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import ApplyChoice from '../ApplyChoice'
-import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -45,17 +44,6 @@ export default function BulletItem({ id }: { id: number }) {
     await host.saved(message, { kind: 'bullet', id: saved.bullet_id })
   }
 
-  async function addVersion(original: Bullet, content: string) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ content })
-    const version = await bulletsApi.addVersion(original.bullet_id, content)
-    await host.saved(
-      version.bullet_id === original.bullet_id
-        ? 'Nothing changed, so no new version was added.'
-        : 'Added a new version, listed right after the original. Resumes and cover letters keep the original until you pick the new one.',
-      { kind: 'bullet', id: version.bullet_id },
-    )
-  }
 
   async function confirmDelete(original: Bullet) {
     setDeleteError(null)
@@ -82,7 +70,7 @@ export default function BulletItem({ id }: { id: number }) {
           field="content"
           initial={bullet.content}
           multiline
-          lockedNote={anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined}
+          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined)}
           onSave={(content) => save(bullet, content)}
           focusOnOpen={false}
           onCancel={host.close}
@@ -90,18 +78,6 @@ export default function BulletItem({ id }: { id: number }) {
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </NameForm>
       }
-      newVersion={(back) => (
-        <NameForm
-          label="New version's text"
-          field="content"
-          initial={bullet.content}
-          multiline
-          lockedNote={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(content) => addVersion(bullet, content)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={label}

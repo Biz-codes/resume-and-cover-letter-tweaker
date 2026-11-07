@@ -122,28 +122,31 @@ Primary key: (job_posting_id, interview_id)
 Note: links each interview to every posting it covered. Deleting a posting removes its links; the app also deletes any of its interviews that no other posting is linked to (see "Delete warnings" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### resume
-| Column             | Type         | Constraints                                               | Description                                  |
-|--------------------|--------------|-----------------------------------------------------------|----------------------------------------------|
-| resume_id          | SERIAL       | PRIMARY KEY                                               | unique resume id                             |
-| account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                         |
-| job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                    |
-| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                       |
-| tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version         |
-| header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                         |
-| based_on_resume_id | INTEGER      | REFERENCES resume(resume_id) ON DELETE SET NULL           | id of resume this version was copied from    |
-| draft              | JSONB        |                                                           | Claude's suggestion awaiting first review    |
-| created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume added to db                 |
-| updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume last updated                |
+| Column             | Type         | Constraints                                               | Description                                   |
+|--------------------|--------------|-----------------------------------------------------------|-----------------------------------------------|
+| resume_id          | SERIAL       | PRIMARY KEY                                               | unique resume id                              |
+| account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                          |
+| job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                     |
+| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                        |
+| tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version          |
+| header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                          |
+| based_on_resume_id | INTEGER      | REFERENCES resume(resume_id) ON DELETE SET NULL           | id of resume this version was copied from     |
+| draft              | JSONB        |                                                           | Claude's suggestion awaiting first review     |
+| hidden             | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the resume is hidden from new choices |
+| created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume added to db                  |
+| updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume last updated                 |
 
 Unique: (job_posting_id)
 
-Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. A tailored version is named "[role title] at [organization]" when it's started, with no name to type (see "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)). For a base resume the user names it (e.g. "Tech base", "Teaching base").
+Note: `job_posting_id` is empty for a base resume, an ongoing starting point not made for a specific posting. A posting has at most one resume, which is edited in place until the posting is applied to; starting a second one returns `DUPLICATE` (the app checks first, to name the one that exists), and base resumes, with no posting, are unaffected. Seeded resumes are base resumes, or tailored versions for postings the user already applied to. A tailored version is named "[role title] at [organization]" when it's started, with no name to type (see "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)). For a base resume the user names it (e.g. "Tech", "Teaching"), and the app shows it with "Base Resume" after it ("Tech Base Resume").
 
 Note: `name` is unique among the account's resumes, ignoring capitals (an app check: `DUPLICATE` for a typed name, and a number added to a posting's version, which the app names). See "Names of resumes and cover letters" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Note: `header_id` picks the name, headline, and contact details at the top. A resume for a job posting uses the posting's header, which is changed only on the posting. A copied base resume keeps its header until the user changes it. It uses `ON DELETE SET NULL`, so deleting a header never deletes a resume.
 
 Note: `based_on_resume_id` uses `ON DELETE SET NULL`, an exception to cascading deletes. Deleting an older version shouldn't delete every resume copied from it.
+
+Note: `hidden` sets a resume aside: it's listed last under "Hidden" and isn't offered to start a new one from. A sent (locked) resume can't be deleted (`VERSION_LOCKED`, an app check), only hidden, so the record of what went out is kept; deleting its posting still deletes it. See "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Note: `tone_set_id` picks the tone rules applied to this version. It's optional and uses `ON DELETE SET NULL`, so deleting a tone set never deletes a resume. A copied resume keeps its tone set until the user changes it.
 
@@ -152,25 +155,26 @@ Note: `draft` holds Claude's suggestion for a posting's resume (the starting doc
 Note: base resumes can be edited directly at any time, but the database keeps no history, so earlier states are lost. The app warns before editing a base resume and offers to create a new base resume based on it instead. Tailored versions are never edited to fit a different posting. Starting from any earlier resume copies all of its join rows (sections, items, sub-items) into a new resume, and the library items themselves are not copied.
 
 ### cover_letter
-| Column             | Type         | Constraints                                               | Description                                     |
-|--------------------|--------------|-----------------------------------------------------------|-------------------------------------------------|
-| letter_id          | SERIAL       | PRIMARY KEY                                               | unique cover letter id                          |
-| account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                            |
-| job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                       |
-| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                          |
-| header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                            |
-| tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version            |
-| based_on_letter_id | INTEGER      | REFERENCES cover_letter(letter_id) ON DELETE SET NULL     | id of cover letter this version was copied from |
-| addressee          | VARCHAR(100) |                                                           | who the greeting addresses: "Dear [addressee]," |
-| sign_off_id        | INTEGER      | REFERENCES sign_off(sign_off_id) ON DELETE SET NULL       | id of sign-off used before the name             |
-| signature_name     | VARCHAR(100) |                                                           | name under the sign-off, if not the header's    |
-| draft              | JSONB        |                                                           | Claude's suggestion awaiting first review       |
-| created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter added to db              |
-| updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter last updated             |
+| Column             | Type         | Constraints                                               | Description                                         |
+|--------------------|--------------|-----------------------------------------------------------|-----------------------------------------------------|
+| letter_id          | SERIAL       | PRIMARY KEY                                               | unique cover letter id                              |
+| account_id         | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                |
+| job_posting_id     | INTEGER      | REFERENCES job_posting(job_posting_id) ON DELETE CASCADE  | id of related job posting                           |
+| name               | VARCHAR(204) | NOT NULL                                                  | label for this version                              |
+| header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                                |
+| tone_set_id        | INTEGER      | REFERENCES tone_set(tone_set_id) ON DELETE SET NULL       | id of tone set used for this version                |
+| based_on_letter_id | INTEGER      | REFERENCES cover_letter(letter_id) ON DELETE SET NULL     | id of cover letter this version was copied from     |
+| addressee          | VARCHAR(100) |                                                           | who the greeting addresses: "Dear [addressee],"     |
+| sign_off_id        | INTEGER      | REFERENCES sign_off(sign_off_id) ON DELETE SET NULL       | id of sign-off used before the name                 |
+| signature_name     | VARCHAR(100) |                                                           | name under the sign-off, if not the header's        |
+| draft              | JSONB        |                                                           | Claude's suggestion awaiting first review           |
+| hidden             | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the cover letter is hidden from new choices |
+| created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter added to db                  |
+| updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter last updated                 |
 
 Unique: (job_posting_id)
 
-Note: works the same way as `resume`, including at most one cover letter per posting and its `draft`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
+Note: works the same way as `resume`, including at most one cover letter per posting, its `draft`, and `hidden`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
 
 Note: there's no direct link between a resume and a cover letter. Both are created under a job posting (`job_posting_id`) and use the posting's header, so they match; deleting one leaves the other in place.
 

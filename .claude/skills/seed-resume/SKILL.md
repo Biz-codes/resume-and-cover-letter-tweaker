@@ -16,7 +16,7 @@ Each file is run once. Content that's already in the library is reused, not inse
 1. **Read the schema.** Read `docs/DATABASE.md`. Table and column names change over time, so never work from memory. Library items store no parent ids: each parent lists its children in a library join table (`section_experience`, `experience_bullet_point`, `skill_category_skill`, etc.).
 2. **Check the schema exists.** The seed must match the migrations. If the schema and `DATABASE.md` disagree, stop and tell the user.
 3. **Ask what kind of resume it is**, if the user hasn't said:
-   - **Base resume:** a current, ongoing starting point (no job posting). Ask for its name.
+   - **Base resume:** a current, ongoing starting point (no job posting). Ask for its name. The app shows a base version's name with "Base Resume" (or "Base Cover Letter") after it, so the name is only what sets it apart ("Tech", not "Tech base").
    - **Sent resume:** already submitted for a job posting. It's a record: copy it exactly as sent (see Rules). Name it "[role title] at [organization]", as the app names a posting's versions. Ask for the posting's url, and optionally the date it was sent (`applied_on`).
 4. **Read what's already in the library**, from two places:
    - **The database:** query the library and library join tables with `$(brew --prefix postgresql@18)/bin/psql -p 5433 -d resume_tweaker`. This includes earlier resumes and anything the user changed in the app.

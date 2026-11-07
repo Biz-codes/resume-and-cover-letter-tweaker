@@ -13,11 +13,12 @@ const doc = (id: number, name: string, organization?: string): Doc => ({
   job_posting: organization ? { job_posting_id: 3, organization, role_title: 'Engineer' } : null,
   based_on: null,
   locked: false,
+  hidden: false,
   copies: [],
   updated_at: null,
 })
 // Most recently updated first, as the API lists them.
-const DOCS = [doc(5, 'Acme resume', 'Acme'), doc(1, 'Tech base')]
+const DOCS = [doc(5, 'Acme resume', 'Acme'), doc(1, 'Tech')]
 
 function renderStart(onStart = vi.fn(() => Promise.resolve())) {
   render(<StartVersion kind="resume" docs={DOCS} onStart={onStart} />)
@@ -28,6 +29,12 @@ const options = (label: string) =>
   [...screen.getByLabelText(label).querySelectorAll('option')].map((option) => option.textContent)
 
 describe('StartVersion', () => {
+  it("doesn't offer hidden ones to start from", () => {
+    render(<StartVersion kind="resume" docs={[...DOCS, { ...doc(7, 'Old resume'), hidden: true }]} onStart={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
+    expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech Base Resume', 'Acme resume (for Acme)'])
+  })
+
   it('opens to a form that starts fresh', async () => {
     const onStart = renderStart()
     const button = screen.getByRole('button', { name: 'Start a resume' })
@@ -38,7 +45,7 @@ describe('StartVersion', () => {
     expect(from).toHaveValue('')
     // It's named for the posting, so there's no name to type.
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech base', 'Acme resume (for Acme)'])
+    expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech Base Resume', 'Acme resume (for Acme)'])
     // One list, base versions first.
     expect(screen.getByLabelText('Start from').querySelectorAll('optgroup')).toHaveLength(0)
     // The posting's header is used, so there's none to pick.

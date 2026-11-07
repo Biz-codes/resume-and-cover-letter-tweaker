@@ -20,7 +20,8 @@ const BASE: Header = {
   linkedin_url: null,
   github_url: null,
   portfolio_url: null,
-  used_by: [{ kind: 'resume', id: 1, name: 'Tech base', locked: false }],
+  used_by: [{ kind: 'resume', id: 1, name: 'Tech Base Resume', locked: false }],
+  in_progress: [{ kind: 'resume', id: 1, name: 'Tech Base Resume', locked: false }],
 }
 
 const SENT: Header = {
@@ -92,7 +93,7 @@ describe('HeadersPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '555-0100' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved as a new header.')
+    await expectNotice('Saved as a new version')
   })
 
   it('says when an identical header already existed', async () => {
@@ -161,24 +162,6 @@ describe('HeadersPage', () => {
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'View and Edit "Sam Rivera, Software Engineer"' })).toHaveFocus(),
     )
-  })
-
-  it('adds a new version of a header, or says one with those values exists', async () => {
-    const version = { ...BASE, header_id: 6, headline: 'Engineer', used_by: [] }
-    const fetchMock = stubApi({
-      'GET /api/headers': [{ status: 200, body: [BASE] }, { status: 200, body: [BASE] }, { status: 200, body: [BASE, version] }],
-      'POST /api/headers/1/versions': [{ status: 201, body: version }],
-    })
-    render(<HeadersPage />)
-    fireEvent.click(within(await dialogFor('Software Engineer')).getByRole('button', { name: /^New version of / }))
-    const form = screen.getByRole('form', { name: 'New version of the header' })
-    expect(within(form).getByLabelText('Full name (required)')).toHaveFocus()
-    await expectNoA11yViolations()
-    fireEvent.change(within(form).getByLabelText('Headline'), { target: { value: 'Engineer' } })
-    fireEvent.click(within(form).getByText('Add version'))
-    await expectNotice('Added a new header.')
-    expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).toMatchObject({ headline: 'Engineer' })
-    expect(sentBody(fetchMock, 'POST /api/headers/1/versions')).not.toHaveProperty('created_at')
   })
 
   it('offers Retry when the list fails to load', async () => {

@@ -30,7 +30,9 @@ from app.documents import (
     posting_header_id,
     refuse_header_change,
     refuse_locked_change,
+    refuse_sent_delete,
 )
+from app.hiding import HiddenIn, set_hidden
 from app.models import Header, Resume, ToneSet
 from app.plain_text import Output, resume_output
 from app.routers.document_tree import add_tree_routes, fill_document
@@ -159,8 +161,21 @@ def copy_resume(resume_id: int, body: CopyIn, db: DbSession,
 
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resume(resume_id: int, db: DbSession, account_id: AccountId) -> None:
-    """Removes its own selections only. Copies made from it are kept."""
-    db.delete(get_owned(db, Resume, resume_id, account_id))
+    """Removes its own selections only. Copies made from it are kept. A sent one can't be
+    deleted (VERSION_LOCKED); it can be hidden instead."""
+    item = get_owned(db, Resume, resume_id, account_id)
+    refuse_sent_delete(doc_info(db, RESUME, [item])[resume_id], "resume")
+    db.delete(item)
+
+
+@router.put("/{resume_id}/hidden")
+def set_resume_hidden(resume_id: int, body: HiddenIn, db: DbSession,
+                    account_id: AccountId) -> ResumeOut:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"), sent or not. Nothing it shows
+    changes."""
+    item = get_owned(db, Resume, resume_id, account_id)
+    set_hidden(db, item, body.hidden)
+    return to_out(db, [item])[0]
 
 
 add_tree_routes(router, RESUME, detail)

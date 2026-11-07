@@ -17,4 +17,7 @@ export const KIND_LABELS: Record<Use['kind'], string> = {
 export const pathOf = (use: Use) =>
   ({ job_posting: '/postings', resume: '/resumes', cover_letter: '/cover-letters' })[use.kind] + `/${use.id}`
 
+// The ones checked for a change (apply_to), as the API takes them.
+export const refs = (uses: Use[]) => uses.map(({ kind, id }) => ({ kind, id }))
+
 export const anyLocked = (uses: Use[]) => uses.some((use) => use.locked)

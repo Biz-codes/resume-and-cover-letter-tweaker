@@ -16,6 +16,7 @@ const LETTER: DocDetail = {
   job_posting: null,
   based_on: null,
   locked: false,
+  hidden: false,
   copies: [],
   updated_at: null,
   sections: [],

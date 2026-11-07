@@ -1,9 +1,8 @@
-// A section's dialog: rename it (a sent version keeps the old title; docs/FRONTEND_CHECKS.md, "Sent
-// versions are locked"), add a version of it, delete it, and edit which narrative content, skill
-// categories, roles, projects, bullets, and education entries it lists. Each of those opens in the
-// same dialog. Only its default kind and the kinds it already lists show; the rest are under More
-// options. A built-in section can't be renamed or deleted, so its dialog has only New version and
-// its lists.
+// A section's dialog: rename it (following "Changing an item" in docs/FRONTEND_CHECKS.md), delete
+// it, and edit which narrative content, skill categories, roles, projects, bullets, and education
+// entries it lists. Each of those opens in the same dialog. Only its default kind and the kinds it
+// already lists show; the rest are under More options. A built-in section can't be hidden or
+// deleted, and a new title for it saves a new section.
 import { Fragment, useState, type ReactNode } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -13,15 +12,17 @@ import { narrativeApi } from '../../shared/api/narrativeContent'
 import { projectLabel, projectsApi } from '../../shared/api/projects'
 import { BUILT_IN_SECTION_IDS, sectionsApi, type Section } from '../../shared/api/sections'
 import { skillCategoriesApi } from '../../shared/api/skills'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
+import ApplyChoice from '../ApplyChoice'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import BulletList from '../BulletList'
 import Collapsible from '../Collapsible/Collapsible'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { educationLabels, projectLabels, roleLabels } from './itemFields'
@@ -29,6 +30,7 @@ import { useItemData } from './useItemData'
 import { offered } from '../../shared/offered'
 
 const LOCKED_NOTE = 'A sent version uses this section, so the new title is saved as a new section. The sent version keeps the old one.'
+const BUILT_IN_NOTE = 'Built-in sections keep their title, so saving adds a new section.'
 
 // Narrative content in a list: its full text, and a short label for its buttons.
 const narrativeItem = (excerpt: { content_id: number; content: string }) => ({
@@ -77,6 +79,7 @@ export default function SectionItem({ id }: { id: number }) {
       educationApi.list(),
     ]),
   )
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   // Decided once when it loads, so a kind added to from More options stays where the user is
   // working until the dialog opens again.
@@ -86,6 +89,8 @@ export default function SectionItem({ id }: { id: number }) {
   if (section && !shown) setShown(shownKindsOf(section))
   if (!data || !section) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const [, categories, roles, projects, bullets, narrative, education] = data
+  const { here, others } = inProgressUses(section.used_by, host.placed?.where)
+  const sentNote = anyLocked(section.used_by) ? LOCKED_NOTE : undefined
 
   // Labels that tell versions apart (labels.ts), for what's listed and what can be added. A
   // section's lists hold short refs, so each is named from the full item when it's loaded.
@@ -106,22 +111,18 @@ export default function SectionItem({ id }: { id: number }) {
   }
 
   async function rename(original: Section, title: string) {
-    const saved = await sectionsApi.rename(original.id, title)
-    await host.saved(
-      saved.id === original.id ? 'Saved.' : `Saved as a new section, "${saved.title}". Sent versions keep "${original.title}".`,
-      { kind: 'section', id: saved.id },
-    )
+    const saved = await sectionsApi.rename(original.id, title, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.id !== original.id,
+      before: original.title,
+      after: saved.title,
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'section', id: saved.id })
   }
 
-  async function addVersion(original: Section, title: string) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ title })
-    const version = await sectionsApi.addVersion(original.id, title)
-    await host.saved(
-      `Added "${version.title}", with the same lists. Resumes and cover letters keep "${original.title}" until you pick the new one.`,
-      { kind: 'section', id: version.id },
-    )
-  }
 
   async function confirmDelete(original: Section) {
     setDeleteError(null)
@@ -260,29 +261,18 @@ export default function SectionItem({ id }: { id: number }) {
         await Promise.all([load(), host.refresh()])
       }}
       form={
-        !section.built_in && (
-          <NameForm
-            label="Section title"
-            field="title"
-            initial={section.title}
-            lockedNote={anyLocked(section.used_by) ? LOCKED_NOTE : undefined}
-            onSave={(title) => rename(section, title)}
-          focusOnOpen={false}
-          onCancel={host.close}
-          />
-        )
-      }
-      newVersion={(back) => (
         <NameForm
-          label="New version's title"
+          label="Section title"
           field="title"
           initial={section.title}
-          lockedNote={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(title) => addVersion(section, title)}
-          onCancel={back}
-        />
-      )}
+          lockedNote={changeNote(here, others, host.placed?.doc, section.built_in ? BUILT_IN_NOTE : sentNote)}
+          onSave={(title) => rename(section, title)}
+          focusOnOpen={false}
+          onCancel={host.close}
+        >
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+        </NameForm>
+      }
       confirmDelete={
         section.built_in
           ? undefined

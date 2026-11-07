@@ -1,6 +1,6 @@
 // Sections. See backend/app/routers/sections.py.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 // The built-in sections' fixed ids (backend/app/models.py). Never look them up by title.
 export const BUILT_IN_SECTION_IDS = { summary: 1, skills: 2, experience: 3, projects: 4, education: 5 }
@@ -10,7 +10,7 @@ export interface Section {
   hidden: boolean
   id: number
   title: string
-  // The five built-in sections can't be renamed or deleted.
+  // The five built-in sections can't be deleted, and a new title saves a new section.
   built_in: boolean
   narrative_content: { content_id: number; content: string }[]
   skill_categories: { category_id: number; category_name: string }[]
@@ -25,8 +25,10 @@ export interface Section {
 export const sectionsApi = {
   list: () => api.get<Section[]>('/sections'),
   create: (title: string) => api.post<Section>('/sections', { title }),
-  // When a sent version uses the section, the new title is saved as a new section.
-  rename: (id: number, title: string) => api.put<Section>(`/sections/${id}`, { title }),
+  // Saved as a new section unless every one in progress is picked in applyTo and nothing sent uses
+  // it (FRONTEND_CHECKS.md, "Changing an item").
+  rename: (id: number, title: string, applyTo: Use[]) =>
+    api.put<Section>(`/sections/${id}`, { title, apply_to: refs(applyTo) }),
   setNarrativeContent: (id: number, contentIds: number[]) =>
     api.put<Section>(`/sections/${id}/narrative-content`, { content_ids: contentIds }),
   setCategories: (id: number, categoryIds: number[]) =>
@@ -39,7 +41,6 @@ export const sectionsApi = {
     api.put<Section>(`/sections/${id}/bullets`, { bullet_ids: bulletIds }),
   setEducation: (id: number, educationIds: number[]) =>
     api.put<Section>(`/sections/${id}/education`, { education_ids: educationIds }),
-  addVersion: (id: number, title: string) => api.post<Section>(`/sections/${id}/versions`, { title }),
   setHidden: (id: number, hidden: boolean) => api.put<Section>(`/sections/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/sections/${id}`),
 }

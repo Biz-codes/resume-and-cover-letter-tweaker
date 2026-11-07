@@ -334,3 +334,18 @@ form.card label select {
   padding: 6px;
   font: inherit;
 }
+
+/* A name field with what the app adds after the name ("Base Resume") beside it, wrapping under
+   it on a narrow screen. */
+.suffixed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+form .suffixed > input {
+  flex: 1 1 12em;
+  width: auto;
+  min-width: 0;
+}

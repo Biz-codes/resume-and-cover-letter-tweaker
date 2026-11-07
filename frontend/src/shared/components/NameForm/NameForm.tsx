@@ -5,12 +5,24 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { toApiError, type ApiError } from '../../api/client'
 import styles from './NameForm.module.css'
 
+// A name field's suffix, read with the field as its description, since the suffix shown beside it
+// ("Base Resume", hidden from screen readers) wouldn't make sense alone. It goes outside the
+// field's label, so it isn't read as part of the label too.
+export function SuffixNote({ id, suffix }: { id: string; suffix: string }) {
+  return (
+    <span id={id} className="visually-hidden">
+      Followed by "{suffix}".
+    </span>
+  )
+}
+
 export default function NameForm({
   label,
   field,
   initial = '',
   lockedNote,
   submitLabel = 'Save',
+  suffix,
   multiline = false,
   focusOnOpen = true,
   children,
@@ -21,9 +33,12 @@ export default function NameForm({
   // The request field, so a VALIDATION_FAILED or DUPLICATE on it highlights the input.
   field: string
   initial?: string
-  // Shown when a sent version uses the item, so saving makes a new version.
+  // Shown above the field and read with it: what saving does (a sent version keeps the original,
+  // which resumes and cover letters get the change).
   lockedNote?: string
   submitLabel?: string
+  // What the app adds after the name wherever it shows it ("Base Resume"), shown after the field.
+  suffix?: string
   // A textarea for text longer than a name, such as a bullet point.
   multiline?: boolean
   // Whether a form that can be cancelled takes focus when it opens. Off for an item's form in its
@@ -39,6 +54,7 @@ export default function NameForm({
   const [saving, setSaving] = useState(false)
   const errorId = useId()
   const noteId = useId()
+  const suffixId = useId()
   const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   const opensInPlace = Boolean(onCancel) && focusOnOpen
 
@@ -61,7 +77,7 @@ export default function NameForm({
     }
   }
 
-  const describedBy = [lockedNote && noteId, error && errorId].filter(Boolean).join(' ') || undefined
+  const describedBy = [lockedNote && noteId, suffix && suffixId, error && errorId].filter(Boolean).join(' ') || undefined
 
   return (
     <form className={styles.form} onSubmit={submit}>
@@ -83,16 +99,20 @@ export default function NameForm({
             onChange={(event) => setName(event.target.value)}
           />
         ) : (
-          <input
-            ref={inputRef}
-            value={name}
-            aria-required="true"
-            aria-invalid={error?.field === field}
-            aria-describedby={describedBy}
-            onChange={(event) => setName(event.target.value)}
-          />
+          <span className={suffix ? 'suffixed' : undefined}>
+            <input
+              ref={inputRef}
+              value={name}
+              aria-required="true"
+              aria-invalid={error?.field === field}
+              aria-describedby={describedBy}
+              onChange={(event) => setName(event.target.value)}
+            />
+            {suffix && <span aria-hidden="true">{suffix}</span>}
+          </span>
         )}
       </label>
+      {suffix && <SuffixNote id={suffixId} suffix={suffix} />}
       {children}
       {error && (
         <p role="alert" id={errorId}>

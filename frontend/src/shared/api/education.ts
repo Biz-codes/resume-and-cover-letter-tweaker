@@ -1,6 +1,6 @@
 // Education entries. See backend/app/routers/education.py.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface EducationFields {
   degree: string
@@ -30,9 +30,10 @@ export const educationApi = {
   // Listed under "Education" unless another section (or none, null) is picked.
   create: (fields: EducationFields, sectionId: number | null) =>
     api.post<Education>('/education', { ...fields, section_id: sectionId }),
-  // When a sent version uses the entry, the change is saved as a new entry with a new id.
-  update: (id: number, fields: EducationFields) => api.put<Education>(`/education/${id}`, fields),
-  addVersion: (id: number, fields: EducationFields) => api.post<Education>(`/education/${id}/versions`, fields),
+  // Saved as a new entry with a new id unless every one in progress is picked in applyTo and nothing sent uses
+  // it (FRONTEND_CHECKS.md, "Changing an item").
+  update: (id: number, fields: EducationFields, applyTo: Use[]) =>
+    api.put<Education>(`/education/${id}`, { ...fields, apply_to: refs(applyTo) }),
   setHidden: (id: number, hidden: boolean) => api.put<Education>(`/education/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/education/${id}`),
 }

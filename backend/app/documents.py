@@ -49,7 +49,7 @@ from app.models import (
     SkillCategory,
 )
 from app.usage import Use
-from app.versions import is_locked
+from app.versions import is_locked, shown_name
 
 EntryKind = Literal["narrative", "category", "experience", "project", "bullet", "education"]
 
@@ -277,6 +277,8 @@ class DocInfo(BaseModel):
     based_on: DocRef | None
     # Sent: its posting has an applied_on date, so only its name can change.
     locked: bool
+    # Set aside (docs/FRONTEND_CHECKS.md, "Hiding"): listed apart and offered nowhere new.
+    hidden: bool
     # The versions copied from it, which a delete keeps (their based_on is cleared).
     copies: list[Use]
     updated_at: datetime | None
@@ -289,11 +291,11 @@ def doc_info(db: Session, kind: Kind, docs: list[Any]) -> dict[int, DocInfo]:
             [doc.job_posting_id for doc in docs if doc.job_posting_id])))}
     based_on_ids = [getattr(doc, kind.based_on) for doc in docs if getattr(doc, kind.based_on)]
     pk = getattr(kind.doc, kind.doc_id)
-    names = dict(db.execute(select(pk, kind.doc.name).where(pk.in_(based_on_ids))).all())
+    names = dict(db.execute(select(pk, shown_name(kind.doc)).where(pk.in_(based_on_ids))).all())
     copies: dict[int, list[Use]] = {doc_id: [] for doc_id in ids}
     based_on = getattr(kind.doc, kind.based_on)
     for original, copy_id, name, locked in db.execute(
-            select(based_on, pk, kind.doc.name, is_locked(kind.doc))
+            select(based_on, pk, shown_name(kind.doc), is_locked(kind.doc))
             .where(based_on.in_(ids)).order_by(pk)):
         copies[original].append(Use(kind=kind.prefix, id=copy_id, name=name, locked=bool(locked)))
 
@@ -307,6 +309,7 @@ def doc_info(db: Session, kind: Kind, docs: list[Any]) -> dict[int, DocInfo]:
                                    role_title=posting.role_title) if posting else None,
             based_on=DocRef(id=original, name=names[original]) if original in names else None,
             locked=posting is not None and posting.applied_on is not None,
+            hidden=doc.hidden,
             copies=copies[getattr(doc, kind.doc_id)],
             updated_at=doc.updated_at)
     return found
@@ -418,6 +421,13 @@ def refuse_header_change(doc: Any, header_id: int | None) -> None:
     """A version for a posting changes its header only through the posting (VALIDATION_FAILED)."""
     if doc.job_posting_id is not None and header_id != doc.header_id:
         raise AppError(ErrorCode.VALIDATION_FAILED, POSTING_HEADER, field="header_id")
+
+
+def refuse_sent_delete(info: DocInfo, singular: str) -> None:
+    """VERSION_LOCKED for a sent version, the record of what went out. It can be hidden instead."""
+    if info.locked:
+        raise AppError(ErrorCode.VERSION_LOCKED,
+                       f"This {singular} was sent, so it can't be deleted. Hide it instead.")
 
 
 def refuse_locked_change(doc: Any, info: DocInfo, changes: dict[str, Any]) -> None:

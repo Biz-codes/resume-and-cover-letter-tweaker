@@ -11,13 +11,14 @@ const TECH: ToneSet = {
   hidden: false,
   tone_set_id: 3,
   name: 'Tech',
+  created_at: '2026-10-01T12:00:00',
   rules: [
     { tone_rule_id: 30, rule_text: 'Lead with tools and metrics.' },
     { tone_rule_id: 31, rule_text: 'Keep bullets short.' },
   ],
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: false }],
 }
-const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', rules: [], used_by: [] }
+const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', created_at: '2026-10-01T12:00:00', rules: [], used_by: [] }
 
 function stub(extra: Record<string, Reply[]> = {}, sets = [TEACHING, TECH]) {
   return stubApi({
@@ -44,18 +45,16 @@ describe('ToneSetsPage', () => {
       expect.stringContaining('Lead with tools and metrics.'),
       expect.stringContaining('Keep bullets short.'),
     ])
-    // Rules belong to the set, so they're deleted (with a warning), not removed.
-    expect(within(rules).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(within(card).getByText('Used by (1)')).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(within(card).getByRole('button', { name: 'Close' }))
     expect(within(await openItem('Teaching')).getByText('No rules yet.')).toBeInTheDocument()
   })
 
-  it('adds a set and a rule', async () => {
+  it('adds a set, then a rule, saved with the tone', async () => {
     const fetchMock = stub({
       'POST /api/tone-sets': [{ status: 201, body: { ...TEACHING, tone_set_id: 5, name: 'Writing' } }],
-      'POST /api/tone-sets/4/rules': [{ status: 201, body: TEACHING }],
+      'PUT /api/tone-sets/4': [{ status: 200, body: TEACHING }],
     })
     render(<ToneSetsPage />)
     fireEvent.change(await screen.findByLabelText('New tone name'), { target: { value: 'Writing' } })
@@ -64,86 +63,66 @@ describe('ToneSetsPage', () => {
     const teaching = await openItem('Teaching')
     fireEvent.change(within(teaching).getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
     fireEvent.click(within(teaching).getByText('Add rule'))
-    await vi.waitFor(() =>
-      expect(sentBody(fetchMock, 'POST /api/tone-sets/4/rules')).toEqual({ rule_text: 'Name the students.' }),
-    )
     await vi.waitFor(() => expect(within(teaching).getByRole('status')).toHaveTextContent('Added the rule "Name the students.".'))
+    fireEvent.click(within(teaching).getByRole('button', { name: 'Save' }))
+    await expectNotice('Saved.')
+    expect(sentBody(fetchMock, 'PUT /api/tone-sets/4')).toEqual({
+      name: 'Teaching',
+      rules: [{ tone_rule_id: null, rule_text: 'Name the students.' }],
+      apply_to: [],
+    })
   })
 
-  it('reorders rules with the keyboard', async () => {
-    const fetchMock = stub({ 'PUT /api/tone-sets/3/rules': [{ status: 200, body: TECH }] })
+  it('reorders and edits rules in the form, then saves them for the resumes checked', async () => {
+    const fetchMock = stub({ 'PUT /api/tone-sets/3': [{ status: 200, body: TECH }] })
     render(<ToneSetsPage />)
     const card = await techCard()
     const handle = within(card).getByRole('button', { name: 'Move "Lead with tools and metrics."' })
     fireEvent.click(handle)
     fireEvent.keyDown(handle, { key: 'ArrowDown' })
     fireEvent.click(handle)
-    await vi.waitFor(() =>
-      expect(sentBody(fetchMock, 'PUT /api/tone-sets/3/rules')).toEqual({ tone_rule_ids: [31, 30] }),
-    )
-  })
-
-  it('edits a rule, then returns focus to its Edit button', async () => {
-    const edited = { ...TECH, rules: [{ tone_rule_id: 30, rule_text: 'Name the tools.' }, TECH.rules[1]] }
-    const fetchMock = stub({ 'PUT /api/tone-sets/3/rules/30': [{ status: 200, body: edited }] })
-    render(<ToneSetsPage />)
-    const card = await techCard()
     fireEvent.click(within(card).getByRole('button', { name: 'Edit "Lead with tools and metrics."' }))
     const field = within(card).getByLabelText('Edit rule "Lead with tools and metrics."')
     expect(field).toHaveFocus()
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Name the tools.' } })
-    fireEvent.click(within(field.closest('form') as HTMLElement).getByText('Save'))
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/rules/30'), expect.anything()))
-    // The rule is part of the tone, so the tone's dialog stays open and says so there.
-    expect(screen.getByRole('dialog', { name: 'Tech' })).toBeInTheDocument()
-    await vi.waitFor(() => expect(within(card).getByRole('status')).toHaveTextContent('Saved the rule "Name the tools.".'))
-    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3/rules/30')).toEqual({ rule_text: 'Name the tools.' })
-    await vi.waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit "Lead with tools and metrics."' })).toHaveFocus(),
+    fireEvent.click(within(card).getByRole('button', { name: 'Apply edit to "Lead with tools and metrics."' }))
+    await vi.waitFor(() => expect(within(card).getByRole('status')).toHaveTextContent('Changed the rule to "Name the tools.".'))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit "Name the tools."' })).toHaveFocus())
+    // Nothing is saved until Save.
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toBe(false)
+    expect(within(card).getByLabelText('Tone name')).toHaveAccessibleDescription(
+      'Saving changes it only in the ones you check below; the rest keep it as it is.',
     )
+    fireEvent.click(within(card).getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+    await expectNotice('Saved.')
+    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toEqual({
+      name: 'Tech',
+      rules: [
+        { tone_rule_id: 31, rule_text: 'Keep bullets short.' },
+        { tone_rule_id: 30, rule_text: 'Name the tools.' },
+      ],
+      apply_to: [{ kind: 'resume', id: 2 }],
+    })
   })
 
-  it('confirms before deleting a rule, then returns focus to the dialog heading', async () => {
-    stub({ 'DELETE /api/tone-sets/3/rules/31': [{ status: 200, body: { ...TECH, rules: [TECH.rules[0]] } }] })
+  it('removes a rule in the form', async () => {
+    stub()
     render(<ToneSetsPage />)
     const card = await techCard()
-    fireEvent.click(within(card).getByRole('button', { name: 'Delete "Keep bullets short."' }))
-    const confirm = screen.getByRole('group', { name: 'Delete the rule "Keep bullets short."?' })
-    expect(within(confirm).getByText('Cancel')).toHaveFocus()
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove "Keep bullets short."' }))
+    expect(await within(card).findByText('Removed "Keep bullets short." from Tech rules.')).toBeInTheDocument()
+    expect(within(card).getByText('Rules (1)')).toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.click(within(confirm).getByText('Delete'))
-    const dialog = screen.getByRole('dialog', { name: 'Tech' })
-    await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Deleted the rule "Keep bullets short.".'))
-    expect(screen.getByRole('heading', { level: 2, name: 'Tech' })).toHaveFocus()
-    expect(screen.queryByRole('group', { name: /^Delete the rule/ })).not.toBeInTheDocument()
   })
 
-  it('renames a set', async () => {
-    const fetchMock = stub({ 'PUT /api/tone-sets/3': [{ status: 200, body: { ...TECH, name: 'Engineering' } }] })
+  it('tells tones with the same name apart by when each was added', async () => {
+    const copy = { ...TECH, tone_set_id: 6, created_at: '2026-11-06T09:30:00', used_by: [] }
+    stub({}, [TEACHING, TECH, copy])
     render(<ToneSetsPage />)
-    await techCard()
-    const field = screen.getByLabelText('Tone name')
-    await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Engineering' } })
-    fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved.')
-    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toEqual({ name: 'Engineering' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('adds a new version of a tone, with a copy of its rules', async () => {
-    const version = { ...TECH, tone_set_id: 9, name: 'Tech, short', used_by: [] }
-    const fetchMock = stub({ 'POST /api/tone-sets/3/versions': [{ status: 201, body: version }] })
-    render(<ToneSetsPage />)
-    fireEvent.click(within(await techCard()).getByRole('button', { name: /^New version of / }))
-    const field = screen.getByLabelText("New version's name")
-    expect(field).toHaveFocus()
-    await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Tech, short' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added "Tech, short", with a copy of each rule.')
-    expect(sentBody(fetchMock, 'POST /api/tone-sets/3/versions')).toEqual({ name: 'Tech, short' })
+    expect(await screen.findByRole('heading', { name: /^Tech, added Oct 1, 2026/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Tech, added Nov 6, 2026/ })).toBeInTheDocument()
   })
 
   it('lists what deleting a set affects, and shows a failed delete', async () => {

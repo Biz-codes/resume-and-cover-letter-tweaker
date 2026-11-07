@@ -82,8 +82,10 @@ describe('NarrativeItem', () => {
     const host = await renderItem(<NarrativeItem id={12} />, {
       doc: 'cover letter',
       where: { kind: 'cover_letter', id: 3 },
-      version: vi.fn(),
     })
+    expect(screen.getByLabelText('Narrative content text (required)')).toHaveAccessibleDescription(
+      /Saving changes it in this cover letter, and in the others you check below\.$/,
+    )
     const choice = screen.getByRole('group', { name: 'Apply this change to which other resumes and cover letters in progress?' })
     expect(within(choice).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual(['Resume: Draft resume'])
     await expectNoA11yViolations()

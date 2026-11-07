@@ -1,5 +1,5 @@
 // Library page for skill categories and skills: adding both, and each one's dialog (CategoryItem,
-// SkillItem), where it's renamed, given a new version, or deleted, with a category's ordered skill
+// SkillItem), where it's renamed or deleted, with a category's ordered skill
 // list. Rules from docs/FRONTEND_CHECKS.md: "Other" is built in, every skill keeps a category, and
 // deleting a category moves its skills under "Other".
 import { useCallback, useEffect, useState } from 'react'

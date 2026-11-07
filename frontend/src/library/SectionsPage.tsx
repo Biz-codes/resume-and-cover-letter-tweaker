@@ -1,6 +1,6 @@
 // Library page for sections: add sections, and open each one's dialog (SectionItem) to rename it,
-// add a version of it, delete it, and edit what it lists. Built-in sections can't be renamed or
-// deleted (docs/FRONTEND_CHECKS.md). Sections are grouped by whether their titles print: resume
+// delete it, and edit what it lists. Built-in sections can't be deleted, and a new title for one
+// saves a new section (docs/FRONTEND_CHECKS.md). Sections are grouped by whether their titles print: resume
 // headings do, cover letter section titles are labels only the user sees (docs/DATABASE.md,
 // section notes).
 import { useCallback, useEffect, useState } from 'react'

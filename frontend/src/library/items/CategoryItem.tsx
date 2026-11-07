@@ -1,18 +1,20 @@
-// A skill category's dialog: rename it (a sent version keeps the old name), add a version of it,
+// A skill category's dialog: rename it (following "Changing an item" in docs/FRONTEND_CHECKS.md),
 // delete it (its skills move under "Other"; docs/FRONTEND_CHECKS.md, "Deleting a skill category"),
 // and edit its ordered skill list. Its skills and sections open in the same dialog. "Other" can't
-// be renamed or deleted, so its dialog has only New version and its skills.
+// be hidden or deleted, and a new name for it saves a new category.
 import { useState } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { OTHER_CATEGORY_ID, skillCategoriesApi, skillsApi, type SkillCategory } from '../../shared/api/skills'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
+import ApplyChoice from '../ApplyChoice'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import Collapsible from '../Collapsible/Collapsible'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -20,38 +22,37 @@ import { lockedNote } from './itemFields'
 import { offered } from '../../shared/offered'
 
 
+const BUILT_IN_NOTE = '"Other" is built in and keeps its name, so saving adds a new category.'
+
 export default function CategoryItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => Promise.all([skillCategoriesApi.list(), skillsApi.list()]))
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
 
   const category = data?.[0].find((item) => item.category_id === id)
   if (!data || !category) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const skills = data[1]
+  const { here, others } = inProgressUses(category.used_by, host.placed?.where)
+  const sentNote = anyLocked(category.used_by) ? lockedNote('category') : undefined
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
   }
 
   async function rename(original: SkillCategory, name: string) {
-    const saved = await skillCategoriesApi.rename(original.category_id, name)
-    await host.saved(
-      saved.category_id === original.category_id
-        ? 'Saved.'
-        : `Saved as a new category, "${saved.category_name}". Sent versions keep "${original.category_name}".`,
-      { kind: 'category', id: saved.category_id },
-    )
+    const saved = await skillCategoriesApi.rename(original.category_id, name, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.category_id !== original.category_id,
+      before: original.category_name,
+      after: saved.category_name,
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'category', id: saved.category_id })
   }
 
-  async function addVersion(original: SkillCategory, name: string) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ category_name: name })
-    const version = await skillCategoriesApi.addVersion(original.category_id, name)
-    await host.saved(
-      `Added "${version.category_name}", with the same skills. Resumes and cover letters keep "${original.category_name}" until you pick the new one.`,
-      { kind: 'category', id: version.category_id },
-    )
-  }
 
   async function confirmDelete(original: SkillCategory) {
     setDeleteError(null)
@@ -73,29 +74,18 @@ export default function CategoryItem({ id }: { id: number }) {
         await Promise.all([load(), host.refresh()])
       }}
       form={
-        !category.built_in && (
-          <NameForm
-            label="Category name"
-            field="category_name"
-            initial={category.category_name}
-            lockedNote={anyLocked(category.used_by) ? lockedNote('category') : undefined}
-            onSave={(name) => rename(category, name)}
-          focusOnOpen={false}
-          onCancel={host.close}
-          />
-        )
-      }
-      newVersion={(back) => (
         <NameForm
-          label="New version's name"
+          label="Category name"
           field="category_name"
           initial={category.category_name}
-          lockedNote={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(name) => addVersion(category, name)}
-          onCancel={back}
-        />
-      )}
+          lockedNote={changeNote(here, others, host.placed?.doc, category.built_in ? BUILT_IN_NOTE : sentNote)}
+          onSave={(name) => rename(category, name)}
+          focusOnOpen={false}
+          onCancel={host.close}
+        >
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+        </NameForm>
+      }
       confirmDelete={
         category.built_in
           ? undefined

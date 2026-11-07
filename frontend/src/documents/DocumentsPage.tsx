@@ -2,15 +2,19 @@
 // each linking to its own page (DocumentPage). A new base version starts fresh, with the
 // default header (and for a letter, greeting and sign-off) and the default sections and their
 // contents (docs/FRONTEND_CHECKS.md, "Defaults"), or as a copy of any existing one, base or
-// tailored, whose original never changes. It opens on its own page.
+// tailored, whose original never changes. It opens on its own page. Hidden ones are listed last,
+// under "Hidden (n)", with Unhide (docs/FRONTEND_CHECKS.md, "Hiding").
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toApiError, type ApiError } from '../shared/api/client'
-import { docsApi, KINDS, type Doc, type DocKind } from '../shared/api/documents'
+import { docsApi, KINDS, shownName, type Doc, type DocKind } from '../shared/api/documents'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { sortByName } from '../shared/sortByName'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
+import HiddenItems, { UnhideButton } from '../library/HiddenItems'
+import { offered } from '../shared/offered'
+import { SuffixNote } from '../shared/components/NameForm/NameForm'
 
 const DESCRIPTIONS: Record<DocKind, string> = {
   resume:
@@ -20,6 +24,8 @@ const DESCRIPTIONS: Record<DocKind, string> = {
 }
 
 const NEW_DOC_ID = 'new-document'
+// Each link, where focus goes once its document is unhidden.
+const linkId = (id: number) => `doc-link-${id}`
 
 // The notice another page sends with the move here (a delete, a new version).
 export interface ListState {
@@ -29,11 +35,13 @@ export interface ListState {
 // The form for a new base version: its name, and what it starts from. It opens in place of its
 // button, so focus moves to the name, and back to the button when it's cancelled.
 function NewBaseForm({
+  kind,
   singular,
   docs,
   onCreate,
   onCancel,
 }: {
+  kind: DocKind
   singular: string
   // Every existing one, to start a copy of.
   docs: Doc[]
@@ -47,6 +55,8 @@ function NewBaseForm({
   const [saving, setSaving] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
   const errorId = useId()
+  const suffixId = useId()
+  const suffix = `Base ${KINDS[kind].title}`
 
   useEffect(() => nameRef.current?.focus(), [])
 
@@ -64,23 +74,29 @@ function NewBaseForm({
   }
 
   const invalid = error?.field === 'name'
-  const bases = docs.filter((doc) => !doc.job_posting)
-  const tailored = docs.filter((doc) => doc.job_posting)
-  const nameOf = (doc: Doc) => (doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : doc.name)
+  // Hidden ones aren't offered ("Hiding").
+  const bases = offered(docs).filter((doc) => !doc.job_posting)
+  const tailored = offered(docs).filter((doc) => doc.job_posting)
+  const nameOf = (doc: Doc) =>
+    doc.job_posting ? `${doc.name} (for ${doc.job_posting.organization})` : shownName(kind, doc)
 
   return (
     <form className="card stacked-form" onSubmit={submit} aria-label={`New base ${singular}`}>
       <label>
         Name of the new base {singular} (required)
-        <input
-          ref={nameRef}
-          value={name}
-          aria-required="true"
-          aria-invalid={invalid}
-          aria-describedby={invalid ? errorId : undefined}
-          onChange={(event) => setName(event.target.value)}
-        />
+        <span className="suffixed">
+          <input
+            ref={nameRef}
+            value={name}
+            aria-required="true"
+            aria-invalid={invalid}
+            aria-describedby={invalid ? `${suffixId} ${errorId}` : suffixId}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <span aria-hidden="true">{suffix}</span>
+        </span>
       </label>
+      <SuffixNote id={suffixId} suffix={suffix} />
       <label>
         Start from
         <select value={from} onChange={(event) => setFrom(event.target.value)}>
@@ -88,8 +104,7 @@ function NewBaseForm({
           {/* Base versions first, then the ones for postings, named with their organization, each A to Z. */}
           {[...sortByName(bases, nameOf), ...sortByName(tailored, nameOf)].map((doc) => (
             <option key={doc.id} value={doc.id}>
-              {doc.name}
-              {doc.job_posting && ` (for ${doc.job_posting.organization})`}
+              {nameOf(doc)}
             </option>
           ))}
         </select>
@@ -112,10 +127,13 @@ function NewBaseForm({
   )
 }
 
-function DocLink({ kind, doc }: { kind: DocKind; doc: Doc }) {
+// `onUnhide`: a hidden one, listed with Unhide.
+function DocLink({ kind, doc, onUnhide }: { kind: DocKind; doc: Doc; onUnhide?: () => Promise<void> }) {
   return (
     <li>
-      <Link to={`${KINDS[kind].path}/${doc.id}`}>{doc.name}</Link>
+      <Link id={onUnhide ? undefined : linkId(doc.id)} to={`${KINDS[kind].path}/${doc.id}`}>
+        {shownName(kind, doc)}
+      </Link>
       {doc.locked && <span className="tag">sent</span>}
       {doc.job_posting && (
         <span className="muted">
@@ -124,6 +142,12 @@ function DocLink({ kind, doc }: { kind: DocKind; doc: Doc }) {
         </span>
       )}
       {doc.based_on && <span className="muted"> (copied from {doc.based_on.name})</span>}
+      {onUnhide && (
+        <>
+          {' '}
+          <UnhideButton name={shownName(kind, doc)} onUnhide={onUnhide} />
+        </>
+      )}
     </li>
   )
 }
@@ -166,13 +190,22 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
 
   async function create(name: string, fromId: number | null) {
     const doc = fromId === null ? await api.create(name) : await api.copy(fromId, name)
-    const notice =
-      fromId === null ? `Created "${doc.name}".` : `Copied to a new base ${singular}, "${doc.name}". The original is unchanged.`
+    const shown = shownName(kind, doc)
+    const notice = fromId === null ? `Created "${shown}".` : `Copied to "${shown}". The original is unchanged.`
     navigate(`${KINDS[kind].path}/${doc.id}`, { state: { notice } satisfies ListState })
   }
 
-  const bases = docs?.filter((doc) => !doc.job_posting) ?? []
-  const tailored = docs?.filter((doc) => doc.job_posting) ?? []
+  const shown = docs ? offered(docs) : []
+  const bases = shown.filter((doc) => !doc.job_posting)
+  const tailored = shown.filter((doc) => doc.job_posting)
+  const hiddenOnes = docs?.filter((doc) => doc.hidden) ?? []
+
+  async function unhide(doc: Doc) {
+    await api.setHidden(doc.id, false)
+    await load()
+    setNotice(`Unhid "${shownName(kind, doc)}".`)
+    focusLater(linkId(doc.id))
+  }
 
   return (
     <section>
@@ -193,6 +226,7 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
 
       {creating && docs ? (
         <NewBaseForm
+          kind={kind}
           singular={singular}
           docs={docs}
           onCreate={create}
@@ -231,6 +265,13 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
               ))}
             </ul>
           )}
+          <HiddenItems count={hiddenOnes.length}>
+            <ul className="doc-list">
+              {hiddenOnes.map((doc) => (
+                <DocLink key={doc.id} kind={kind} doc={doc} onUnhide={() => unhide(doc)} />
+              ))}
+            </ul>
+          </HiddenItems>
         </>
       )}
     </section>

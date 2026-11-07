@@ -5,7 +5,7 @@ import type { Header } from '../api/headers'
 import { expectNoA11yViolations } from '../../test/axe'
 import HeaderFields from './HeaderFields'
 
-const blank = { location: null, linkedin_url: null, github_url: null, portfolio_url: null, used_by: [] }
+const blank = { location: null, linkedin_url: null, github_url: null, portfolio_url: null, used_by: [], in_progress: [] }
 const TECH: Header = {
   hidden: false,
   header_id: 1,

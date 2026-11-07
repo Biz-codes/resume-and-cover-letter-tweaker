@@ -1,7 +1,6 @@
 // An excerpt of narrative content's dialog: edit its text and the sections that list it
-// (following "Changing an item" in docs/FRONTEND_CHECKS.md:
-// sent versions never change, and resumes and cover letters in progress change only if the user
-// picks them), add a version of it, or delete it.
+// (following "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions never change, and
+// resumes and cover letters in progress change only if the user picks them), or delete it.
 import { useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -12,9 +11,9 @@ import Checklist from '../../shared/components/Checklist'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
 import ApplyChoice from '../ApplyChoice'
-import { inProgressUses, pickedFor, savedMessage } from '../applyChange'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -52,17 +51,6 @@ export default function NarrativeItem({ id }: { id: number }) {
     await host.saved(message, { kind: 'narrative', id: saved.content_id })
   }
 
-  async function addVersion(original: NarrativeContent, { content }: ExcerptFields) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ content })
-    const version = await narrativeApi.addVersion(original.content_id, content)
-    await host.saved(
-      version.content_id === original.content_id
-        ? 'Nothing changed, so no new version was added.'
-        : 'Added a new version, listed right after the original. Resumes and cover letters keep the original until you pick the new one.',
-      { kind: 'narrative', id: version.content_id },
-    )
-  }
 
   async function confirmDelete(original: NarrativeContent) {
     setDeleteError(null)
@@ -88,7 +76,7 @@ export default function NarrativeItem({ id }: { id: number }) {
           label={`Edit ${label}`}
           fields={EXCERPT_FIELDS}
           initial={{ content: excerpt.content }}
-          note={anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined)}
           onSave={(fields) => update(excerpt, fields)}
           focusOnOpen={false}
           onCancel={host.close}
@@ -104,17 +92,6 @@ export default function NarrativeItem({ id }: { id: number }) {
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
       }
-      newVersion={(back) => (
-        <FieldsForm
-          label={`New version of ${label}`}
-          fields={EXCERPT_FIELDS}
-          initial={{ content: excerpt.content }}
-          note={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(fields) => addVersion(excerpt, fields)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={label}

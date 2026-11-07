@@ -78,7 +78,7 @@ describe('App', () => {
   it('shows a resume as a whole page, under Resumes in the nav', async () => {
     const resume = {
       resume_id: 1,
-      name: 'Tech base',
+      name: 'Tech',
       header_id: null,
       tone_set_id: null,
       job_posting: null,
@@ -94,10 +94,10 @@ describe('App', () => {
       vi.fn((url: string) => Promise.resolve(Response.json(url === '/api/resumes/1' ? resume : []))),
     )
     renderAt('/resumes/1')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Resumes' })).toHaveAttribute('aria-current', 'true')
     // The title is set once the page has its name, just after the heading shows it.
-    await vi.waitFor(() => expect(document.title).toBe('Tech base Resume – Resume Tweaker'))
+    await vi.waitFor(() => expect(document.title).toBe('Tech Base Resume – Resume Tweaker'))
     await expectNoA11yViolations({ page: true })
   })
 

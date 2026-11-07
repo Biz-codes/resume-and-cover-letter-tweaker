@@ -1,15 +1,17 @@
-// An education entry's dialog: edit it (a sent version keeps the original; docs/FRONTEND_CHECKS.md,
-// "Sent versions are locked"), add a version of it, or delete it. Its sections open in the same
-// dialog.
+// An education entry's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md:
+// sent versions never change, and resumes and cover letters in progress change only if the user
+// picks them) or delete it. Its sections open in the same dialog.
 import { useState } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { educationApi, educationLabel, type Education, type EducationFields } from '../../shared/api/education'
-import { anyLocked } from '../../shared/api/usage'
+import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
+import ApplyChoice from '../ApplyChoice'
+import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
-import { placedNote, useItemHost } from './itemHost'
+import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
@@ -29,33 +31,27 @@ const fieldsOf = (entry: Education): EducationFields => ({
 export default function EducationItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => educationApi.list())
+  const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
 
   const entry = data?.find((item) => item.education_id === id)
   if (!data || !entry) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = educationLabels(data)(entry)
+  const { here, others } = inProgressUses(entry.used_by, host.placed?.where)
 
   async function update(original: Education, fields: EducationFields) {
-    const saved = await educationApi.update(original.education_id, fields)
-    await host.saved(
-      saved.education_id === original.education_id
-        ? 'Saved.'
-        : `Saved as a new entry, "${educationLabel(saved)}", listed right after the original. Sent versions keep "${educationLabel(original)}".`,
-      { kind: 'education', id: saved.education_id },
-    )
+    const saved = await educationApi.update(original.education_id, fields, pickedFor(here, applyTo))
+    const message = savedMessage({
+      newVersion: saved.education_id !== original.education_id,
+      before: educationLabel(original),
+      after: educationLabel(saved),
+      here,
+      doc: host.placed?.doc,
+      checked: applyTo,
+    })
+    await host.saved(message, { kind: 'education', id: saved.education_id })
   }
 
-  async function addVersion(original: Education, fields: EducationFields) {
-    // From a resume's or cover letter's tree, it takes the original's place there.
-    if (host.placed) return host.placed.version({ ...fields })
-    const version = await educationApi.addVersion(original.education_id, fields)
-    await host.saved(
-      version.education_id === original.education_id
-        ? 'Nothing changed, so no new version was added.'
-        : `Added a new version, "${educationLabel(version)}". Resumes and cover letters keep "${educationLabel(original)}" until you pick the new one.`,
-      { kind: 'education', id: version.education_id },
-    )
-  }
 
   async function confirmDelete(original: Education) {
     setDeleteError(null)
@@ -81,23 +77,14 @@ export default function EducationItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={EDUCATION_FIELDS}
           initial={fieldsOf(entry)}
-          note={anyLocked(entry.used_by) ? SENT_NOTE : undefined}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(entry.used_by) ? SENT_NOTE : undefined)}
           onSave={(fields) => update(entry, fields)}
           focusOnOpen={false}
           onCancel={host.close}
-        />
+        >
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+        </FieldsForm>
       }
-      newVersion={(back) => (
-        <FieldsForm
-          label={`New version of "${label}"`}
-          fields={EDUCATION_FIELDS}
-          initial={fieldsOf(entry)}
-          note={host.placed && placedNote(host.placed.doc)}
-          submitLabel="Add version"
-          onSave={(fields) => addVersion(entry, fields)}
-          onCancel={back}
-        />
-      )}
       confirmDelete={(back) => (
         <ConfirmDelete
           what={`"${label}"`}

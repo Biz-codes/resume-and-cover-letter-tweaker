@@ -214,26 +214,6 @@ describe('ExperiencePage', () => {
     expect(screen.getByLabelText('Title (required)')).not.toHaveAccessibleDescription()
   })
 
-  it('adds a new version of a role, and returns focus on cancel', async () => {
-    const version = { ...ENGINEER, experience_id: 8, role_title: 'Senior Engineer', used_by: [] }
-    const fetchMock = stub({ 'POST /api/experience/4/versions': [{ status: 201, body: version }] }, [ENGINEER])
-    render(<ExperiencePage />)
-    const dialog = await openItem('Engineer, Acme')
-    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
-    expect(within(dialog).queryByRole('form', { name: 'Edit "Engineer, Acme (2020 – 2022)"' })).not.toBeInTheDocument()
-    fireEvent.click(within(dialog).getByText('Cancel'))
-    await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: /^New version of / })).toHaveFocus())
-    fireEvent.click(within(dialog).getByRole('button', { name: /^New version of / }))
-    const form = screen.getByRole('form', { name: 'New version of "Engineer, Acme (2020 – 2022)"' })
-    expect(within(form).getByLabelText('Title (required)')).toHaveFocus()
-    expect(within(form).getByLabelText('Title (required)')).toHaveValue('Engineer')
-    await expectNoA11yViolations()
-    fireEvent.change(within(form).getByLabelText('Title (required)'), { target: { value: 'Senior Engineer' } })
-    fireEvent.click(within(form).getByText('Add version'))
-    await expectNotice('keep "Engineer, Acme (2020 – 2022)" until you pick the new one')
-    expect(sentBody(fetchMock, 'POST /api/experience/4/versions')).toMatchObject({ role_title: 'Senior Engineer' })
-  })
-
   it("saves a role's bullet list and writes new bullets under it", async () => {
     const fetchMock = stub({
       'PUT /api/experience/4/bullets': [{ status: 200, body: ENGINEER }],

@@ -1,15 +1,14 @@
 // The parts of a library item's dialog, the same for every kind: its form, with Save and Cancel
-// (which closes the dialog), then New version, Hide (or Unhide), and Delete, then what it lists
-// and where it's used (`children`). New version and Delete open their own form or confirm in
-// place of the item's form, never a second dialog, and going back from either returns focus to
-// its button. Hide keeps the dialog open and says so in it (docs/FRONTEND_CHECKS.md, "Hiding").
+// (which closes the dialog), then Hide (or Unhide) and Delete, then what it lists and where it's
+// used (`children`). Delete opens its confirm in place of the item's form, never a second dialog,
+// and going back returns focus to its button. Hide keeps the dialog open and says so in it (docs/FRONTEND_CHECKS.md, "Hiding").
 // An item a sent application uses can't be deleted, so it offers only Hide, with a note saying
 // why.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { useOptionalItemHost } from './itemHost'
 
-type Mode = 'item' | 'version' | 'delete'
+type Mode = 'item' | 'delete'
 
 export const HIDDEN_NOTE = "Hidden: it isn't offered anywhere new. Everything that uses it keeps it."
 export const SENT_DELETE_NOTE = "A sent application uses it, so it can't be deleted. Hide it to set it aside."
@@ -17,20 +16,16 @@ export const SENT_DELETE_NOTE = "A sent application uses it, so it can't be dele
 export default function ItemParts({
   name,
   form,
-  newVersion,
   confirmDelete,
   hidden,
   usedBySent = false,
   onSetHidden,
   children,
 }: {
-  // The item's name as its buttons say it (`"Led the redesign."`), so New version, Hide, and Delete
-  // each name their item.
+  // The item's name as its buttons say it (`"Led the redesign."`), so Hide and Delete each name
+  // their item.
   name: string
-  // The item's own form. Left out for an item that can't be changed (a built-in section).
-  form?: ReactNode
-  // The new version form; `back` returns to the item's form.
-  newVersion?: (back: () => void) => ReactNode
+  form: ReactNode
   // The delete confirm; `back` returns to the item's form. Left out for a built-in item.
   confirmDelete?: (back: () => void) => ReactNode
   hidden?: boolean
@@ -45,11 +40,9 @@ export default function ItemParts({
   const [returnTo, setReturnTo] = useState<Mode | null>(null)
   const [hiding, setHiding] = useState(false)
   const [hideError, setHideError] = useState<ApiError | null>(null)
-  const versionRef = useRef<HTMLButtonElement>(null)
   const deleteRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    if (returnTo === 'version') versionRef.current?.focus()
     if (returnTo === 'delete') deleteRef.current?.focus()
   }, [returnTo])
 
@@ -81,20 +74,14 @@ export default function ItemParts({
 
   return (
     <>
-      {mode === 'version' && newVersion?.(back)}
       {mode === 'delete' && confirmDelete?.(back)}
       {mode === 'item' && (
         <>
           {form}
           {hidden && <p className="muted">{HIDDEN_NOTE}</p>}
           {usedBySent && confirmDelete && <p className="muted">{SENT_DELETE_NOTE}</p>}
-          {(newVersion || onSetHidden || canDelete) && (
+          {(onSetHidden || canDelete) && (
             <div className="actions">
-              {newVersion && (
-                <button type="button" ref={versionRef} aria-label={`New version of ${name}`} onClick={() => open('version')}>
-                  New version
-                </button>
-              )}
               {onSetHidden && (
                 // aria-disabled, not disabled, so the button keeps focus while it saves.
                 <button

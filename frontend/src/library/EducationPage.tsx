@@ -1,5 +1,5 @@
-// Library page for education: add entries, and open each one's dialog (EducationItem) to edit it,
-// add a version of it, or delete it. Entries no section lists come first, so they can be listed
+// Library page for education: add entries, and open each one's dialog (EducationItem) to edit or
+// delete it. Entries no section lists come first, so they can be listed
 // again or deleted (docs/FRONTEND_CHECKS.md, "Unlisted items").
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'

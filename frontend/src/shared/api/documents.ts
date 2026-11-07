@@ -29,6 +29,8 @@ export interface Doc extends DocFields {
   based_on: { id: number; name: string } | null
   // Sent: its posting was applied to, so only its name can change.
   locked: boolean
+  // Set aside: listed under Hidden and offered nowhere new ("Hiding").
+  hidden: boolean
   // Versions copied from it, which a delete keeps.
   copies: Use[]
   updated_at: string | null
@@ -90,12 +92,20 @@ export interface KindInfo {
   // "resume" / "cover letter", and the plural for headings ("Resumes").
   singular: string
   plural: string
+  // "Resume" / "Cover Letter", ending a document's title.
+  title: string
   idKey: 'resume_id' | 'letter_id'
 }
 
 export const KINDS: Record<DocKind, KindInfo> = {
-  resume: { path: '/resumes', singular: 'resume', plural: 'Resumes', idKey: 'resume_id' },
-  cover_letter: { path: '/cover-letters', singular: 'cover letter', plural: 'Cover letters', idKey: 'letter_id' },
+  resume: { path: '/resumes', singular: 'resume', plural: 'Resumes', title: 'Resume', idKey: 'resume_id' },
+  cover_letter: {
+    path: '/cover-letters',
+    singular: 'cover letter',
+    plural: 'Cover letters',
+    title: 'Cover Letter',
+    idKey: 'letter_id',
+  },
 }
 
 // The first of "Copy of [name]", "Copy 2 of [name]", and so on that no other resume (or cover
@@ -108,6 +118,12 @@ export function copyName(name: string, taken: string[]) {
     if (!names.has(candidate.toLowerCase())) return candidate
   }
 }
+
+// A document's name as the app shows it everywhere but its own name field: a base version's ends
+// in "Base Resume" (or "Base Cover Letter"), so its name is only what sets it apart ("Mentoring").
+// The backend names them the same way in lists of uses (shown_name in backend/app/versions.py).
+export const shownName = (kind: DocKind, doc: Pick<Doc, 'name' | 'job_posting'>) =>
+  doc.job_posting ? doc.name : `${doc.name} Base ${KINDS[kind].title}`
 
 // "resume" → "Resume", for a heading.
 export const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
@@ -160,7 +176,10 @@ export function docsApi(kind: DocKind) {
     // with `forPosting`, one for that posting, with the posting's header.
     copy: (id: number, name: string, forPosting?: ForPosting) =>
       one(api.post<Raw>(`${path}/${id}/copies`, { name, ...forPosting })),
+    // A sent version can't be deleted (VERSION_LOCKED); it can be hidden instead.
     delete: (id: number) => api.delete(`${path}/${id}`),
+    setHidden: (id: number, hidden: boolean) =>
+      api.put<Raw>(`${path}/${id}/hidden`, { hidden }).then((raw) => withId<Doc>(kind, raw)),
 
     // Building the header and tree (backend/app/routers/document_tree.py). Each call sends the whole list in
     // its new order and returns the document with its new tree and output. Rows left out are
@@ -197,31 +216,11 @@ export function docsApi(kind: DocKind) {
       one(api.put<Raw>(`${path}/${id}/items/${entryKind}/${entryRow}/bullets`, { bullet_ids: bulletIds })),
     // A new library item of any kind, with its own fields: saved to the library, listed under the
     // section, and placed last in it. A skill category's name must be new (DUPLICATE).
-    // With `replaces`, a new version of narrative content or a bullet placed in the section: listed
-    // right after the original, and in its place here.
-    write: (id: number, sectionRow: number, item: NewItem, replaces?: number) =>
-      one(api.post<Raw>(`${path}/${id}/sections/${sectionRow}/written`, { ...item, replaces })),
+    write: (id: number, sectionRow: number, item: NewItem) =>
+      one(api.post<Raw>(`${path}/${id}/sections/${sectionRow}/written`, item)),
     // A new bullet: saved to the library, listed under the role or project, and shown last under it.
-    // With `replaces`, a new version of a bullet shown under it, listed right after the original
-    // and in its place here.
-    writeBullet: (
-      id: number,
-      entryKind: 'experience' | 'project',
-      entryRow: number,
-      content: string,
-      replaces?: number,
-    ) => one(api.post<Raw>(`${path}/${id}/items/${entryKind}/${entryRow}/written`, { content, replaces })),
-    // New versions (docs/FRONTEND_CHECKS.md, "New versions in a resume or cover letter"): each must
-    // differ from the original (VALIDATION_FAILED), is saved next to it wherever it's listed, and
-    // takes its place in this document only, keeping what's under it. Names and titles must be
-    // new (DUPLICATE).
-    versionSection: (id: number, sectionRow: number, title: string) =>
-      one(api.post<Raw>(`${path}/${id}/sections/${sectionRow}/version`, { title })),
-    // A role, project, education entry, or skill category placed in a section, with its fields.
-    versionItem: (id: number, entryRow: number, item: NewItem) =>
-      one(api.post<Raw>(`${path}/${id}/items/${entryRow}/version`, item)),
-    versionSkill: (id: number, parent: 'category' | 'project', skillRow: number, skillName: string) =>
-      one(api.post<Raw>(`${path}/${id}/skills/${parent}/${skillRow}/version`, { skill_name: skillName })),
+    writeBullet: (id: number, entryKind: 'experience' | 'project', entryRow: number, content: string) =>
+      one(api.post<Raw>(`${path}/${id}/items/${entryKind}/${entryRow}/written`, { content })),
     // A new skill: saved to the library, listed under the category (a project's under "Other" and
     // the project), and shown last under it. Its name must be new (DUPLICATE).
     writeSkill: (id: number, entryKind: 'category' | 'project', entryRow: number, skillName: string) =>

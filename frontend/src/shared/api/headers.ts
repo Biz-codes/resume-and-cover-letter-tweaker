@@ -1,7 +1,7 @@
 // Headers: the name, headline, and contact details at the top of a resume or cover letter.
 // See backend/app/routers/headers.py and "Headers" in docs/FRONTEND_CHECKS.md.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface HeaderFields {
   full_name: string
@@ -23,6 +23,9 @@ export interface Header extends HeaderFields {
   // When it was added, which tells versions apart in lists (labels.ts).
   created_at: string
   used_by: HeaderUse[]
+  // What an edit can be applied to: the postings in progress (whose resumes and cover letters go
+  // with them) and the base resumes and cover letters that use it.
+  in_progress: HeaderUse[]
 }
 
 // Tells saved headers apart in a picker: the name, headline, and email.
@@ -33,10 +36,10 @@ export const headersApi = {
   list: () => api.get<Header[]>('/headers'),
   // Returns the identical existing header instead of adding a duplicate.
   create: (fields: HeaderFields) => api.post<Header>('/headers', fields),
-  // When a sent version uses the header, the change is saved as a new header with a new id.
-  update: (headerId: number, fields: HeaderFields) =>
-    api.put<Header>(`/headers/${headerId}`, fields),
-  addVersion: (headerId: number, fields: HeaderFields) => api.post<Header>(`/headers/${headerId}/versions`, fields),
+  // Saved as a new header (or an identical one reused) unless every one in progress is picked in
+  // applyTo and nothing sent uses it (FRONTEND_CHECKS.md, "Changing an item").
+  update: (headerId: number, fields: HeaderFields, applyTo: Use[]) =>
+    api.put<Header>(`/headers/${headerId}`, { ...fields, apply_to: refs(applyTo) }),
   setHidden: (headerId: number, hidden: boolean) => api.put<Header>(`/headers/${headerId}/hidden`, { hidden }),
   delete: (headerId: number) => api.delete(`/headers/${headerId}`),
 }

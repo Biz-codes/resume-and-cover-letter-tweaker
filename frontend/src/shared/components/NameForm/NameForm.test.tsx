@@ -13,6 +13,14 @@ describe('NameForm', () => {
     await expectNoA11yViolations()
   })
 
+  it('shows the suffix beside the field, read as its description and not its name', async () => {
+    render(<NameForm label="Title" field="name" initial="Mentoring" suffix="Base Resume" onSave={vi.fn()} />)
+    const input = screen.getByRole('textbox', { name: 'Title' })
+    expect(input).toHaveAccessibleDescription('Followed by "Base Resume".')
+    expect(screen.getByText('Base Resume')).toHaveAttribute('aria-hidden', 'true')
+    await expectNoA11yViolations()
+  })
+
   it('takes focus when it opens in place, and describes the input with the locked note', async () => {
     render(
       <NameForm

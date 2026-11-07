@@ -1,6 +1,6 @@
 // Projects. See backend/app/routers/projects.py.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface ProjectFields {
   project_title: string
@@ -31,19 +31,15 @@ export const projectsApi = {
   // Listed under "Projects" unless another section (or none, null) is picked.
   create: (fields: ProjectFields, sectionId: number | null) =>
     api.post<Project>('/projects', { ...fields, section_id: sectionId }),
-  // Adds another version on purpose, sharing the project's skills and bullets. Nothing switches to
-  // it. With nothing changed, returns the original.
-  addVersion: (id: number, fields: ProjectFields) => api.post<Project>(`/projects/${id}/versions`, fields),
   setSkills: (id: number, skillIds: number[]) =>
     api.put<Project>(`/projects/${id}/skills`, { skill_ids: skillIds }),
   setBullets: (id: number, bulletIds: number[]) =>
     api.put<Project>(`/projects/${id}/bullets`, { bullet_ids: bulletIds }),
   // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
-  // every one in progress is picked and nothing sent uses it, the change is saved as a new version
-  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
-  // bullet, or narrative content").
+  // every one in progress is picked and nothing sent uses it, the change is saved as a new project
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing an item").
   update: (id: number, fields: ProjectFields, applyTo: Use[]) =>
-    api.put<Project>(`/projects/${id}`, { ...fields, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
+    api.put<Project>(`/projects/${id}`, { ...fields, apply_to: refs(applyTo) }),
   setHidden: (id: number, hidden: boolean) => api.put<Project>(`/projects/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/projects/${id}`),
 }

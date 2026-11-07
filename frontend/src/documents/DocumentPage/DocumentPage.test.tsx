@@ -21,6 +21,7 @@ const SAM: Header = {
   github_url: null,
   portfolio_url: null,
   used_by: [],
+  in_progress: [],
 }
 const TECH_TONE = { tone_set_id: 2, name: 'Tech', rules: [], used_by: [] }
 const OUTPUT = {
@@ -32,17 +33,16 @@ const OUTPUT = {
   text: 'Sam Rivera\nEngineer\nsam@example.com\n\nExperience\nEngineer | Acme\n- Led the redesign.',
 }
 
-// Each test uses its own resume id: the warning before editing a base version is only shown
-// once per version while the app is open.
 function resume(id: number, values: object = {}) {
   return {
     resume_id: id,
-    name: 'Tech base',
+    name: 'Tech',
     header_id: 1,
     tone_set_id: null,
     job_posting: null,
     based_on: null,
     locked: false,
+    hidden: false,
     copies: [],
     updated_at: null,
     sections: [],
@@ -54,7 +54,7 @@ function resume(id: number, values: object = {}) {
 const SENT = {
   name: 'Acme resume',
   job_posting: { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' },
-  based_on: { id: 1, name: 'Tech base' },
+  based_on: { id: 1, name: 'Tech Base Resume' },
   locked: true,
   copies: [{ kind: 'resume', id: 9, name: 'Acme copy', locked: false }],
 }
@@ -95,10 +95,12 @@ describe('DocumentPage', () => {
   it('shows the tone, a tree that opens level by level, and the preview in parts', async () => {
     stub(1, resume(1, { tone_set_id: 2 }))
     renderAt('/resumes/1')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
-    await vi.waitFor(() => expect(document.title).toBe('Tech base Resume – Resume Tweaker'))
-    expect(screen.getByText('Base resume')).toBeInTheDocument()
-    expect(screen.getByText('Tone: Tech')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })).toBeInTheDocument()
+    await vi.waitFor(() => expect(document.title).toBe('Tech Base Resume – Resume Tweaker'))
+    // The title is shown again under Contents, with New title.
+    expect(screen.getByText('Tech Base Resume', { selector: 'p' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New title' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Tone')).toHaveValue('2')
     const header = screen.getByRole('button', { name: 'Header' })
     expect(header).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: 'Sections (0)' })).toBeInTheDocument()
@@ -138,36 +140,19 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('shows a base version read-only until the user chooses to edit it in place', async () => {
+  it('edits a base version in place, saying what editing does', async () => {
     const saved = resume(4, { tone_set_id: 2 })
     const fetchMock = stub(4, resume(4), { 'PUT /api/resumes/4': [{ status: 200, body: saved }] })
     renderAt('/resumes/4')
-    const warning = await screen.findByRole('group', { name: /This is a base resume/ })
-    expect(screen.queryByLabelText('Tone')).not.toBeInTheDocument()
+    expect(await screen.findByText('Edits to the resume below save instantly.')).toBeInTheDocument()
+    expect(screen.getByText('If you want to preserve this version, select "Copy" instead.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy to a new base resume' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.click(within(warning).getByRole('button', { name: 'Edit this one' }))
-
-    const tone = screen.getByLabelText('Tone')
-    await vi.waitFor(() => expect(tone).toHaveFocus())
-    expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
-    fireEvent.change(tone, { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
     await expectNotice('Tone saved.')
-    expect(sentBody(fetchMock, 'PUT /api/resumes/4')).toEqual({ name: 'Tech base', header_id: 1, tone_set_id: 2 })
-    await expectNoA11yViolations()
-  })
-
-  it('goes back to showing a base version when editing is done', async () => {
-    stub(22, resume(22))
-    renderAt('/resumes/22')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
-    const done = await screen.findByRole('button', { name: 'Done editing' })
-    await expectNoA11yViolations()
-    fireEvent.click(done)
-    // Read-only again, with the choice to edit or copy, and focus on "Edit this one".
-    expect(screen.queryByLabelText('Tone')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
-    await expectNotice('Done editing. Your changes to this resume are saved.')
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit this one' })).toHaveFocus())
+    expect(sentBody(fetchMock, 'PUT /api/resumes/4')).toEqual({ name: 'Tech', header_id: 1, tone_set_id: 2 })
     await expectNoA11yViolations()
   })
 
@@ -181,7 +166,7 @@ describe('DocumentPage', () => {
       ],
     })
     renderAt('/resumes/24')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     const undo = screen.getByRole('button', { name: 'Undo' })
     const redo = screen.getByRole('button', { name: 'Redo' })
     expect(screen.getByRole('group', { name: 'Undo and redo' })).toContainElement(undo)
@@ -232,7 +217,7 @@ describe('DocumentPage', () => {
       'PUT /api/resumes/25/tree': [{ status: 200, body: full }],
     })
     renderAt('/resumes/25')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Skills' }))
     expect(await screen.findByRole('button', { name: 'Sections (0)' })).toBeInTheDocument()
@@ -252,7 +237,7 @@ describe('DocumentPage', () => {
       ],
     })
     renderAt('/resumes/26')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
     const undo = screen.getByRole('button', { name: 'Undo' })
     await vi.waitFor(() => expect(undo).toHaveAttribute('aria-disabled', 'false'))
@@ -262,24 +247,17 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
-  it("doesn't warn again about a version already chosen for editing", async () => {
-    stub(4, resume(4))
-    renderAt('/resumes/4')
-    expect(await screen.findByLabelText('Tone')).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
-  })
-
-  it('offers a copy instead of editing a base version, named so no other has its name', async () => {
-    // "Copy of Tech base" is taken, so it starts as the next one free.
-    const taken = [resume(1), resume(2, { name: 'copy of tech base' })]
+  it('offers a copy named so no other has its name', async () => {
+    // "Copy of Tech" is taken, so it starts as the next one free.
+    const taken = [resume(1), resume(2, { name: 'copy of tech' })]
     stub(5, resume(5), { 'GET /api/resumes': [{ status: 200, body: taken }] })
     renderAt('/resumes/5')
-    fireEvent.click(await screen.findByRole('button', { name: 'Make a copy instead' }))
-    const name = await screen.findByLabelText('Name of the copy')
-    expect(name).toHaveValue('Copy 2 of Tech base')
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy to a new base resume' }))
+    const name = await screen.findByRole('textbox', { name: 'Name of the copy' })
+    expect(name).toHaveValue('Copy 2 of Tech')
     await vi.waitFor(() => expect(name).toHaveFocus())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Make a copy' })).toHaveFocus())
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Copy to a new base resume' })).toHaveFocus())
   })
 
   it('says when saving the tone fails', async () => {
@@ -287,7 +265,7 @@ describe('DocumentPage', () => {
       'PUT /api/resumes/18': [{ status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') }],
     })
     renderAt('/resumes/18')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     expect(screen.getByLabelText('Tone')).toHaveAttribute('aria-invalid', 'true')
@@ -301,7 +279,7 @@ describe('DocumentPage', () => {
       'GET /api/headers': [{ status: 200, body: [SAM] }, { status: 200, body: [teaching, SAM] }],
     })
     renderAt('/resumes/19')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     fireEvent.click(screen.getByRole('button', { name: 'Header' }))
     fireEvent.click(screen.getByRole('button', { name: 'New headline' }))
     const dialog = screen.getByRole('dialog', { name: 'New headline' })
@@ -319,10 +297,7 @@ describe('DocumentPage', () => {
   it("shows a posting's header, changed on the posting", async () => {
     stub(23, resume(23, { job_posting: SENT.job_posting }))
     renderAt('/resumes/23')
-    // A version for a posting isn't a base version, so it's editable right away, with no
-    // read-only view to go back to.
     fireEvent.click(await screen.findByRole('button', { name: 'Application header' }))
-    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Tone')).toBeInTheDocument()
     expect(screen.getByText('Engineer')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save header' })).not.toBeInTheDocument()
@@ -342,30 +317,57 @@ describe('DocumentPage', () => {
       Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
     )
     renderAt('/resumes/21')
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit this one' }))
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
     fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Experience' }))
     expect(await screen.findByRole('group', { name: 'Items in Experience' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
-  it('renames, keeping the input when it fails', async () => {
-    stub(6, resume(6), {
-      'PUT /api/resumes/6': [{ status: 422, body: errorBody('VALIDATION_FAILED', 'Name is required.', 'name') }],
+  it('renames in a modal, keeping what was typed when it fails', async () => {
+    const fetchMock = stub(6, resume(6), {
+      'PUT /api/resumes/6': [
+        { status: 422, body: errorBody('VALIDATION_FAILED', 'Name is required.', 'name') },
+        { status: 200, body: resume(6, { name: 'Mentoring' }) },
+      ],
     })
     renderAt('/resumes/6')
-    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
-    const name = screen.getByLabelText('New name for "Tech base"')
-    expect(name).toHaveFocus()
+    fireEvent.click(await screen.findByRole('button', { name: 'New title' }))
+    const dialog = screen.getByRole('dialog', { name: 'New title' })
+    await vi.waitFor(() => expect(within(dialog).getByRole('heading', { name: 'New title' })).toHaveFocus())
+    const name = within(dialog).getByRole('textbox', { name: 'Title' })
+    expect(name).toHaveValue('Tech')
+    // What the app adds after the name is shown beside it, and read with it.
+    expect(name).toHaveAccessibleDescription('Followed by "Base Resume".')
+    await expectNoA11yViolations()
     fireEvent.change(name, { target: { value: ' ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Name is required.')
     expect(name).toHaveAttribute('aria-invalid', 'true')
-    expect(name).toHaveAccessibleDescription('Name is required.')
+    expect(name).toHaveAccessibleDescription('Followed by "Base Resume". Name is required.')
     expect(name).toHaveValue(' ')
     await expectNoA11yViolations()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveFocus())
+    fireEvent.change(name, { target: { value: 'Mentoring' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    // The modal closes as the notice opens, and focus goes back to New title after it.
+    await expectNotice('Renamed to "Mentoring Base Resume".')
+    expect(screen.queryByRole('dialog', { name: 'New title' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Mentoring Base Resume' })).toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'New title' })).toHaveFocus())
+    const puts = fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+    expect(JSON.parse(String((puts.at(-1)![1] as RequestInit).body)).name).toBe('Mentoring')
+  })
+
+  it('closes the title modal with Cancel, saving nothing', async () => {
+    const fetchMock = stub(26, resume(26))
+    renderAt('/resumes/26')
+    fireEvent.click(await screen.findByRole('button', { name: 'New title' }))
+    const dialog = screen.getByRole('dialog', { name: 'New title' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Title' }), { target: { value: 'Teaching' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'New title' })).toHaveFocus())
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toEqual([])
   })
 
   it('shows a sent version read-only, and only renames it', async () => {
@@ -375,27 +377,67 @@ describe('DocumentPage', () => {
     renderAt('/resumes/7')
     // Its posting, linked.
     expect(await screen.findByRole('link', { name: 'Back to job posting' })).toHaveAttribute('href', '/postings/4')
-    expect(screen.getByText(/so it's a record of what went out/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Tech base' })).toHaveAttribute('href', '/resumes/1')
-    expect(screen.queryByRole('group', { name: /This is a base resume/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/so the only field you can edit is the title below\./)).toBeInTheDocument()
+    expect(
+      screen.getByText('If you want to use this resume as a template for a new application, select "Copy".'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Tech Base Resume' })).toHaveAttribute('href', '/resumes/1')
     expect(screen.getByText('Tone: None')).toBeInTheDocument()
-    // Nothing can change, so there's nothing to undo.
+    // Nothing else can change, so there's nothing to undo, and it can be hidden, not deleted.
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Application header' }))
     // The header's values are listed, with nothing to pick.
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
-    const name = screen.getByLabelText('New name for "Acme resume"')
     await expectNoA11yViolations()
+    // A version for a posting's title ends in "Resume", not "Base Resume".
+    expect(screen.getByRole('heading', { level: 2, name: 'Acme resume Resume' })).toBeInTheDocument()
+    expect(screen.queryByText('Base resume')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'New title' }))
+    const name = within(screen.getByRole('dialog', { name: 'New title' })).getByRole('textbox', { name: 'Title' })
+    expect(name).toHaveAccessibleDescription('Followed by "Resume".')
     fireEvent.change(name, { target: { value: 'Acme (sent)' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Acme (sent) Resume' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await expectNotice('Renamed to "Acme (sent) Resume".')
+    expect(screen.getByRole('heading', { level: 2, name: 'Acme (sent) Resume' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'PUT /api/resumes/7').name).toBe('Acme (sent)')
   })
 
+  it('hides and unhides a sent version, keeping focus on the button', async () => {
+    const fetchMock = stub(27, resume(27, SENT), {
+      'PUT /api/resumes/27/hidden': [
+        { status: 200, body: resume(27, { ...SENT, hidden: true }) },
+        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
+      ],
+    })
+    renderAt('/resumes/27')
+    const button = await screen.findByRole('button', { name: 'Hide' })
+    button.focus()
+    fireEvent.click(button)
+    await expectNotice('Hid "Acme resume".')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/27/hidden')).toEqual({ hidden: true })
+    expect(button).toHaveTextContent('Unhide')
+    expect(screen.getByText('hidden')).toBeInTheDocument()
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    expect(button).toHaveTextContent('Unhide')
+    await expectNoA11yViolations()
+  })
+
+  it('shows it is hiding', async () => {
+    stub(28, resume(28, SENT))
+    const fetchMock = vi.mocked(fetch)
+    const answer = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((url, init) => (init?.method === 'PUT' ? new Promise<Response>(() => {}) : answer(url, init)))
+    renderAt('/resumes/28')
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide' }))
+    expect(await screen.findByRole('button', { name: 'Hiding…' })).toHaveAttribute('aria-disabled', 'true')
+    await expectNoA11yViolations()
+  })
+
   it('makes a copy and opens it', async () => {
-    const copy = resume(10, { name: 'Tech copy', based_on: { id: 8, name: 'Tech base' } })
+    const copy = resume(10, { name: 'Tech copy', based_on: { id: 8, name: 'Tech Base Resume' } })
     const fetchMock = stub(8, resume(8), {
       'POST /api/resumes/8/copies': [{ status: 201, body: copy }],
       'GET /api/resumes/10': [{ status: 200, body: copy }],
@@ -404,32 +446,33 @@ describe('DocumentPage', () => {
       'GET /api/resumes': [{ status: 200, body: [resume(8)] }],
     })
     renderAt('/resumes/8')
-    fireEvent.click(await screen.findByRole('button', { name: 'Make a copy' }))
-    const name = await screen.findByLabelText('Name of the copy')
-    expect(name).toHaveValue('Copy of Tech base')
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy to a new base resume' }))
+    const name = await screen.findByRole('textbox', { name: 'Name of the copy' })
+    expect(name).toHaveValue('Copy of Tech')
+    // The copy is a base version, so its name is shown with "Base Resume" after it.
+    expect(name).toHaveAccessibleDescription('Followed by "Base Resume".')
     await vi.waitFor(() => expect(name).toHaveFocus())
     fireEvent.change(name, { target: { value: 'Tech copy' } })
     fireEvent.click(screen.getByRole('button', { name: 'Make copy' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy Resume' })).toBeInTheDocument()
-    await expectNotice('Copied to a new base resume, "Tech copy".')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech copy Base Resume' })).toBeInTheDocument()
+    await expectNotice('Copied to "Tech copy Base Resume". The original is unchanged.')
     expect(sentBody(fetchMock, 'POST /api/resumes/8/copies')).toEqual({ name: 'Tech copy' })
   })
 
   it('lists the copies a delete keeps, then deletes', async () => {
-    stub(11, resume(11, SENT), {
+    stub(11, resume(11, { copies: SENT.copies }), {
       'DELETE /api/resumes/11': [{ status: 204 }],
       'GET /api/resumes': [{ status: 200, body: [] }],
     })
     renderAt('/resumes/11')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
-    const confirm = screen.getByRole('group', { name: 'Delete "Acme resume"?' })
+    const confirm = screen.getByRole('group', { name: 'Delete "Tech Base Resume"?' })
     expect(within(confirm).getByRole('button', { name: 'Cancel' })).toHaveFocus()
     expect(confirm).toHaveTextContent("Copies made from it: Acme copy. They're kept.")
-    expect(confirm).toHaveTextContent('removes the record of what you sent')
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Resumes' })).toBeInTheDocument()
-    await expectNotice('Deleted "Acme resume".')
+    await expectNotice('Deleted "Tech Base Resume".')
   })
 
   it('keeps the confirm open when a delete fails', async () => {
@@ -439,7 +482,7 @@ describe('DocumentPage', () => {
     renderAt('/resumes/12')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Delete "Tech base"?' })).getByRole('button', { name: 'Delete' }),
+      within(screen.getByRole('group', { name: 'Delete "Tech Base Resume"?' })).getByRole('button', { name: 'Delete' }),
     )
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -470,7 +513,6 @@ describe('DocumentPage', () => {
     renderAt('/cover-letters/13')
     await openPreview()
     expect(await screen.findByText("Section names aren't printed in the letter.")).toBeInTheDocument()
-    // A letter for a posting isn't a base version, so there's no warning.
     fireEvent.click(screen.getByRole('button', { name: 'Greeting' }))
     const greeting = screen.getByLabelText('Addressed to (after "Dear")')
     fireEvent.change(greeting, { target: { value: 'Ms. Lee' } })
@@ -553,7 +595,7 @@ describe('DocumentPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Tech base Resume' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })).toBeInTheDocument()
   })
 
   it('links back to the list when the resume does not exist', async () => {

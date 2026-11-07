@@ -37,7 +37,7 @@ from app.models import (
     ResumeSkill,
     ResumeSkillCategory,
 )
-from app.versions import is_locked
+from app.versions import is_locked, shown_name
 
 
 class Use(BaseModel):
@@ -214,7 +214,7 @@ def uses(db: Session, links: list[Link], item_ids: list[int]) -> dict[int, list[
         row_item, row_doc = rows.c[1], rows.c[2]
         doc_pk = doc_id(link.doc)
         kind = "resume" if link.doc is Resume else "cover_letter"
-        query = (select(row_item, doc_pk, link.doc.name, is_locked(link.doc))
+        query = (select(row_item, doc_pk, shown_name(link.doc), is_locked(link.doc))
                  .join(link.doc, doc_pk == row_doc)
                  .where(row_item.in_(item_ids))
                  .order_by(doc_pk))
@@ -267,7 +267,7 @@ def column_uses(db: Session, columns: list[Any], item_ids: list[int]) -> dict[in
     for column in columns:
         doc = column.class_
         kind = "resume" if doc is Resume else "cover_letter"
-        query = (select(column, doc_id(doc), doc.name, is_locked(doc))
+        query = (select(column, doc_id(doc), shown_name(doc), is_locked(doc))
                  .where(column.in_(item_ids)).order_by(doc_id(doc)))
         for item_id, document_id, name, locked in db.execute(query):
             found[item_id].append(Use(kind=kind, id=document_id, name=name, locked=bool(locked)))

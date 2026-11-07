@@ -159,21 +159,6 @@ describe('NarrativeContentPage', () => {
     expect(edit).toHaveFocus()
   })
 
-  it('adds a new version of an excerpt', async () => {
-    const version = { ...INTRO, content_id: 13, content: 'I build web tools.', used_by: [] }
-    const fetchMock = stub({ 'POST /api/narrative-content/10/versions': [{ status: 201, body: version }] })
-    render(<NarrativeContentPage />)
-    fireEvent.click(within(await openItem(INTRO.content)).getByRole('button', { name: /^New version of / }))
-    const form = screen.getByRole('form', { name: `New version of ${LABEL}` })
-    fireEvent.change(within(form).getByLabelText('Narrative content text (required)'), {
-      target: { value: 'I build web tools.' },
-    })
-    await expectNoA11yViolations()
-    fireEvent.click(within(form).getByText('Add version'))
-    await expectNotice('Added a new version')
-    expect(sentBody(fetchMock, 'POST /api/narrative-content/10/versions')).toEqual({ content: 'I build web tools.' })
-  })
-
   it('lists what a delete affects, then deletes', async () => {
     stub({ 'DELETE /api/narrative-content/10': [{ status: 204 }] }, [unsent(INTRO), LOOSE])
     render(<NarrativeContentPage />)

@@ -7,9 +7,9 @@
 // section's items come with their own defaults). Anything else goes in a section type first
 // (AddContent), from the library or written new; bullets and skills can be written in place too.
 // Each row's View and Edit opens its library item in the same dialog as the library's
-// (useItemDialogs), where New version takes the item's place in this document only and leaves the
-// original in the library. Each change is saved right away and returns the document with its new
-// output.
+// (useItemDialogs), where an edit changes it in this document, and in the others in progress the
+// user checks (docs/FRONTEND_CHECKS.md, "Changing an item"). Each change is saved right away and
+// returns the document with its new output.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -26,7 +26,7 @@ import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList, { type ListItem } from '../../shared/components/OrderedList/OrderedList'
 import { useItemDialogs } from '../../library/items/ItemDialogs'
-import type { ItemRef, VersionValues } from '../../library/items/itemHost'
+import type { ItemRef } from '../../library/items/itemHost'
 import {
   entryItem,
   fromKey,
@@ -34,7 +34,6 @@ import {
   KIND_NAMES,
   KINDS_IN_ORDER,
   listedIds,
-  NEW_FIELDS,
   placedItem,
   savedItems,
   SHOWN_FIELDS,
@@ -109,20 +108,10 @@ function Writer({
   )
 }
 
-const same = (values: VersionValues, before: Record<string, string>) =>
-  Object.keys(before).every((name) => (values[name] ?? '').trim() === before[name].trim())
-
 // A row's View and Edit button: `row` makes its id unique on the page, `label` names the row and
 // where it is (an item can be in more than one section, a skill under more than one category),
-// `ref` is its library item, `current` the values it shows now, and `version` saves a new version
-// in its place here.
-type EditRow = (
-  row: string,
-  label: string,
-  ref: ItemRef,
-  current: Record<string, string>,
-  version: (values: VersionValues) => Promise<DocDetail>,
-) => ReactNode
+// and `ref` is its library item.
+type EditRow = (row: string, label: string, ref: ItemRef) => ReactNode
 
 // What opens under a role, project, or education entry (its fields, as the library has them),
 // and a category's or project's skills and a role's or project's bullets here.
@@ -133,9 +122,7 @@ function EntryChildren({
   onBullets,
   taken,
   onWriteBullet,
-  onVersionBullet,
   onWriteSkill,
-  onVersionSkill,
   editRow,
   sectionTitle,
 }: {
@@ -148,11 +135,7 @@ function EntryChildren({
   onBullets: (ids: number[]) => Promise<void>
   // A new bullet.
   onWriteBullet: (content: string) => Promise<void>
-  // A new version of a bullet shown here, in its place.
-  onVersionBullet: (content: string, replaces: number) => Promise<DocDetail>
   onWriteSkill: (skillName: string) => Promise<void>
-  // A new version of a skill shown here, by its row.
-  onVersionSkill: (skillRow: number, skillName: string) => Promise<DocDetail>
   editRow: EditRow
   // The section it's placed in, which names its rows' buttons.
   sectionTitle: string
@@ -194,8 +177,6 @@ function EntryChildren({
         `bullet-${parentKind}-${row.row_id}`,
         `${item.label ?? item.name} under ${name} in ${sectionTitle}`,
         { kind: 'bullet', id: row.item_id, title: shortBullet(row.text) },
-        { content: row.text },
-        (values) => onVersionBullet(values.content ?? '', row.item_id),
       )
     )
   }
@@ -207,8 +188,6 @@ function EntryChildren({
         `skill-${parentKind}-${row.row_id}`,
         `${item.name} under ${name} in ${sectionTitle}`,
         { kind: 'skill', id: row.item_id, title: row.text },
-        { skill_name: row.text },
-        (values) => onVersionSkill(row.row_id, values.skill_name ?? ''),
       )
     )
   }
@@ -364,7 +343,7 @@ function SectionBody({
   library: Library | null
   saved: (request: Promise<DocDetail>) => Promise<void>
   // Without a notice, the caller gives its own.
-  written: (request: Promise<DocDetail>, notice?: string) => Promise<void>
+  written: (request: Promise<DocDetail>, notice: string) => Promise<void>
   onNotice: (notice: string) => void
   editRow: EditRow
 }) {
@@ -394,18 +373,11 @@ function SectionBody({
     const entry = entryOf(item)
     if (!entry) return null
     const name = itemName(entry.kind, entry.values)
-    const current = Object.fromEntries(NEW_FIELDS[entry.kind].map((field) => [field.name, entry.values[field.name] ?? '']))
-    return editRow(
-      `${entry.kind}-${entry.row_id}`,
-      `${item.label ?? item.name} in ${section.title}`,
-      { kind: entry.kind, id: entry.item_id, title: opens(entry.kind) ? name : shortBullet(name) },
-      current,
-      // Text takes the original's place through writing; the other kinds have their own version.
-      (values) =>
-        opens(entry.kind)
-          ? api.versionItem(doc.id, entry.row_id, { kind: entry.kind, ...values })
-          : api.write(doc.id, section.row_id, { kind: entry.kind, content: values.content }, entry.item_id),
-    )
+    return editRow(`${entry.kind}-${entry.row_id}`, `${item.label ?? item.name} in ${section.title}`, {
+      kind: entry.kind,
+      id: entry.item_id,
+      title: opens(entry.kind) ? name : shortBullet(name),
+    })
   }
 
   return (
@@ -463,10 +435,6 @@ function SectionBody({
               }
               onWriteBullet={(content) =>
                 written(api.writeBullet(doc.id, parent, entry.row_id, content), "Added the new bullet. It's saved in your library too.")
-              }
-              onVersionBullet={(content, replaces) => api.writeBullet(doc.id, parent, entry.row_id, content, replaces)}
-              onVersionSkill={(skillRow, skillName) =>
-                api.versionSkill(doc.id, entry.kind === 'project' ? 'project' : 'category', skillRow, skillName)
               }
               editRow={editRow}
               sectionTitle={section.title}
@@ -529,11 +497,10 @@ export default function DocumentTree({
   // Each change sends the whole list and gets the document back.
   const saved = async (request: Promise<DocDetail>) => onChange(await request)
 
-  // Writing adds to the library too, so its lists are read again. Without a notice, the caller
-  // gives its own (a new version).
-  async function written(request: Promise<DocDetail>, notice?: string) {
+  // Writing adds to the library too, so its lists are read again.
+  async function written(request: Promise<DocDetail>, notice: string) {
     onChange(await request)
-    if (notice) onNotice(notice)
+    onNotice(notice)
     void load()
   }
 
@@ -544,25 +511,14 @@ export default function DocumentTree({
     notify: onNotice,
   })
 
-  const editRow: EditRow = (row, label, ref, current, version) => {
+  const editRow: EditRow = (row, label, ref) => {
     const id = `edit-${row}`
     return (
       <button
         type="button"
         id={id}
         aria-label={`View and Edit ${label}`}
-        onClick={() =>
-          open(ref, {
-            doc: KINDS[kind].singular,
-            where: { kind, id: doc.id },
-            returnTo: id,
-            version: async (values) => {
-              if (same(values, current)) return 'Nothing changed, so nothing was saved.'
-              await written(version(values))
-              return 'Saved the new version here. The original is still in your library.'
-            },
-          })
-        }
+        onClick={() => open(ref, { doc: KINDS[kind].singular, where: { kind, id: doc.id }, returnTo: id })}
       >
         View and Edit
       </button>
@@ -578,8 +534,6 @@ export default function DocumentTree({
         `section-${section.row_id}`,
         section.title,
         { kind: 'section', id: section.section_id, title: section.title },
-        { title: section.title },
-        (values) => api.versionSection(doc.id, section.row_id, values.title ?? ''),
       )
     )
   }

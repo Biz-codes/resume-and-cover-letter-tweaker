@@ -134,32 +134,20 @@ describe('SectionsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it("doesn't offer renaming or deleting built-in sections, only a new version", async () => {
+  it("doesn't offer hiding or deleting built-in sections, and notes a new title saves a new one", async () => {
     stub({}, [SKILLS, unsent(FREELANCE)])
     render(<SectionsPage />)
     expect(within(await findCard(/^Skills/)).getByText('built in')).toBeInTheDocument()
     const skills = await card('Skills')
-    expect(within(skills).queryByLabelText('Section title')).not.toBeInTheDocument()
+    expect(within(skills).getByLabelText('Section title')).toHaveAccessibleDescription(/^Built-in sections keep their title/)
     expect(within(skills).queryByRole('button', { name: /^Delete "/ })).not.toBeInTheDocument()
-    expect(within(skills).getByRole('button', { name: /^New version of / })).toBeInTheDocument()
+    expect(within(skills).queryByRole('button', { name: /^Hide "/ })).not.toBeInTheDocument()
+    expect(within(skills).queryByRole('button', { name: /New version/ })).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(within(skills).getByRole('button', { name: 'Close' }))
     const freelance = await card('Freelance')
     expect(within(freelance).getByLabelText('Section title')).toHaveValue('Freelance')
     expect(within(freelance).getByRole('button', { name: /^Delete "/ })).toBeInTheDocument()
-  })
-
-  it('adds a new version of a section, built-in ones too', async () => {
-    const version = { ...SKILLS, id: 13, title: 'Technical Skills', built_in: false }
-    const fetchMock = stub({ 'POST /api/sections/2/versions': [{ status: 201, body: version }] })
-    render(<SectionsPage />)
-    fireEvent.click(within(await card('Skills')).getByRole('button', { name: /^New version of / }))
-    const field = screen.getByLabelText("New version's title")
-    expect(field).toHaveFocus()
-    fireEvent.change(field, { target: { value: 'Technical Skills' } })
-    fireEvent.click(screen.getByText('Add version'))
-    await expectNotice('Added "Technical Skills", with the same lists. Resumes and cover letters keep "Skills" until you pick the new one.',)
-    expect(sentBody(fetchMock, 'POST /api/sections/2/versions')).toEqual({ title: 'Technical Skills' })
   })
 
   it('offers categories to list, but never "Other"', async () => {
@@ -218,7 +206,7 @@ describe('SectionsPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Section title'), { target: { value: 'Consulting' } })
     fireEvent.click(screen.getByText('Save'))
-    await expectNotice('Saved as a new section, "Consulting". Sent versions keep "Freelance".',)
+    await expectNotice('Saved as a new version, "Consulting". Everything that used "Freelance" still does')
   })
 
   it('highlights the title when it duplicates another section', async () => {

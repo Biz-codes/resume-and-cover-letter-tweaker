@@ -1,6 +1,6 @@
 // Experience (roles). See backend/app/routers/experience.py.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface ExperienceFields {
   role_title: string
@@ -31,18 +31,13 @@ export const experienceApi = {
   // Listed under "Experience" unless another section (or none, null) is picked.
   create: (fields: ExperienceFields, sectionId: number | null) =>
     api.post<Experience>('/experience', { ...fields, section_id: sectionId }),
-  // Adds another version on purpose, sharing the role's bullets. Nothing switches to it.
-  // With nothing changed, returns the original.
-  addVersion: (id: number, fields: ExperienceFields) =>
-    api.post<Experience>(`/experience/${id}/versions`, fields),
   setBullets: (id: number, bulletIds: number[]) =>
     api.put<Experience>(`/experience/${id}/bullets`, { bullet_ids: bulletIds }),
   // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
-  // every one in progress is picked and nothing sent uses it, the change is saved as a new version
-  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
-  // bullet, or narrative content").
+  // every one in progress is picked and nothing sent uses it, the change is saved as a new role
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing an item").
   update: (id: number, fields: ExperienceFields, applyTo: Use[]) =>
-    api.put<Experience>(`/experience/${id}`, { ...fields, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
+    api.put<Experience>(`/experience/${id}`, { ...fields, apply_to: refs(applyTo) }),
   setHidden: (id: number, hidden: boolean) => api.put<Experience>(`/experience/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/experience/${id}`),
 }

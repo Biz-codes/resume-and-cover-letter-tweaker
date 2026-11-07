@@ -43,3 +43,12 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* The title under Contents: "Title", the title under it, then New title. */
+.title p {
+  margin: 0;
+}
+
+.title button {
+  margin: 4px 0 8px;
+}

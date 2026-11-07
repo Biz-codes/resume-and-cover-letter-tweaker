@@ -1,5 +1,5 @@
-// Library page for bullet points: every bullet, and its dialog (BulletItem), where it's edited,
-// given a new version, or deleted, with where it's listed and used. New bullets are written under
+// Library page for bullet points: every bullet, and its dialog (BulletItem), where it's edited or
+// deleted, with where it's listed and used. New bullets are written under
 // a role, project, or section on those pages. Bullets no role, project, or section lists come
 // first, so they can be listed again or deleted (docs/FRONTEND_CHECKS.md, "Unlisted items").
 import { useCallback, useEffect, useState } from 'react'

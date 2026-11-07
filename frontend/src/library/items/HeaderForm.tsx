@@ -1,5 +1,5 @@
-// A header's fields and its form, used to add, edit, and add a version of a header.
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+// A header's fields and its form, used to add and edit a header.
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import type { HeaderFields } from '../../shared/api/headers'
 import { HEADER_FIELDS } from './itemFields'
@@ -10,18 +10,22 @@ import { HEADER_FIELDS } from './itemFields'
 export default function HeaderForm({
   label,
   initial,
-  locked = false,
+  note,
   submitLabel = 'Save',
   focusOnOpen = true,
+  children,
   onSave,
   onCancel,
 }: {
   label: string
   initial: HeaderFields
-  locked?: boolean
+  // Shown above the fields and read with the first one (what saving does).
+  note?: string
   submitLabel?: string
   // Off for the header's form in its dialog, where the dialog's heading has focus.
   focusOnOpen?: boolean
+  // More controls, shown after the fields (which ones in progress get the change).
+  children?: ReactNode
   onSave: (fields: HeaderFields) => Promise<void>
   onCancel: () => void
 }) {
@@ -39,7 +43,7 @@ export default function HeaderForm({
   // Focus lands on the first field, past the note, so the note describes that field.
   function describedBy(name: keyof HeaderFields) {
     const ids = [
-      locked && name === HEADER_FIELDS[0].name ? noteId : null,
+      note && name === HEADER_FIELDS[0].name ? noteId : null,
       error?.field === name ? errorId : null,
     ].filter(Boolean)
     return ids.length ? ids.join(' ') : undefined
@@ -61,9 +65,9 @@ export default function HeaderForm({
 
   return (
     <form className="card" ref={formRef} onSubmit={submit} aria-label={label}>
-      {locked && (
+      {note && (
         <p className="note" id={noteId}>
-          A sent version uses this header, so saving adds a new header. Everything using this one keeps it.
+          {note}
         </p>
       )}
       {HEADER_FIELDS.map(({ name, label: fieldLabel, type, autoComplete }) => (
@@ -81,6 +85,7 @@ export default function HeaderForm({
           />
         </label>
       ))}
+      {children}
       {error && (
         <p role="alert" id={errorId}>
           {error.message}

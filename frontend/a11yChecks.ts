@@ -27,7 +27,7 @@ const CONTRAST_PAIRS: [string, string, string][] = [
   ["[role='alert']", '.note, .confirm', 'error text in a delete confirm'],
   [':root', '.note, .confirm', 'text in a note or delete confirm'],
   [':root', '.tag', 'tag text'],
-  [':root', '--highlight', 'text of an item being moved (OrderedList.module.css)'],
+  [':root', '--highlight', 'text of an item being moved (OrderedList.module.css), and of a title being hovered to rename (DocumentPage.module.css)'],
 ]
 
 function missingTests() {

@@ -1,5 +1,5 @@
 // Library page for projects: add projects, and open each one's dialog (ProjectItem) to edit it,
-// add a version of it, delete it, and edit its skills and bullets.
+// delete it, and edit its skills and bullets.
 import { useCallback, useEffect, useState } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { distinctLabels } from '../shared/api/labels'

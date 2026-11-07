@@ -1,6 +1,5 @@
 // Library page for narrative content: every excerpt (one sentence up to a full paragraph), adding
-// excerpts, and each one's dialog (NarrativeItem), where it's edited, given a new version, or
-// deleted. The add and edit forms also choose every section that lists the excerpt. Excerpts no
+// excerpts, and each one's dialog (NarrativeItem), where it's edited or deleted. The add and edit forms also choose every section that lists the excerpt. Excerpts no
 // section lists come first, so they can be listed again or deleted (docs/FRONTEND_CHECKS.md,
 // "Unlisted items").
 import { useCallback, useEffect, useState } from 'react'

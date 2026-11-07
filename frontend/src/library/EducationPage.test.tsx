@@ -97,7 +97,7 @@ describe('EducationPage', () => {
     await expectNoA11yViolations()
     fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
     fireEvent.click(within(form).getByText('Save'))
-    await expectNotice('Saved as a new entry, "B.A. in English, State University (2015)"',)
+    await expectNotice('Saved as a new version, "B.A. in English, State University (2015)"')
     expect(sentBody(fetchMock, 'PUT /api/education/7')).toMatchObject({ graduation: '2015' })
   })
 
@@ -110,20 +110,6 @@ describe('EducationPage', () => {
     fireEvent.click(within(await loadedDialog()).getByText('Cancel'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(edit).toHaveFocus()
-  })
-
-  it('adds a new version of an entry', async () => {
-    const version = { ...DEGREE, education_id: 11, graduation: '2015', used_by: [] }
-    const fetchMock = stub({ 'POST /api/education/7/versions': [{ status: 201, body: version }] })
-    render(<EducationPage />)
-    fireEvent.click(within(await openItem('B.A. in English, State University')).getByRole('button', { name: /^New version of / }))
-    const form = screen.getByRole('form', { name: `New version of "${LABEL}"` })
-    fireEvent.change(within(form).getByLabelText(/^Graduation and honors/), { target: { value: '2015' } })
-    await expectNoA11yViolations()
-    fireEvent.click(within(form).getByText('Add version'))
-    await expectNotice(`keep "${LABEL}" until you pick the new one`)
-    expect(sentBody(fetchMock, 'POST /api/education/7/versions')).toMatchObject({ graduation: '2015' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('lists what a delete affects, then deletes', async () => {

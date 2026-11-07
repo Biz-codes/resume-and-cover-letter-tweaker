@@ -1,6 +1,6 @@
 // Bullet points. See backend/app/routers/bullet_points.py.
 import { api } from './client'
-import type { Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface Bullet {
   // Set aside: not offered anywhere new, but kept wherever it's used.
@@ -26,12 +26,10 @@ export const bulletsApi = {
   list: () => api.get<Bullet[]>('/bullet-points'),
   create: (content: string, parent: BulletParent) => api.post<Bullet>('/bullet-points', { content, ...parent }),
   // A sent version never changes, and in-progress ones change only when picked in applyTo. Unless
-  // every one in progress is picked and nothing sent uses it, the new text is saved as a new bullet
-  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing a role, project,
-  // bullet, or narrative content").
+  // every one in progress is picked and nothing sent uses it, the change is saved as a new bullet
+  // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing an item").
   update: (id: number, content: string, applyTo: Use[]) =>
-    api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: applyTo.map(({ kind, id }) => ({ kind, id })) }),
-  addVersion: (id: number, content: string) => api.post<Bullet>(`/bullet-points/${id}/versions`, { content }),
+    api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: refs(applyTo) }),
   setHidden: (id: number, hidden: boolean) => api.put<Bullet>(`/bullet-points/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/bullet-points/${id}`),
 }

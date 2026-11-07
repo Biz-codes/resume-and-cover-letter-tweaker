@@ -93,7 +93,10 @@ describe('BulletItem', () => {
       'GET /api/bullet-points': [{ status: 200, body: [IN_USE] }],
       'PUT /api/bullet-points/10': [{ status: 200, body: saved }],
     })
-    const host = await renderItem(<BulletItem id={10} />, { doc: 'resume', where: { kind: 'resume', id: 3 }, version: vi.fn() })
+    const host = await renderItem(<BulletItem id={10} />, { doc: 'resume', where: { kind: 'resume', id: 3 } })
+    expect(screen.getByLabelText('Bullet text')).toHaveAccessibleDescription(
+      /sent version keeps this one\. Saving changes it in this resume, and in the others you check below\.$/,
+    )
     const choice = screen.getByRole('group', { name: 'Apply this change to which other resumes and cover letters in progress?' })
     expect(within(choice).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual(['Cover letter: Draft letter'])
     await expectNoA11yViolations()

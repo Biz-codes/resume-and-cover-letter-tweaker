@@ -185,17 +185,18 @@ def test_a_cover_letter_reads_without_section_titles(client: TestClient, db: Ses
 
 
 def test_list_shows_postings_locks_and_copies(client: TestClient, db: Session, account_id: int):
-    base = add(db, Resume(account_id=account_id, name="Tech base"))
+    base = add(db, Resume(account_id=account_id, name="Tech"))
     sent = add(db, Resume(account_id=account_id, name="Acme", based_on_resume_id=base.resume_id,
                           job_posting_id=posting(db, account_id, sent=True).job_posting_id))
     listed = {doc["name"]: doc for doc in client.get("/api/resumes").json()}
-    assert listed["Tech base"]["job_posting"] is None
-    assert not listed["Tech base"]["locked"]
-    assert listed["Tech base"]["copies"] == [
+    assert listed["Tech"]["job_posting"] is None
+    assert not listed["Tech"]["locked"]
+    assert listed["Tech"]["copies"] == [
         {"kind": "resume", "id": sent.resume_id, "name": "Acme", "locked": True}]
     assert listed["Acme"]["job_posting"]["organization"] == "Acme"
     assert listed["Acme"]["locked"]
-    assert listed["Acme"]["based_on"] == {"id": base.resume_id, "name": "Tech base"}
+    # Names pointing to another one show it as the app does: a base version's ends in "Base Resume".
+    assert listed["Acme"]["based_on"] == {"id": base.resume_id, "name": "Tech Base Resume"}
 
 
 def test_another_accounts_documents_are_not_found(client: TestClient, db: Session,
@@ -373,3 +374,22 @@ def test_delete_keeps_the_copies(client: TestClient, db: Session, account_id: in
     kept = client.get(f"/api/resumes/{copy['resume_id']}").json()
     assert kept["based_on"] is None
     assert kept["output"]["text"] == RESUME_TEXT.split("\n\n", 1)[1]
+
+
+def test_a_sent_version_is_hidden_not_deleted(client: TestClient, db: Session, account_id: int):
+    sent = add(db, CoverLetter(account_id=account_id, name="Acme",
+                               job_posting_id=posting(db, account_id, sent=True).job_posting_id))
+    url = f"/api/cover-letters/{sent.letter_id}"
+    assert error(client.delete(url))[:2] == (409, "VERSION_LOCKED")
+    hidden = client.put(f"{url}/hidden", json={"hidden": True})
+    assert (hidden.status_code, hidden.json()["hidden"]) == (200, True)
+    assert [doc["hidden"] for doc in client.get("/api/cover-letters").json()] == [True]
+    assert client.put(f"{url}/hidden", json={"hidden": False}).json()["hidden"] is False
+
+
+def test_a_resume_can_be_hidden(client: TestClient, db: Session, account_id: int):
+    doc = add(db, Resume(account_id=account_id, name="Tech base"))
+    url = f"/api/resumes/{doc.resume_id}"
+    assert client.get(url).json()["hidden"] is False
+    assert client.put(f"{url}/hidden", json={"hidden": True}).json()["hidden"] is True
+    assert client.get(url).json()["hidden"] is True

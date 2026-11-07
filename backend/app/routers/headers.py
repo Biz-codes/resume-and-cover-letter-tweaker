@@ -21,7 +21,7 @@ from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.models import CoverLetter, Header, JobPosting, Resume
 from app.schemas import OptionalText, RequiredText
 from app.usage import Use, UseRef, edit_choice
-from app.versions import is_locked
+from app.versions import is_locked, shown_name
 
 router = APIRouter(prefix="/api/headers", tags=["headers"])
 
@@ -63,10 +63,10 @@ def uses(db: Session, header_ids: list[int]) -> dict[int, list[Use]]:
         ("job_posting", select(JobPosting.header_id, JobPosting.job_posting_id,
                                JobPosting.organization + ": " + JobPosting.role_title,
                                JobPosting.applied_on.is_not(None))),
-        ("resume", select(Resume.header_id, Resume.resume_id, Resume.name,
+        ("resume", select(Resume.header_id, Resume.resume_id, shown_name(Resume),
                           is_locked(Resume))),
-        ("cover_letter", select(CoverLetter.header_id, CoverLetter.letter_id, CoverLetter.name,
-                                is_locked(CoverLetter))),
+        ("cover_letter", select(CoverLetter.header_id, CoverLetter.letter_id,
+                                shown_name(CoverLetter), is_locked(CoverLetter))),
     ]
     for kind, query in queries:
         header_column = query.selected_columns[0]

@@ -6,6 +6,7 @@ import { experienceLabel, type Experience, type ExperienceFields } from '../../s
 import type { Header, HeaderFields } from '../../shared/api/headers'
 import { distinctLabels } from '../../shared/api/labels'
 import { projectLabel, type Project, type ProjectFields } from '../../shared/api/projects'
+import type { ToneSet } from '../../shared/api/toneSets'
 import type { Field } from '../../shared/components/FieldsForm'
 
 export const ROLE_FIELDS: Field<ExperienceFields>[] = [
@@ -30,6 +31,10 @@ export const PROJECT_FIELDS: Field<ProjectFields>[] = [
 
 // The full label of each project, telling versions apart (labels.ts).
 export const projectLabels = (projects: Project[]) => distinctLabels(projects, projectLabel, (item) => item.created_at)
+
+// Each tone's name, telling tones with the same name apart (labels.ts): a tone saved from an edit
+// keeps its original's name.
+export const toneLabels = (sets: ToneSet[]) => distinctLabels(sets, (item) => item.name, (item) => item.created_at)
 
 export const EDUCATION_FIELDS: Field<EducationFields>[] = [
   { name: 'degree', label: 'Degree and field of study (e.g. B.A. in English)', required: true },
