@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs every automated check: backend lint, tests, and schema drift, then front end types,
 # lint, and tests. Used by the git pre-commit hook (.githooks/pre-commit) and the /check
-# skill. Run it from anywhere: scripts/check.sh
-# Needs Postgres 18 running (brew services start postgresql@18) and Node on the PATH.
+# skill, and by CI (.github/workflows/checks.yml). Run it from anywhere: scripts/check.sh
+# Needs Postgres 18 running on port 5433 (brew services start postgresql@18), backend/.venv,
+# frontend/node_modules, and Node on the PATH.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 failures=""
@@ -16,7 +17,12 @@ run() {  # run <name> <folder> <command...>
     fi
 }
 
-if ! "$(brew --prefix postgresql@18 2>/dev/null)/bin/pg_isready" -q -p 5433; then
+# Homebrew's Postgres tools aren't on the PATH; on a machine without Homebrew (CI), they are.
+pg_isready=pg_isready
+if command -v brew >/dev/null; then
+    pg_isready="$(brew --prefix postgresql@18)/bin/pg_isready"
+fi
+if ! "$pg_isready" -q -p 5433; then
     echo "Postgres 18 isn't running on port 5433. Start it with: brew services start postgresql@18"
     exit 1
 fi

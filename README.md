@@ -1,5 +1,7 @@
 # Resume and Cover Letter Tweaker
 
+[![Checks](https://github.com/Biz-codes/resume-and-cover-letter-tweaker/actions/workflows/checks.yml/badge.svg)](https://github.com/Biz-codes/resume-and-cover-letter-tweaker/actions/workflows/checks.yml)
+
 A web app that tailors your resume and cover letter to each job posting, using content you've already written and suggestions from Claude, and saves every version so you never start over.
 
 ## Why

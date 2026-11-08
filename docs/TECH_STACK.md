@@ -35,6 +35,8 @@ Postgres 18 runs as a Homebrew service on port 5433 (see [BUILD_PLAN.md](BUILD_P
 From the project root:
 - `scripts/check.sh`: run every check (backend lint, tests, and schema drift; front end types, lint, and tests). The git pre-commit hook runs it too.
 
+CI (`.github/workflows/checks.yml`, GitHub Actions) runs `scripts/check.sh` on every push and pull request, against Postgres 18 in a service container on port 5433, so commits that skip the pre-commit hook (VS Code's commit box) are checked too. It needs no secrets. The badge at the top of the README shows the latest result on `main`.
+
 From `frontend/`:
 - `npm run dev`: start the app at http://localhost:5173 (it forwards `/api` to the backend)
 - `npm test`: run the front end tests
