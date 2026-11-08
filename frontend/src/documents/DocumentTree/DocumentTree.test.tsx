@@ -74,6 +74,7 @@ const DOC: DocDetail = {
   copies: [],
   updated_at: null,
   output: { parts: [], text: '' },
+  draft: null,
   sections: [
     {
       row_id: 100,

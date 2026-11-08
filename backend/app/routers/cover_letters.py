@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude
 from app.db import DbSession
 from app.documents import (
     COVER_LETTER,
@@ -31,6 +32,7 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
+from app.drafts import Draft, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
@@ -61,6 +63,8 @@ class NewLetter(LetterIn):
     account's "Sincerely"."""
 
     job_posting_id: int | None = None
+    # Starts with no sections at all ("Build from scratch"), not the defaults.
+    empty: bool = False
 
 
 class LetterOut(LetterIn, DocInfo):
@@ -70,6 +74,8 @@ class LetterOut(LetterIn, DocInfo):
 class LetterDetail(LetterOut):
     sections: list[SectionTree]
     output: Output
+    # Claude's draft, until its first review is finished (app/drafts.py).
+    draft: Draft | None
 
 
 FIELDS = list(LetterIn.model_fields)
@@ -90,7 +96,7 @@ def detail(db: Session, letter: CoverLetter) -> LetterDetail:
     output = letter_output(header, sections, letter.addressee,
                            sign_off.text if sign_off else None, letter.signature_name)
     return LetterDetail(**to_out(db, [letter])[0].model_dump(), sections=sections,
-                        output=output)
+                        output=output, draft=letter.draft)
 
 
 def check_links(db: Session, body: LetterIn, account_id: int) -> None:
@@ -121,11 +127,10 @@ def get_letter(letter_id: int, db: DbSession, account_id: AccountId) -> LetterDe
     return detail(db, get_owned(db, CoverLetter, letter_id, account_id))
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> LetterDetail:
+def new_letter(db: Session, body: NewLetter, account_id: int) -> CoverLetter:
     """A new cover letter, starting with the default sections and their defaults: what the
-    latest cover letter used (app/defaults.py). One for a posting uses the posting's header, so
-    the posting needs one."""
+    latest cover letter used (app/defaults.py), or with `empty`, none. One for a posting uses
+    the posting's header, so the posting needs one."""
     given = body.model_fields_set
     posting = None
     if body.job_posting_id is not None:
@@ -140,10 +145,32 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
     body.name = document_name(db, COVER_LETTER, account_id, body.name,
                               body.job_posting_id is not None)
     check_links(db, body, account_id)
-    letter = CoverLetter(account_id=account_id, **body.model_dump())
+    letter = CoverLetter(account_id=account_id, **body.model_dump(exclude={"empty"}))
     db.add(letter)
     db.flush()
-    fill_document(db, COVER_LETTER, letter.letter_id, account_id)
+    if not body.empty:
+        fill_document(db, COVER_LETTER, letter.letter_id, account_id)
+    return letter
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> LetterDetail:
+    letter = new_letter(db, body, account_id)
+    db.refresh(letter)
+    return detail(db, letter)
+
+
+@router.post("/tailored", status_code=status.HTTP_201_CREATED)
+def tailor_letter(body: NewLetter, db: DbSession, account_id: AccountId,
+                  client: Claude) -> LetterDetail:
+    """A new cover letter for a posting, started by Claude, like a resume
+    (resumes.tailor_resume). If Claude fails, nothing is created."""
+    if body.job_posting_id is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Claude tailors a cover letter only for a job posting.",
+                       field="job_posting_id")
+    letter = new_letter(db, body.model_copy(update={"empty": True}), account_id)
+    start_draft(db, client, COVER_LETTER, account_id, letter)
     db.refresh(letter)
     return detail(db, letter)
 

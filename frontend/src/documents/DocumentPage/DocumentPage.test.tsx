@@ -567,6 +567,94 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it("reviews Claude's draft in place of the tree, with Undo, then finishes", async () => {
+    const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
+    const texts = [
+      { key: 1, kind: 'narrative', text: 'Builds accessible React apps.', replaces: 6 },
+      { key: 2, kind: 'narrative', text: 'Teaches web basics.', replaces: null },
+    ]
+    const reworded = { kind: 'narrative', item_id: 6, text_key: 1, reason: 'Names React.' }
+    const added = { kind: 'narrative', item_id: null, text_key: 2, reason: 'Mentions mentoring.' }
+    const draft = (...entries: object[]) => ({
+      starting_document: null,
+      starting_reason: 'There are no earlier resumes.',
+      texts,
+      sections: [{ section_id: 1, reason: 'A short summary.', entries }],
+    })
+    const drafted = (...entries: object[]) =>
+      resume(5, { name: 'Engineer at Acme', job_posting: posting, output: { parts: [], text: '' }, draft: draft(...entries) })
+    const finished = resume(5, {
+      name: 'Engineer at Acme',
+      job_posting: posting,
+      draft: null,
+      sections: [
+        {
+          row_id: 50,
+          section_id: 1,
+          title: 'Summary',
+          entries: [{ kind: 'narrative', row_id: 60, item_id: 6, position: 1, values: { content: 'Builds accessible apps.' }, skills: [], bullets: [] }],
+        },
+      ],
+    })
+    const none = { skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] }
+    const fetchMock = stub(5, drafted(reworded, added), {
+      'GET /api/sections': [
+        { status: 200, body: [{ id: 1, title: 'Summary', built_in: true, ...none, narrative_content: [{ content_id: 6, content: 'Builds accessible apps.' }] }] },
+      ],
+      'GET /api/narrative-content': [{ status: 200, body: [{ content_id: 6, content: 'Builds accessible apps.', sections: [], used_by: [] }] }],
+      ...Object.fromEntries(
+        ['skill-categories', 'experience', 'projects', 'bullet-points', 'education'].map((path) => [
+          `GET /api/${path}`,
+          [{ status: 200, body: [] }],
+        ]),
+      ),
+      'PUT /api/resumes/5/draft': [
+        { status: 200, body: drafted(reworded) },
+        { status: 200, body: drafted(reworded, added) },
+        { status: 200, body: drafted({ ...reworded, use_original: true }, added) },
+      ],
+      'POST /api/resumes/5/draft/finish': [{ status: 200, body: finished }],
+    })
+    renderAt('/resumes/5')
+    expect(await screen.findByText(/Below is Claude's draft\. Nothing is saved to this resume or your library until you finish the review\./)).toBeInTheDocument()
+    // The draft is what there is to do first, so it starts open.
+    expect(screen.getByRole('button', { name: 'Sections (1)' })).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(await screen.findByRole('button', { name: 'Summary' }))
+    await expectNoA11yViolations()
+
+    // Taking out the new text saves the draft only, and Undo puts it back.
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Text: "Teaches web basics." in Summary' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'false'))
+    expect(sentBody(fetchMock, 'PUT /api/resumes/5/draft').sections[0].entries).toEqual([reworded])
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await expectNotice('Undid a change. Nothing more to undo.')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/5/draft', 1).sections[0].entries).toEqual([reworded, added])
+
+    // Back to the original wording, which the lists don't announce, so the page does.
+    fireEvent.click(await screen.findByRole('button', { name: 'Text: Builds accessible React apps. in Summary' }))
+    const useOriginal = screen.getByRole('button', { name: 'Use the original wording of Text: "Builds accessible React apps." in Summary' })
+    useOriginal.focus()
+    fireEvent.click(useOriginal)
+    await expectNotice('Using the original wording.')
+    // The button stays where it was, now offering the way back, and keeps focus.
+    expect(screen.getByRole('button', { name: `Use Claude's wording of Text: "Builds accessible apps." in Summary` })).toHaveFocus()
+
+    // Claude's rewording is now unused, so finishing asks whether to keep it.
+    fireEvent.click(screen.getByRole('button', { name: 'Finish review' }))
+    const dialog = await screen.findByRole('dialog', { name: "Claude's text you didn't use" })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Builds accessible React apps.' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finish review' }))
+    await expectNotice("Saved the review. The resume has what you kept, and Claude's text you kept for later is in your library.")
+    expect(sentBody(fetchMock, 'POST /api/resumes/5/draft/finish')).toEqual({ keep: [1] })
+    // The usual tree is back, and the library rows it saved can't be undone.
+    expect(screen.queryByText(/Below is Claude's draft/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Finish review' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sections (1)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('heading', { level: 2, name: 'Engineer at Acme Resume' })).toHaveFocus()
+    await expectNoA11yViolations()
+  })
+
   it('says when there is nothing in it yet', async () => {
     stub(14, resume(14, { output: { parts: [], text: '' } }))
     renderAt('/resumes/14')

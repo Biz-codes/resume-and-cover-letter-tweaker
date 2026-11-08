@@ -9,8 +9,9 @@ starts with its defaults (app/defaults.py).
 
 Undo and redo on the document's page send a whole earlier tree back (restore_tree).
 
-A posting's document gets Claude's suggestion through POST .../suggestion (app/suggestions.py),
-which is stored in its draft for the user to review.
+A posting's document started with Claude has Claude's suggestion in its draft (app/drafts.py):
+PUT .../draft saves the user's first pass over it, and POST .../draft/finish saves what they
+kept.
 
 Like the library lists, a change to a list sends the whole list in its new order. Rows that stay
 keep their ids, so what's under them stays too; rows left out are removed with everything under
@@ -27,7 +28,6 @@ from sqlalchemy import ColumnElement, delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
-from app.claude import Claude
 from app.db import DbSession
 from app.defaults import (
     SECTION_LISTS,
@@ -46,6 +46,7 @@ from app.documents import (
     in_section,
     standalone_bullets,
 )
+from app.drafts import DraftSections, FinishIn, check_sections, current_draft, finish
 from app.errors import AppError, ErrorCode
 from app.library import append, check_ids, check_unique_name
 from app.models import (
@@ -65,7 +66,6 @@ from app.routers.headers import HeaderIn, find_or_add
 from app.routers.projects import ProjectIn
 from app.routers.skill_categories import CategoryIn
 from app.schemas import RequiredText
-from app.suggestions import Suggestion, suggest
 from app.usage import touch
 
 
@@ -377,6 +377,22 @@ def fill_document(db: Session, kind: Kind, doc_id: int, account_id: int) -> None
         fill_section(db, kind, doc_id, row, section_id, account_id)
 
 
+def restore(db: Session, kind: Kind, doc_id: int, sections: list[RestoredSection],
+            account_id: int) -> None:
+    """Replace the document's whole tree with these sections, each placed exactly as sent (see
+    restore_section)."""
+    check_ids(db, Section, Section.id, [section.section_id for section in sections],
+              account_id, "sections", allow_built_in=True)
+    table = kind.section.__table__
+    db.execute(delete(table).where(table.c[kind.doc_id] == doc_id))
+    for position, section in enumerate(sections, 1):
+        row = db.scalar(insert(table).values({kind.doc_id: doc_id,
+                                              "section_id": section.section_id,
+                                              "position": position})
+                        .returning(_pk(kind.section)))
+        restore_section(db, kind, row, section.entries, account_id)
+
+
 def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, Any], Any]) -> None:
     """The endpoints that build the tree, under /{doc_id}. Each returns the document's detail,
     with its new tree and output."""
@@ -395,22 +411,34 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         db.refresh(doc)
         return detail(db, doc)
 
-    @router.post("/{doc_id}/suggestion")
-    def make_suggestion(doc_id: int, db: DbSession, account_id: AccountId,
-                        client: Claude) -> Suggestion:
-        """Claude's suggestion for a posting's document, stored in its draft for the user to
-        review (docs/FRONTEND_CHECKS.md, "Claude's suggestions"). Nothing else changes."""
+    @router.put("/{doc_id}/draft")
+    def save_draft(doc_id: int, body: DraftSections, db: DbSession, account_id: AccountId):
+        """The user's first pass over Claude's draft, as its whole tree in its new order (see
+        app/drafts.py). Only the draft changes: nothing is saved to the document or the
+        library yet."""
         doc = editable(db, doc_id, account_id)
-        if doc.job_posting_id is None:
-            raise AppError(ErrorCode.VALIDATION_FAILED,
-                           "Claude suggests content only for a posting's resume or cover letter.")
-        if doc.draft is not None:
-            raise AppError(ErrorCode.VALIDATION_FAILED,
-                           "There's already a suggestion to review.")
-        suggestion = suggest(db, client, kind, account_id, doc)
-        doc.draft = suggestion.model_dump()
-        db.flush()
-        return suggestion
+        draft = current_draft(doc)
+        check_sections(db, account_id, draft, body.sections)
+        doc.draft = draft.model_copy(update={"sections": body.sections}).model_dump()
+        return changed(db, doc)
+
+    @router.post("/{doc_id}/draft/finish")
+    def finish_review(doc_id: int, body: FinishIn, db: DbSession, account_id: AccountId):
+        """Save the reviewed draft: Claude's texts the user kept become new library rows
+        (with any it didn't use that the user keeps for later), and the tree is placed with
+        them, in this document only. The draft is cleared, and the document is based on the
+        one Claude started from."""
+        doc = editable(db, doc_id, account_id)
+        draft = current_draft(doc)
+        sections = RestoredTree.model_validate({"sections": finish(db, account_id, draft,
+                                                                   body.keep)}).sections
+        restore(db, kind, doc_id, sections, account_id)
+        start = draft.starting_document
+        if start is not None and db.scalar(select(func.count()).select_from(kind.doc).where(
+                getattr(kind.doc, kind.doc_id) == start.id, kind.doc.account_id == account_id)):
+            setattr(doc, kind.based_on, start.id)
+        doc.draft = None
+        return changed(db, doc)
 
     @router.put("/{doc_id}/header")
     def set_header(doc_id: int, body: HeaderIn, db: DbSession, account_id: AccountId):
@@ -451,16 +479,7 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         Library items are never changed or removed, so anything written since stays in the
         library (docs/FRONTEND_CHECKS.md, "Undo")."""
         doc = editable(db, doc_id, account_id)
-        check_ids(db, Section, Section.id, [section.section_id for section in body.sections],
-                  account_id, "sections", allow_built_in=True)
-        table = kind.section.__table__
-        db.execute(delete(table).where(table.c[kind.doc_id] == doc_id))
-        for position, section in enumerate(body.sections, 1):
-            row = db.scalar(insert(table).values({kind.doc_id: doc_id,
-                                                  "section_id": section.section_id,
-                                                  "position": position})
-                            .returning(_pk(kind.section)))
-            restore_section(db, kind, row, section.entries, account_id)
+        restore(db, kind, doc_id, body.sections, account_id)
         return changed(db, doc)
 
     @router.post("/{doc_id}/sections/written", status_code=status.HTTP_201_CREATED)

@@ -1,8 +1,8 @@
 // One job posting, headed as the user's application to it: its link and job description (with
 // Edit details and Delete inside it), its header (used by all its versions), and its resume and
-// cover letter, each started fresh or from a copy (StartVersion) and named for the posting. A new
-// posting picks its header first, from the suggestion, with that section open, since its versions
-// use it; once picked, the section starts closed. Once the posting is applied to, its versions are
+// cover letter, each tailored by Claude, copied, or built from scratch (StartVersion), and named
+// for the posting. A new posting picks its header first, from the suggestion, with that section
+// open, since its versions use it; once picked, the section starts closed. Once the posting is applied to, its versions are
 // a record of what was sent, so no new ones start here. Below them, its tracking: the dates,
 // contacts, and interviews.
 // See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { capitalize, docsApi, KINDS, type Doc, type DocKind } from '../shared/api/documents'
+import { toneSetsApi, type ToneSet } from '../shared/api/toneSets'
 import { headersApi, type Header, type HeaderFields as Fields } from '../shared/api/headers'
 import {
   isWebAddress,
@@ -27,7 +28,7 @@ import Disclosure from '../shared/components/Disclosure/Disclosure'
 import FieldsForm from '../shared/components/FieldsForm'
 import HeaderFields from '../shared/components/HeaderFields'
 import Interviews from './Interviews'
-import StartVersion from './StartVersion'
+import StartVersion, { type StartChoice } from './StartVersion'
 import Tracking from './Tracking'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
@@ -53,6 +54,7 @@ export function PostingPage({ id }: { id: number }) {
   const [posting, setPosting] = useState<PostingDetail | null>(null)
   const [headers, setHeaders] = useState<Header[]>([])
   const [docs, setDocs] = useState<Record<DocKind, Doc[]>>({ resume: [], cover_letter: [] })
+  const [toneSets, setToneSets] = useState<ToneSet[]>([])
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [mode, setMode] = useState<Mode | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
@@ -63,11 +65,18 @@ export function PostingPage({ id }: { id: number }) {
 
   const load = useCallback(
     () =>
-      Promise.all([postingsApi.get(id), headersApi.list(), docsApi('resume').list(), docsApi('cover_letter').list()])
-        .then(([loaded, headerList, resumes, letters]) => {
+      Promise.all([
+        postingsApi.get(id),
+        headersApi.list(),
+        docsApi('resume').list(),
+        docsApi('cover_letter').list(),
+        toneSetsApi.list(),
+      ])
+        .then(([loaded, headerList, resumes, letters, toneSetList]) => {
           setPosting(loaded)
           setHeaders(headerList)
           setDocs({ resume: resumes, cover_letter: letters })
+          setToneSets(toneSetList)
           setLoadError(null)
         })
         .catch((error: unknown) => setLoadError(toApiError(error))),
@@ -121,14 +130,21 @@ export function PostingPage({ id }: { id: number }) {
     setNotice('Saved the tracking details.')
   }
 
-  async function start(kind: DocKind, current: PostingDetail, fromId: number | null) {
+  async function start(kind: DocKind, current: PostingDetail, choice: StartChoice) {
     const api = docsApi(kind)
     const name = postingName(current)
     const forPosting = { job_posting_id: id }
-    const doc = fromId === null ? await api.create(name, forPosting) : await api.copy(fromId, name, forPosting)
-    navigate(`${KINDS[kind].path}/${doc.id}`, {
-      state: { notice: `Started "${doc.name}" for this posting.` } satisfies ListState,
-    })
+    const doc =
+      choice.how === 'claude'
+        ? await api.tailor(name, forPosting, choice.toneSetId)
+        : choice.how === 'copy'
+          ? await api.copy(choice.fromId, name, forPosting)
+          : await api.create(name, forPosting, { empty: true, tone_set_id: choice.toneSetId })
+    const notice =
+      choice.how === 'claude'
+        ? `Claude drafted "${doc.name}". Nothing is saved to it until you finish the review.`
+        : `Started "${doc.name}" for this posting.`
+    navigate(`${KINDS[kind].path}/${doc.id}`, { state: { notice } satisfies ListState })
   }
 
   async function confirmDelete(current: PostingDetail) {
@@ -271,7 +287,8 @@ export function PostingPage({ id }: { id: number }) {
                   <StartVersion
                     kind={kind}
                     docs={docs[kind]}
-                    onStart={(fromId) => start(kind, posting, fromId)}
+                    toneSets={toneSets}
+                    onStart={(choice) => start(kind, posting, choice)}
                   />
                 )}
               </div>

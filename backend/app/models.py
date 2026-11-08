@@ -150,7 +150,7 @@ class Resume(Base):
     tone_set_id: Mapped[int | None] = mapped_column(fk("tone_set.tone_set_id", "SET NULL"))
     header_id: Mapped[int | None] = mapped_column(fk("header.header_id", "SET NULL"))
     based_on_resume_id: Mapped[int | None] = mapped_column(fk("resume.resume_id", "SET NULL"))
-    # Claude's suggestion awaiting the first review (app/suggestions.py). None is saved as SQL
+    # Claude's draft awaiting the first review (app/drafts.py). None is saved as SQL
     # NULL, not a JSON null, so a cleared draft is empty.
     draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     hidden: Mapped[bool] = hidden()

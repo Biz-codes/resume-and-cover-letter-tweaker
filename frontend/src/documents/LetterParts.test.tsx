@@ -21,6 +21,7 @@ const LETTER: DocDetail = {
   updated_at: null,
   sections: [],
   output: { parts: [], text: '' },
+  draft: null,
 }
 const SIGN_OFFS = [
   { sign_off_id: 3, text: 'Sincerely', hidden: false, used_by: [] },

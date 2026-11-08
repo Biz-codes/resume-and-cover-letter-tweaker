@@ -6,6 +6,8 @@
 // Unhide), sit under its title; its title is changed under Contents, in a modal opened by "New
 // title". See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a base version
 // or one in progress is edited in place, and a sent one is shown read-only and can only be renamed.
+// A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
+// first review is finished; each change saves the draft, and Undo and Redo cover those too.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -20,6 +22,7 @@ import {
   type DocDetail,
   type DocFields,
   type DocKind,
+  type DraftSection,
 } from '../../shared/api/documents'
 import { headersApi, type Header } from '../../shared/api/headers'
 import { signOffsApi, type SignOff } from '../../shared/api/signOffs'
@@ -28,6 +31,7 @@ import { toneLabels } from '../../library/items/itemFields'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
+import DraftTree from '../DraftTree/DraftTree'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
 import NameForm from '../../shared/components/NameForm/NameForm'
@@ -48,7 +52,7 @@ type Mode = 'copy' | 'delete' | 'title'
 
 // What editing does, above the buttons: one in progress saves as it's edited, and a sent one
 // keeps everything but its name.
-function EditNote({ singular, sent }: { singular: string; sent: boolean }) {
+function EditNote({ singular, sent, draft }: { singular: string; sent: boolean; draft: boolean }) {
   return sent ? (
     <div className="note">
       <p>
@@ -59,6 +63,11 @@ function EditNote({ singular, sent }: { singular: string; sent: boolean }) {
     </div>
   ) : (
     <div className="note">
+      {draft && (
+        <p>
+          Below is Claude&apos;s draft. Nothing is saved to this {singular} or your library until you finish the review.
+        </p>
+      )}
       <p>Edits to the {singular} below save instantly.</p>
       <p>The undo and redo buttons can make changes only while you stay on this page.</p>
       <p>If you want to preserve this version, select "Copy" instead.</p>
@@ -238,6 +247,9 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
         if (JSON.stringify(treeShape(current.sections)) !== JSON.stringify(treeShape(target.sections))) {
           next = await api.restoreTree(id, target.sections)
         }
+        if (target.draft && JSON.stringify(current.draft?.sections) !== JSON.stringify(target.draft.sections)) {
+          next = await api.saveDraft(id, target.draft.sections)
+        }
         if (direction === 'undo') setStacks(undo.slice(0, -1), [...redo, current])
         else setStacks([...undo, current], redo.slice(0, -1))
         return next
@@ -270,6 +282,23 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
       },
     )
   }
+
+  // The draft's lists announce their own changes, so only a change they don't gets a notice.
+  const saveDraft = (sections: DraftSection[], notice = '') => inTurn(() => docsApi(kind).saveDraft(id, sections), notice)
+
+  // Finishing saves to the library, which Undo never takes back, so the history starts again.
+  const finishReview = (keep: number[]) =>
+    inTurn(
+      () => docsApi(kind).finishReview(id, keep),
+      keep.length
+        ? `Saved the review. The ${singular} has what you kept, and Claude's text you kept for later is in your library.`
+        : `Saved the review. The ${singular} has what you kept.`,
+      (next) => {
+        setStacks([], [])
+        latest.current = next
+        setDoc(next)
+      },
+    )
 
   async function changeTone(toneSetId: number | null) {
     setToneError(null)
@@ -355,7 +384,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               Copied from <Link to={`${path}/${doc.based_on.id}`}>{doc.based_on.name}</Link>
             </p>
           )}
-          <EditNote singular={singular} sent={doc.locked} />
+          <EditNote singular={singular} sent={doc.locked} draft={Boolean(doc.draft)} />
 
           {mode === 'copy' && copyNameFor !== null && (
             <NameForm
@@ -488,18 +517,23 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               </Disclosure>
             </li>
             <li>
-              <Disclosure title={`Sections (${doc.sections.length})`}>
-                <DocumentTree
-                  kind={kind}
-                  doc={doc}
-                  readOnly={readOnly}
-                  onChange={record}
-                  onReload={(next) => {
-                    latest.current = next
-                    setDoc(next)
-                  }}
-                  onNotice={setNotice}
-                />
+              {/* Claude's draft starts open, since it's what there is to do first. */}
+              <Disclosure title={`Sections (${(doc.draft ?? doc).sections.length})`} initiallyOpen={Boolean(doc.draft)}>
+                {doc.draft && !readOnly ? (
+                  <DraftTree kind={kind} draft={doc.draft} onChange={saveDraft} onFinish={finishReview} />
+                ) : (
+                  <DocumentTree
+                    kind={kind}
+                    doc={doc}
+                    readOnly={readOnly}
+                    onChange={record}
+                    onReload={(next) => {
+                      latest.current = next
+                      setDoc(next)
+                    }}
+                    onNotice={setNotice}
+                  />
+                )}
               </Disclosure>
             </li>
             {kind === 'cover_letter' && (

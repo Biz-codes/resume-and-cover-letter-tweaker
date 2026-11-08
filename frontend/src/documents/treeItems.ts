@@ -1,14 +1,14 @@
-// What DocumentTree and AddContent share about the items placed in a section: the library they
+// What DocumentTree, DraftTree, and AddContent share about the items placed in a section: the library they
 // come from, what each kind is called, how an item is named, which kind a section starts with,
 // and the fields of a new item of each kind.
-import { shortBullet, type Bullet } from '../shared/api/bullets'
+import { bulletsApi, shortBullet, type Bullet } from '../shared/api/bullets'
 import type { EntryKind, TreeEntry } from '../shared/api/documents'
-import { educationLabel, type Education } from '../shared/api/education'
-import { experienceLabel, type Experience } from '../shared/api/experience'
-import type { NarrativeContent } from '../shared/api/narrativeContent'
-import { projectLabel, type Project } from '../shared/api/projects'
-import type { Section } from '../shared/api/sections'
-import type { SkillCategory } from '../shared/api/skills'
+import { educationApi, educationLabel, type Education } from '../shared/api/education'
+import { experienceApi, experienceLabel, type Experience } from '../shared/api/experience'
+import { narrativeApi, type NarrativeContent } from '../shared/api/narrativeContent'
+import { projectLabel, projectsApi, type Project } from '../shared/api/projects'
+import { sectionsApi, type Section } from '../shared/api/sections'
+import { skillCategoriesApi, type SkillCategory } from '../shared/api/skills'
 import type { ListItem } from '../shared/components/OrderedList/OrderedList'
 import { distinctLabels } from '../shared/api/labels'
 import { offered } from '../shared/offered'
@@ -21,6 +21,19 @@ export interface Library {
   projects: Project[]
   bullets: Bullet[]
   education: Education[]
+}
+
+export async function loadLibrary(): Promise<Library> {
+  const [sections, narrative, categories, experience, projects, bullets, education] = await Promise.all([
+    sectionsApi.list(),
+    narrativeApi.list(),
+    skillCategoriesApi.list(),
+    experienceApi.list(),
+    projectsApi.list(),
+    bulletsApi.list(),
+    educationApi.list(),
+  ])
+  return { sections, narrative, categories, experience, projects, bullets, education }
 }
 
 // What each kind is called: before an item's name in a section's list (one), as a type of

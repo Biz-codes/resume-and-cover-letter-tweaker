@@ -347,6 +347,16 @@ def _new_text(text: str | None, original: str | None) -> str | None:
 def check(reply: Suggestion, library: Library, documents: set[int], where: str) -> Suggestion:
     """The reply with anything it can't use left out (docs/FRONTEND_CHECKS.md, "Claude's
     suggestions"), each logged."""
+    checked, dropped = usable(reply, library, documents)
+    if dropped:
+        logger.warning("Claude's suggestion for %s: left out %s", where, ", ".join(dropped))
+    return checked
+
+
+def usable(reply: Suggestion, library: Library,
+           documents: set[int]) -> tuple[Suggestion, list[str]]:
+    """The reply with anything it can't use left out, and what was left out. A draft the user
+    is reviewing is checked the same way (app/drafts.py), and refused if anything is."""
     dropped: list[str] = []
     start = reply.starting_document_id
     if start is not None and start not in documents:
@@ -361,10 +371,8 @@ def check(reply: Suggestion, library: Library, documents: set[int], where: str) 
         seen_sections.add(section.section_id)
         sections.append(SuggestedSection(section_id=section.section_id, reason=section.reason,
                                          entries=_check_entries(section, library, dropped)))
-    if dropped:
-        logger.warning("Claude's suggestion for %s: left out %s", where, ", ".join(dropped))
     return Suggestion(starting_document_id=start, starting_reason=reply.starting_reason,
-                      sections=sections)
+                      sections=sections), dropped
 
 
 def _check_entries(section: SuggestedSection, library: Library,

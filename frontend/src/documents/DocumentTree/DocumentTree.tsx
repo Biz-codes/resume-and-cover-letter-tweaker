@@ -11,15 +11,9 @@
 // user checks (docs/FRONTEND_CHECKS.md, "Changing an item"). Each change is saved right away and
 // returns the document with its new output.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { bulletsApi, shortBullet } from '../../shared/api/bullets'
+import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { docsApi, KINDS, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection } from '../../shared/api/documents'
-import { educationApi } from '../../shared/api/education'
-import { experienceApi } from '../../shared/api/experience'
-import { narrativeApi } from '../../shared/api/narrativeContent'
-import { projectsApi } from '../../shared/api/projects'
-import { sectionsApi } from '../../shared/api/sections'
-import { skillCategoriesApi } from '../../shared/api/skills'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import AddContent from '../AddContent'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
@@ -34,6 +28,7 @@ import {
   KIND_NAMES,
   KINDS_IN_ORDER,
   listedIds,
+  loadLibrary,
   placedItem,
   savedItems,
   SHOWN_FIELDS,
@@ -472,17 +467,9 @@ export default function DocumentTree({
 
   const load = useCallback(
     () =>
-      Promise.all([
-        sectionsApi.list(),
-        narrativeApi.list(),
-        skillCategoriesApi.list(),
-        experienceApi.list(),
-        projectsApi.list(),
-        bulletsApi.list(),
-        educationApi.list(),
-      ])
-        .then(([sections, narrative, categories, experience, projects, bullets, education]) => {
-          setLibrary({ sections, narrative, categories, experience, projects, bullets, education })
+      loadLibrary()
+        .then((loaded) => {
+          setLibrary(loaded)
           setLoadError(null)
         })
         .catch((error: unknown) => setLoadError(toApiError(error))),

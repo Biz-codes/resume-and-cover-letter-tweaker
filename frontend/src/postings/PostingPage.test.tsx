@@ -53,6 +53,8 @@ const doc = (id: number, name: string) => ({
   updated_at: null,
 })
 
+const WARM = { tone_set_id: 4, name: 'Warm', hidden: false, rules: [], created_at: '2026-10-01T00:00:00Z', used_by: [] }
+
 function stub(posting: unknown = POSTING, extra: Record<string, Reply[]> = {}, headers: unknown[] = [TEACHER, SAM]) {
   return stubApi({
     'GET /api/job-postings/9': [{ status: 200, body: posting }],
@@ -63,6 +65,7 @@ function stub(posting: unknown = POSTING, extra: Record<string, Reply[]> = {}, h
     ],
     'GET /api/resumes': [{ status: 200, body: [doc(1, 'Tech base')] }],
     'GET /api/cover-letters': [{ status: 200, body: [doc(3, 'General letter')] }],
+    'GET /api/tone-sets': [{ status: 200, body: [WARM] }],
     ...extra,
   })
 }
@@ -137,9 +140,9 @@ describe('PostingPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('starts a fresh resume for it', async () => {
+  it('has Claude tailor a resume for it', async () => {
     const created = { ...doc(20, 'English Teacher (Lincoln High)'), sections: [], output: { parts: [], text: '' } }
-    const fetchMock = stub(EMPTY, { 'POST /api/resumes': [{ status: 201, body: created }] })
+    const fetchMock = stub(EMPTY, { 'POST /api/resumes/tailored': [{ status: 201, body: created }] })
     renderPage()
     expect(await screen.findByText('No resume for this posting yet.')).toBeInTheDocument()
     const link = screen.getByRole('link', { name: 'The posting (opens in a new tab)' })
@@ -148,25 +151,44 @@ describe('PostingPage', () => {
     expect(link).toHaveAttribute('rel', 'noreferrer')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    expect(sentBody(fetchMock, 'POST /api/resumes/tailored')).toEqual({
+      name: 'English Teacher at Lincoln High',
+      job_posting_id: 9,
+      tone_set_id: 4,
+    })
+  })
+
+  it('builds a resume for it from scratch', async () => {
+    const created = { ...doc(20, 'English Teacher (Lincoln High)'), sections: [], output: { parts: [], text: '' } }
+    const fetchMock = stub(EMPTY, { 'POST /api/resumes': [{ status: 201, body: created }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start a resume' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Build from scratch (empty)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
     expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
     expect(sentBody(fetchMock, 'POST /api/resumes')).toEqual({
       name: 'English Teacher at Lincoln High',
       job_posting_id: 9,
+      empty: true,
+      tone_set_id: null,
     })
   })
 
   it('names a version for the whole posting, however long', async () => {
     const opened = { ...doc(20, 'Opened'), sections: [], output: { parts: [], text: '' } }
     const longest = { ...EMPTY, role_title: 'R'.repeat(100), organization: 'O'.repeat(100) }
-    const fetchMock = stub(longest, { 'POST /api/resumes': [{ status: 201, body: opened }] })
+    const fetchMock = stub(longest, { 'POST /api/resumes/tailored': [{ status: 201, body: opened }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Start a resume' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
     await vi.waitFor(() =>
-      expect(sentBody(fetchMock, 'POST /api/resumes')).toEqual({
+      expect(sentBody(fetchMock, 'POST /api/resumes/tailored')).toEqual({
         name: `${'R'.repeat(100)} at ${'O'.repeat(100)}`,
         job_posting_id: 9,
+        tone_set_id: null,
       }),
     )
   })
@@ -176,6 +198,7 @@ describe('PostingPage', () => {
     const fetchMock = stub(EMPTY, { 'POST /api/cover-letters/3/copies': [{ status: 201, body: copied }] })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Start a cover letter' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Copy a saved cover letter as is' }))
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start cover letter' }))
     expect(await screen.findByRole('heading', { name: 'Opened cover letter' })).toBeInTheDocument()
@@ -254,6 +277,7 @@ describe('PostingPage', () => {
       'GET /api/headers': [{ status: 200, body: [] }],
       'GET /api/resumes': [{ status: 200, body: [] }],
       'GET /api/cover-letters': [{ status: 200, body: [] }],
+      'GET /api/tone-sets': [{ status: 200, body: [] }],
     })
     renderPage()
     expect(await screen.findByRole('alert')).toHaveTextContent("That item doesn't exist.")

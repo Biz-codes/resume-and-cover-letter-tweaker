@@ -79,11 +79,72 @@ export interface TreeSection {
   entries: TreeEntry[]
 }
 
+// Claude's draft of a posting's document, until its first review is finished
+// (backend/app/drafts.py). Each piece of Claude's text is kept once in `texts`, and placed by its
+// key; `use_original` goes back to the item's own wording. A reason is empty for what the user
+// added during the review.
+export interface DraftBullet {
+  bullet_id: number | null
+  text_key?: number | null
+  use_original?: boolean
+  reason?: string
+}
+
+export interface DraftEntry {
+  kind: EntryKind
+  // Null only for Claude's new narrative content or bullet.
+  item_id: number | null
+  text_key?: number | null
+  use_original?: boolean
+  reason?: string
+  skill_ids?: number[]
+  bullets?: DraftBullet[]
+}
+
+export interface DraftSection {
+  section_id: number
+  reason?: string
+  entries: DraftEntry[]
+}
+
+// A rewording (of `replaces`) or new text Claude wrote.
+export interface ClaudeText {
+  key: number
+  kind: 'narrative' | 'bullet'
+  text: string
+  replaces: number | null
+}
+
+export interface Draft {
+  // The earlier one Claude started from, or null for none.
+  starting_document: { id: number; name: string } | null
+  starting_reason: string
+  texts: ClaudeText[]
+  sections: DraftSection[]
+}
+
+// The keys of Claude's texts the draft uses (not gone back to the original). The rest can be kept
+// in the library for later when the review is finished.
+export function textsInUse(sections: DraftSection[]) {
+  const keys = new Set<number>()
+  const add = (key: number | null | undefined, useOriginal: boolean | undefined) => {
+    if (key != null && !useOriginal) keys.add(key)
+  }
+  for (const section of sections) {
+    for (const entry of section.entries) {
+      add(entry.text_key, entry.use_original)
+      for (const bullet of entry.bullets ?? []) add(bullet.text_key, bullet.use_original)
+    }
+  }
+  return keys
+}
+
 export interface DocDetail extends Doc {
   // Its sections in order, each with its items in order.
   sections: TreeSection[]
   // The document as plain text, in parts (header, each section, greeting, sign-off).
   output: { parts: OutputPart[]; text: string }
+  draft: Draft | null
 }
 
 export interface KindInfo {
@@ -169,7 +230,18 @@ export function docsApi(kind: DocKind) {
     // in by the backend: the posting's header (or for a base version the most recently used
     // one), for a letter "[organization] Hiring Team" and "Sincerely", and the sections (each
     // with its items) of the latest document of the same kind.
-    create: (name: string, forPosting?: ForPosting) => one(api.post<Raw>(path, { name, ...forPosting })),
+    // With `empty`, it starts with no sections at all ("Build from scratch").
+    create: (name: string, forPosting?: ForPosting, options: { empty?: boolean; tone_set_id?: number | null } = {}) =>
+      one(api.post<Raw>(path, { name, ...forPosting, ...options })),
+    // A posting's version started by Claude: empty, with Claude's suggestion in its draft to review.
+    // If Claude fails (AI_UNAVAILABLE), nothing is created.
+    tailor: (name: string, forPosting: ForPosting, toneSetId: number | null) =>
+      one(api.post<Raw>(`${path}/tailored`, { name, ...forPosting, tone_set_id: toneSetId })),
+    // The first pass over Claude's draft, as its whole tree. Only the draft changes.
+    saveDraft: (id: number, sections: DraftSection[]) => one(api.put<Raw>(`${path}/${id}/draft`, { sections })),
+    // Saves the reviewed draft: Claude's kept wordings become new library rows used here, and `keep`
+    // (keys of Claude's texts the draft doesn't use) are kept in the library for later.
+    finishReview: (id: number, keep: number[]) => one(api.post<Raw>(`${path}/${id}/draft/finish`, { keep })),
     // A sent version can only be renamed (VERSION_LOCKED otherwise).
     update: (id: number, fields: DocFields) => one(api.put<Raw>(`${path}/${id}`, fields)),
     // A new version with the original's fields, sections, and selections: a base version, or

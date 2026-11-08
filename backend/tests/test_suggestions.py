@@ -9,9 +9,11 @@ import anthropic
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.claude import get_client
+from app.drafts import StartingDocument, to_draft
 from app.main import app
 from app.models import (
     EXPERIENCE_SECTION_ID,
@@ -29,7 +31,7 @@ from app.models import (
     WritingRuleKind,
 )
 from app.suggestions import SuggestedBullet, SuggestedEntry, SuggestedSection, Suggestion
-from tests.test_education_narrative_rules import letter
+from tests.test_documents import header, posting
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_posting_reader import FakeMessages
 from tests.test_sections_skills import add, category, error, resume
@@ -58,8 +60,14 @@ def suggested(bullet_id: int | None, new_text: str | None = None) -> SuggestedBu
     return SuggestedBullet(bullet_id=bullet_id, new_text=new_text, reason="Fits.")
 
 
-def suggest(client: TestClient, doc: Resume):
-    return client.post(f"/api/resumes/{doc.resume_id}/suggestion")
+def tailor(client: TestClient, db: Session, account_id: int, *, sent: bool = False,
+           path: str = "resumes", **body):
+    """Start a posting's resume (or cover letter) with Claude."""
+    job = posting(db, account_id, sent)
+    job.header_id = header(db, account_id).header_id
+    db.flush()
+    return client.post(f"/api/{path}/tailored", json={
+        "name": "Engineer at Acme", "job_posting_id": job.job_posting_id, **body})
 
 
 def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: Session,
@@ -70,7 +78,6 @@ def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: 
     front_end = category(db, account_id, "Front End", ["React", "CSS"])
     earlier = resume(db, account_id, "Tech base", sent=True)
     show_job(db, earlier, job, ["Shipped it"])
-    draft = resume(db, account_id, "Engineer at Acme", sent=False)
     reply = Suggestion(starting_document_id=earlier.resume_id, starting_reason="Same role.",
                        sections=[section(EXPERIENCE_SECTION_ID, entry(
                            "experience", job.experience_id,
@@ -79,11 +86,19 @@ def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: 
                                                                   front_end.category_id))])
     claude.reply = reply
 
-    response = suggest(client, draft)
-    assert response.status_code == 200
-    assert response.json() == reply.model_dump()
+    response = tailor(client, db, account_id)
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    # It starts empty, with the suggestion in its draft and Claude's text kept once by key.
+    assert body["sections"] == []
+    assert body["draft"] == to_draft(reply, StartingDocument(
+        id=earlier.resume_id, name="Tech base")).model_dump()
+    assert body["draft"]["texts"] == [{
+        "key": 1, "kind": "bullet", "text": "Tested it in React.", "replaces": tested,
+        "section_id": EXPERIENCE_SECTION_ID, "parent_kind": "experience",
+        "parent_id": job.experience_id}]
     db.expire_all()
-    assert db.get(Resume, draft.resume_id).draft == reply.model_dump()
+    assert db.get(Resume, body["resume_id"]).draft == body["draft"]
 
     [request] = claude.calls
     assert (request["model"], request["output_config"], request["max_tokens"]) == (
@@ -133,48 +148,52 @@ def test_leaves_out_what_it_cant_use(client: TestClient, db: Session, account_id
         section(hidden_section),
         section(SUMMARY_SECTION_ID),
     ])
-    body = suggest(client, resume(db, account_id, "Engineer at Acme", sent=False)).json()
-    assert body["starting_document_id"] is None
+    body = tailor(client, db, account_id).json()["draft"]
+    assert body["starting_document"] is None
     assert [s["section_id"] for s in body["sections"]] == [
         SUMMARY_SECTION_ID, EXPERIENCE_SECTION_ID, SKILLS_SECTION_ID]
     summary, experience, skills = (s["entries"] for s in body["sections"])
+    texts = {text["key"]: text["text"] for text in body["texts"]}
     # The same text as the original is no rewording; empty new text and another account's
     # item are left out.
-    assert [(e["item_id"], e["new_text"]) for e in summary] == [(intro, None), (None, "I teach.")]
+    assert [(e["item_id"], texts.get(e["text_key"])) for e in summary] == [
+        (intro, None), (None, "I teach.")]
     # A role can't be reworded, bullets it doesn't list or that are hidden are left out, and
     # a bullet or role already in the section isn't placed again.
     [placed] = experience
-    assert placed["new_text"] is None
-    assert [(b["bullet_id"], b["new_text"]) for b in placed["bullets"]] == [
+    assert placed["text_key"] is None
+    assert [(b["bullet_id"], texts.get(b["text_key"])) for b in placed["bullets"]] == [
         (shipped, None), (None, "Led a team.")]
     assert skills[0]["skill_ids"] == []
 
 
-def test_refuses_a_sent_document(client: TestClient, db: Session, account_id: int,
-                                 claude: FakeMessages):
-    response = suggest(client, resume(db, account_id, "Sent", sent=True))
-    assert error(response)[:2] == (409, "VERSION_LOCKED")
+def test_refuses_a_posting_applied_to(client: TestClient, db: Session, account_id: int,
+                                      claude: FakeMessages):
+    assert error(tailor(client, db, account_id, sent=True)) == (
+        409, "VERSION_LOCKED", "job_posting_id")
     assert claude.calls == []
 
 
-def test_refuses_a_base_document_and_a_second_suggestion(client: TestClient, db: Session,
-                                                         account_id: int, claude: FakeMessages):
-    base = add(db, Resume(account_id=account_id, name="Tech base"))
-    assert error(suggest(client, base))[:2] == (422, "VALIDATION_FAILED")
-    draft = resume(db, account_id, "Engineer at Acme", sent=False)
-    assert suggest(client, draft).status_code == 200
-    assert error(suggest(client, draft))[:2] == (422, "VALIDATION_FAILED")
+def test_refuses_a_base_document_and_a_second_one(client: TestClient, db: Session,
+                                                  account_id: int, claude: FakeMessages):
+    base = client.post("/api/resumes/tailored", json={"name": "Tech"})
+    assert error(base) == (422, "VALIDATION_FAILED", "job_posting_id")
+    first = tailor(client, db, account_id)
+    assert first.status_code == 201
+    again = client.post("/api/resumes/tailored", json={
+        "name": "Again", "job_posting_id": first.json()["job_posting"]["job_posting_id"]})
+    assert error(again) == (409, "DUPLICATE", "job_posting_id")
     assert len(claude.calls) == 1
 
 
-def test_claude_failing_stores_nothing(client: TestClient, db: Session, account_id: int,
+def test_claude_failing_creates_nothing(client: TestClient, db: Session, account_id: int,
                                        claude: FakeMessages):
     request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     claude.reply = anthropic.APIConnectionError(request=request)
-    draft = resume(db, account_id, "Engineer at Acme", sent=False)
-    assert error(suggest(client, draft))[:2] == (503, "AI_UNAVAILABLE")
+    assert error(tailor(client, db, account_id))[:2] == (503, "AI_UNAVAILABLE")
+    # The resume isn't created, so the user can try again.
     db.expire_all()
-    assert db.get(Resume, draft.resume_id).draft is None
+    assert db.scalars(select(Resume)).all() == []
 
 
 def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, account_id: int,
@@ -185,10 +204,7 @@ def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, 
         add(db, WritingRule(account_id=account_id, kind=kind, rule_text=text, active=active))
     tone = add(db, ToneSet(account_id=account_id, name="Tech"))
     add(db, ToneRule(tone_set_id=tone.tone_set_id, rule_text="Name the tools.", position=1))
-    draft = resume(db, account_id, "Engineer at Acme", sent=False)
-    draft.tone_set_id = tone.tone_set_id
-    db.flush()
-    suggest(client, draft)
+    assert tailor(client, db, account_id, tone_set_id=tone.tone_set_id).status_code == 201
     [request] = claude.calls
     instructions = request["system"][0]["text"]
     assert "Never use these words or phrases: leverage." in instructions
@@ -203,9 +219,10 @@ def test_a_cover_letter_is_tailored_as_a_letter(client: TestClient, db: Session,
     intro = add(db, NarrativeContent(account_id=account_id, content="I build tools."))
     add(db, SectionNarrativeContent(section_id=SUMMARY_SECTION_ID, content_id=intro.content_id,
                                     position=1))
-    doc = letter(db, account_id, "Engineer at Acme", sent=False)
-    response = client.post(f"/api/cover-letters/{doc.letter_id}/suggestion")
-    assert response.status_code == 200
+    response = tailor(client, db, account_id, path="cover-letters")
+    assert response.status_code == 201
+    # A letter keeps its usual greeting.
+    assert response.json()["addressee"] == "Acme Hiring Team"
     [request] = claude.calls
     assert "each paragraph is its own section" in request["system"][0]["text"]
     assert request["messages"][0]["content"].startswith("Tailor a new cover letter")
@@ -213,9 +230,8 @@ def test_a_cover_letter_is_tailored_as_a_letter(client: TestClient, db: Session,
 
 def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Session,
                                                     account_id: int, claude: FakeMessages):
-    draft = resume(db, account_id, "Engineer at Acme", sent=False)
-    suggest(client, draft)
-    tracking = f"/api/job-postings/{draft.job_posting_id}/tracking"
+    draft = tailor(client, db, account_id).json()
+    tracking = f"/api/job-postings/{draft['job_posting']['job_posting_id']}/tracking"
     response = client.put(tracking, json={"applied_on": "2026-11-04"})
     assert error(response) == (422, "VALIDATION_FAILED", "applied_on")
     assert "Finish reviewing Claude's suggestion for the resume" in response.json()["error"][
@@ -223,7 +239,7 @@ def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Sess
     # Other tracking still saves.
     assert client.put(tracking, json={"contacts": "Jamie Lee"}).status_code == 200
     db.expire_all()
-    db.get(Resume, draft.resume_id).draft = None
+    db.get(Resume, draft["resume_id"]).draft = None
     db.flush()
     final = client.put(tracking, json={"applied_on": "2026-11-04"})
     assert final.status_code == 200, final.json()

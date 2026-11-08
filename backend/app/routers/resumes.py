@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude
 from app.db import DbSession
 from app.documents import (
     RESUME,
@@ -32,6 +33,8 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
+from app.drafts import Draft, start_draft
+from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.models import Header, Resume, ToneSet
 from app.plain_text import Output, resume_output
@@ -52,6 +55,8 @@ class NewResume(ResumeIn):
     out starts with the most recently used one; a resume for a posting uses the posting's."""
 
     job_posting_id: int | None = None
+    # Starts with no sections at all ("Build from scratch"), not the defaults.
+    empty: bool = False
 
 
 class CopyIn(BaseModel):
@@ -69,6 +74,8 @@ class ResumeOut(ResumeIn, DocInfo):
 class ResumeDetail(ResumeOut):
     sections: list[SectionTree]
     output: Output
+    # Claude's draft, until its first review is finished (app/drafts.py).
+    draft: Draft | None
 
 
 def to_out(db: Session, resumes: list[Resume]) -> list[ResumeOut]:
@@ -82,7 +89,7 @@ def detail(db: Session, resume: Resume) -> ResumeDetail:
     header = db.get(Header, resume.header_id) if resume.header_id else None
     sections = load_tree(db, RESUME, resume.resume_id)
     return ResumeDetail(**to_out(db, [resume])[0].model_dump(), sections=sections,
-                        output=resume_output(header, sections))
+                        output=resume_output(header, sections), draft=resume.draft)
 
 
 def check_links(db: Session, body: ResumeIn, account_id: int) -> None:
@@ -101,11 +108,10 @@ def get_resume(resume_id: int, db: DbSession, account_id: AccountId) -> ResumeDe
     return detail(db, get_owned(db, Resume, resume_id, account_id))
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> ResumeDetail:
+def new_resume(db: Session, body: NewResume, account_id: int) -> Resume:
     """A new resume, starting with the default sections and their defaults: what the latest
-    resume used (app/defaults.py). One for a posting uses the posting's header, so the posting
-    needs one."""
+    resume used (app/defaults.py), or with `empty`, none. One for a posting uses the posting's
+    header, so the posting needs one."""
     if body.job_posting_id is not None:
         posting = posting_for_version(db, account_id, body.job_posting_id, RESUME)
         body.header_id = posting_header_id(posting, body.header_id)
@@ -113,10 +119,32 @@ def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> Resu
         body.header_id = latest_header_id(db, account_id)
     body.name = document_name(db, RESUME, account_id, body.name, body.job_posting_id is not None)
     check_links(db, body, account_id)
-    resume = Resume(account_id=account_id, **body.model_dump())
+    resume = Resume(account_id=account_id, **body.model_dump(exclude={"empty"}))
     db.add(resume)
     db.flush()
-    fill_document(db, RESUME, resume.resume_id, account_id)
+    if not body.empty:
+        fill_document(db, RESUME, resume.resume_id, account_id)
+    return resume
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> ResumeDetail:
+    resume = new_resume(db, body, account_id)
+    db.refresh(resume)
+    return detail(db, resume)
+
+
+@router.post("/tailored", status_code=status.HTTP_201_CREATED)
+def tailor_resume(body: NewResume, db: DbSession, account_id: AccountId,
+                  client: Claude) -> ResumeDetail:
+    """A new resume for a posting, started by Claude: it starts empty, with Claude's
+    suggestion in its draft for the user to review (app/drafts.py). If Claude fails, nothing
+    is created."""
+    if body.job_posting_id is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Claude tailors a resume only for a job posting.", field="job_posting_id")
+    resume = new_resume(db, body.model_copy(update={"empty": True}), account_id)
+    start_draft(db, client, RESUME, account_id, resume)
     db.refresh(resume)
     return detail(db, resume)
 

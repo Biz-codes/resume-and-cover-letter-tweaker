@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../shared/api/client'
 import type { Doc } from '../shared/api/documents'
+import type { ToneSet } from '../shared/api/toneSets'
 import { expectNoA11yViolations } from '../test/axe'
 import StartVersion from './StartVersion'
 
@@ -19,9 +20,14 @@ const doc = (id: number, name: string, organization?: string): Doc => ({
 })
 // Most recently updated first, as the API lists them.
 const DOCS = [doc(5, 'Acme resume', 'Acme'), doc(1, 'Tech')]
+const TONES = [
+  { tone_set_id: 2, name: 'Warm', hidden: false, created_at: '2026-10-01T00:00:00Z' },
+  { tone_set_id: 3, name: 'Old', hidden: true, created_at: '2026-10-01T00:00:00Z' },
+] as ToneSet[]
 
-function renderStart(onStart = vi.fn(() => Promise.resolve())) {
-  render(<StartVersion kind="resume" docs={DOCS} onStart={onStart} />)
+function renderStart(onStart = vi.fn(() => Promise.resolve()), docs = DOCS) {
+  render(<StartVersion kind="resume" docs={docs} toneSets={TONES} onStart={onStart} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
   return onStart
 }
 
@@ -29,54 +35,76 @@ const options = (label: string) =>
   [...screen.getByLabelText(label).querySelectorAll('option')].map((option) => option.textContent)
 
 describe('StartVersion', () => {
-  it("doesn't offer hidden ones to start from", () => {
-    render(<StartVersion kind="resume" docs={[...DOCS, { ...doc(7, 'Old resume'), hidden: true }]} onStart={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
-    expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech Base Resume', 'Acme resume (for Acme)'])
-  })
-
-  it('opens to a form that starts fresh', async () => {
-    const onStart = renderStart()
-    const button = screen.getByRole('button', { name: 'Start a resume' })
+  it('opens to Claude tailoring it, with a tone', async () => {
+    render(<StartVersion kind="resume" docs={DOCS} toneSets={TONES} onStart={vi.fn()} />)
     await expectNoA11yViolations()
-    fireEvent.click(button)
-    const from = screen.getByLabelText('Start from')
-    await vi.waitFor(() => expect(from).toHaveFocus())
-    expect(from).toHaveValue('')
-    // It's named for the posting, so there's no name to type.
+    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
+    const claude = screen.getByRole('radio', { name: 'Claude tailors one of your saved resumes' })
+    await vi.waitFor(() => expect(claude).toHaveFocus())
+    expect(claude).toBeChecked()
+    expect(screen.getAllByRole('radio').map((radio) => radio.parentElement?.textContent)).toEqual([
+      'Claude tailors one of your saved resumes',
+      'Copy a saved resume as is',
+      'Build from scratch (empty)',
+    ])
+    // Hidden tones aren't offered. It's named for the posting, and uses its header.
+    expect(options('Tone')).toEqual(['None', 'Warm'])
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(options('Start from')).toEqual(['Fresh, with the usual defaults', 'Tech Base Resume', 'Acme resume (for Acme)'])
-    // One list, base versions first.
-    expect(screen.getByLabelText('Start from').querySelectorAll('optgroup')).toHaveLength(0)
-    // The posting's header is used, so there's none to pick.
     expect(screen.queryByLabelText('Header')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Start from')).not.toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith(null))
   })
 
-  it('starts from a copy', async () => {
+  it('has Claude tailor it, saying so while it waits', async () => {
+    const onStart = renderStart(vi.fn(() => new Promise<void>(() => {})))
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(onStart).toHaveBeenCalledWith({ how: 'claude', toneSetId: 2 })
+    expect(await screen.findByRole('button', { name: 'Tailoring…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Claude is tailoring your resume. This can take a few minutes.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+  })
+
+  it('copies a saved one, base versions first, without hidden ones', async () => {
+    const onStart = renderStart(undefined, [...DOCS, { ...doc(7, 'Old resume'), hidden: true }])
+    fireEvent.click(screen.getByRole('radio', { name: 'Copy a saved resume as is' }))
+    // A copy keeps the original's tone.
+    expect(screen.queryByLabelText('Tone')).not.toBeInTheDocument()
+    expect(options('Start from')).toEqual(['Choose a resume', 'Tech Base Resume', 'Acme resume (for Acme)'])
+    await expectNoA11yViolations()
+    // One has to be chosen first.
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a resume to copy.')
+    const from = screen.getByLabelText('Start from')
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    expect(from).toHaveAccessibleDescription('Choose a resume to copy.')
+    await vi.waitFor(() => expect(from).toHaveFocus())
+    expect(onStart).not.toHaveBeenCalled()
+    await expectNoA11yViolations()
+    fireEvent.change(from, { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(onStart).toHaveBeenCalledWith({ how: 'copy', fromId: 5 })
+    expect(await screen.findByRole('button', { name: 'Starting…' })).toBeInTheDocument()
+    expect(screen.queryByText(/Claude is tailoring/)).not.toBeInTheDocument()
+  })
+
+  it('builds one from scratch', () => {
     const onStart = renderStart()
-    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
-    fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Build from scratch (empty)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith(5))
+    expect(onStart).toHaveBeenCalledWith({ how: 'scratch', toneSetId: null })
   })
 
-  it('says it is starting', async () => {
-    renderStart(vi.fn(() => new Promise<void>(() => {})))
-    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
+  it('shows a failure to try again, and cancels back to its button', async () => {
+    const onStart = renderStart(vi.fn(() => Promise.reject(new ApiError('AI_UNAVAILABLE', "Claude isn't available.", null, 503))))
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    expect(await screen.findByRole('button', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(await screen.findByRole('alert')).toHaveTextContent("Claude isn't available.")
+    // Claude failing offers to try again, as reading a posting does.
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveAttribute('aria-disabled', 'false')
     await expectNoA11yViolations()
-  })
-
-  it('shows a refusal, and cancels back to its button', async () => {
-    renderStart(vi.fn(() => Promise.reject(new ApiError('VERSION_LOCKED', 'This version was already sent.', null, 409))))
-    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('This version was already sent.')
-    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(onStart).toHaveBeenCalledTimes(2)
+    await screen.findByRole('alert')
     const form = screen.getByRole('form', { name: 'Start a resume for this posting' })
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Start a resume' })).toHaveFocus())
