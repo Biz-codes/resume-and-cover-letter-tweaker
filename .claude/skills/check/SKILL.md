@@ -11,7 +11,7 @@ Report results in plain language. Don't commit or stage anything; the user handl
 
 Run `scripts/check.sh` from the project root. It runs ruff, the backend tests, `alembic check`, TypeScript, oxlint, and the front end tests, and lists any that failed. It's the same script the git pre-commit hook runs.
 - The front end tests include the accessibility checks: `a11yChecks.ts` runs first (every component has a test, jsx-a11y lint passes, CSS colors meet contrast), and axe-core runs after every test and wherever a test checks a state on the way. oxlint includes the jsx-a11y rules.
-- The backend tests include `tests/test_docs.py`, which checks DATABASE.md against the models and API_ERRORS.md against the error codes, and `tests/test_seeds.py` for the committed seed SQL.
+- The backend tests include `tests/test_docs.py`, which checks DATABASE.md against the models and API_ERRORS.md against the error codes, and `tests/test_seeds.py` for the committed seed SQL (including that the demo data loads and follows the writing rules).
 - If Postgres isn't running, the script says so. Ask the user to start it (`brew services start postgresql@18`) rather than skipping the database checks.
 - For a failure, show the relevant output and fix it if the cause is clear. If a fix would change the design, ask first.
 
@@ -19,6 +19,7 @@ Run `scripts/check.sh` from the project root. It runs ruff, the backend tests, `
 
 - `git status --short` and `git ls-files --others --exclude-standard`: nothing under `db/seed_personal/`, no `.env` file other than `.env.example`, and no `*.dump` file may appear.
 - `git check-ignore db/seed_personal/` should confirm the folder is ignored.
+- `python3 scripts/check_demo_data.py`: the demo data (`db/seed_demo.sql`) must share nothing with `db/seed_personal/`. A match prints only the demo file's line and the kind of match (sentence, contact detail, name, or organization). Read that demo line and change it to something made up; never open the personal file to see what it matched.
 - Never print the contents of `.env` files or personal seed files.
 
 ## 3. Leftovers from design changes

@@ -19,7 +19,7 @@
 - `backend/`: FastAPI app, SQLAlchemy models, Alembic migrations, tests. Python packages in a `venv` installed with pip.
 - `frontend/`: Vite + React + TypeScript app. `frontend/src/` is grouped by feature: `library/`, `postings/`, and `documents/` (resumes and cover letters) each hold their pages, components, and API modules, and `shared/` holds what more than one feature uses (`shared/api/`, `shared/components/`, `shared/hooks/`). A file used by one feature goes in that feature; once another feature uses it, it moves to `shared/`. `App.tsx`, `main.tsx`, `modes.ts`, `HomePage.tsx`, `index.css`, and `test/` stay at the top. A component's `.tsx` and `.test.tsx` sit side by side; one with a third file (its `Name.module.css`) gets its own folder, such as `shared/components/OrderedList/`.
 - **Styles:** `frontend/src/index.css` holds what's site-wide: the colors (as variables on `:root` too, such as `--border`), base element styles, layout and breakpoints, and classes several components use (`muted`, `tag`, `actions`, `card`, `visually-hidden`, and the like). Styles only one component uses go in its `Name.module.css`, read as `styles.camelCaseName`, and use the color variables, never their own colors, so the contrast check covers every color (see "Accessibility" below). Tests see the modules' plain class names (`vite.config.ts`).
-- `db/`: seed SQL files (`seed_defaults.sql` and `seed_helpers.sql` committed; `seed_personal/`, one file per resume, gitignored).
+- `db/`: seed SQL files (`seed_defaults.sql`, `seed_helpers.sql`, and `seed_demo.sql` committed; `seed_personal/`, one file per resume, gitignored).
 - **Tests:** pytest for the backend, Vitest for the front end.
 - **Linting:** ruff (Python), and tsc and oxlint (TypeScript, including oxlint's jsx-a11y accessibility rules), run automatically by a Claude Code hook after each edit.
 - **Accessibility:** the front end targets WCAG 2.2 AA. See "Accessibility" below.
@@ -34,6 +34,7 @@ Postgres 18 runs as a Homebrew service on port 5433 (see [BUILD_PLAN.md](BUILD_P
 
 From the project root:
 - `scripts/check.sh`: run every check (backend lint, tests, and schema drift; front end types, lint, and tests). The git pre-commit hook runs it too.
+- `scripts/demo_db.sh`: build the demo database, `resume_tweaker_demo`, from the migrations and `db/seed_demo.sql` (made-up data for screenshots and recordings; `--reset` deletes and rebuilds it). Start the API against it from `backend/` with `DATABASE_URL=postgresql+psycopg://localhost:5433/resume_tweaker_demo .venv/bin/uvicorn app.main:app --reload`; the front end needs no change.
 
 CI (`.github/workflows/checks.yml`, GitHub Actions) runs `scripts/check.sh` on every push and pull request, against Postgres 18 in a service container on port 5433, so commits that skip the pre-commit hook (VS Code's commit box) are checked too. It needs no secrets. The badge at the top of the README shows the latest result on `main`.
 
@@ -44,7 +45,7 @@ From `frontend/`:
 ### Commit messages
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat: ...`, `fix: ...`) and describe only the staged changes. There are two ways to get one written, and both ask the commit's type (feat, fix, refactor, docs, or chore) and then the message's length (succinct, highlights, verbose, or write your own):
 - **`git commit` in a terminal:** the `prepare-commit-msg` hook asks in the terminal, has Claude write the message, and opens the editor with it to review. It keeps only Claude's output from the first line starting with a commit type, since `claude -p` can print narration above the message; output with no such line counts as no message. Its suggested type comes from the staged files' paths alone, so it answers instantly: docs for docs only, chore for tooling only, feat when the app gains a new file, and no suggestion otherwise. It can't tell a fix from a refactor, or notice that a change to app code is really a fix.
-- **`/commit-message` in Claude Code:** Claude reads the whole staged diff before asking, so its recommended type is an informed judgment. It shows the message for you to copy.
+- **`/commit-message` in Claude Code:** Claude reads the whole staged diff before asking, so its recommended type is an informed judgment. It shows the message for you to copy, with the choices to make at the hook's prompts (the type's number, then 4 Write my own); the copyable message leaves out the type, which "Write my own" already starts the message with.
 
 **For a better type recommendation, run `/commit-message` first.** Use its message, or note its recommended type and pick that at the hook's prompt. The hook's suggestion is fine when the staged files make the type obvious (only docs, or only tooling).
 

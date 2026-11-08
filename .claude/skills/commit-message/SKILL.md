@@ -50,4 +50,18 @@ Messages follow [Conventional Commits](https://www.conventionalcommits.org/): th
 
 4. **Output.**
    - With `--raw`: the message only. Its first line is the subject, starting with the type; nothing comes before it or after the message (no note on what you found, no code block), since every line printed goes into the commit.
-   - Otherwise: the message in a code block, then one line naming anything odd you noticed that the user may not want in this commit (an unrelated file, a debug leftover, or changes that fit a different type better). Say nothing else.
+   - Otherwise: first the steps for using the message with the git hook, filled in with the commit's type, its number, and its description as the hook's menu (`.githooks/prepare-commit-msg`) shows them: 1) feat: a new feature or behavior, 2) fix: a bug fix, 3) refactor: code restructured without changing what it does, 4) docs: documentation only, 5) chore: tooling, config, dependencies, or hooks. "Write my own" starts the message with the type (`chore: `), so the user pastes in everything after it. Each choice goes on its own line, as in this example for a chore:
+
+     ```
+     When the commit hook asks for the commit type, choose:
+     `5) chore: tooling, config, dependencies, or hooks`
+     Then, when it asks for the message type, choose:
+     `4) Write my own`
+     In the commit message, arrow past the commit type (`chore: `) and paste in:
+     ```
+
+     (Write these as plain lines in the reply, not in a code block; end each line but the last with two spaces or a backslash so they don't run together.) Then the message in a code block, without the `<type>: ` at the start of its subject: for a succinct message, only the description; for a longer one, the description, then the blank line and the body.
+
+     A type the hook doesn't list (one typed under "Other", such as `test`) has no number: say to press `s` at the type question to skip the hook's questions and paste the whole message, type included, into git's editor, and show the whole message in the code block.
+
+     Last, one line naming anything odd you noticed that the user may not want in this commit (an unrelated file, a debug leftover, or changes that fit a different type better). Say nothing else.

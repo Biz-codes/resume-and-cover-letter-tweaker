@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 The docs are the source of truth for the design (CLAUDE.md), so they have to describe what the code actually does. This audit reads all of them and checks each claim against the code. `/check` only looks for leftovers from recent changes and runs the tests; this covers everything, whether or not it changed recently.
 
-Don't commit or stage anything; the user handles git. The user edits the docs by hand, so build on their wording and never revert a name or phrase they changed. Don't read `.env` files or anything in `db/seed_personal/` (personal data); `.env.example` and `db/seed_helpers.sql` are fine.
+Don't commit or stage anything; the user handles git. The user edits the docs by hand, so build on their wording and never revert a name or phrase they changed. Don't read `.env` files or anything in `db/seed_personal/` (personal data); `.env.example`, `db/seed_helpers.sql`, and `db/seed_demo.sql` are fine.
 
 ## 1. Gather
 

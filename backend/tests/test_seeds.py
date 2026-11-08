@@ -1,9 +1,14 @@
-"""The committed seed SQL: db/seed_defaults.sql and the helpers in db/seed_helpers.sql.
+"""The committed seed SQL: db/seed_defaults.sql, the helpers in db/seed_helpers.sql, and the
+demo data in db/seed_demo.sql.
 
 Uses made-up data only; the personal seed files are never read here.
 """
 
+import re
+
+import psycopg
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import Connection, func, select, text
 from sqlalchemy.exc import DBAPIError
 
@@ -33,10 +38,16 @@ DB_DIR = BACKEND_DIR.parent / "db"
 BULLETS = ["Built the thing.", "Tested the thing."]
 
 
+def sql_text(name: str) -> str:
+    """The file, with each psql include (\\ir) replaced by the file it names, as psql runs it."""
+    return re.sub(r"^\\ir (\S+)$", lambda m: sql_text(m.group(1)),
+                  (DB_DIR / name).read_text(), flags=re.MULTILINE)
+
+
 def run_sql_file(connection: Connection, name: str) -> None:
     # The raw driver cursor with no parameters runs the whole file as written (SQLAlchemy
     # would treat the %I in format() calls as parameter placeholders).
-    connection.connection.cursor().execute((DB_DIR / name).read_text())
+    connection.connection.cursor().execute(sql_text(name))
 
 
 def scalar(connection: Connection, statement):
@@ -193,3 +204,102 @@ def test_set_resume_skills_replaces_the_list_in_order(helpers: Connection, accou
         "SELECT string_agg(k.skill_name, ', ' ORDER BY x.position) FROM skill_category_skill x"
         " JOIN skill k USING (skill_id)")).scalar()
     assert listed == "Go, Python, Rust, FastAPI"  # Rust stays in the library list
+
+
+# db/seed_demo.sql
+
+DEMO = "seed_demo.sql"
+
+
+@pytest.fixture
+def demo(connection: Connection) -> Connection:
+    run_sql_file(connection, DEMO)
+    return connection
+
+
+def rows(connection: Connection, sql: str) -> list:
+    return connection.execute(text(sql)).all()
+
+
+def test_demo_has_every_stage_of_an_application(demo: Connection):
+    postings = rows(demo, "SELECT p.organization, p.applied_on IS NOT NULL,"
+                          " (SELECT count(*) FROM resume r"
+                          "  WHERE r.job_posting_id = p.job_posting_id),"
+                          " (SELECT count(*) FROM cover_letter c"
+                          "  WHERE c.job_posting_id = p.job_posting_id),"
+                          " (SELECT count(*) FROM job_posting_interview i"
+                          "  WHERE i.job_posting_id = p.job_posting_id)"
+                          " FROM job_posting p ORDER BY p.created_at")
+    assert [tuple(p) for p in postings] == [
+        ("Marigold Health", True, 1, 1, 1),
+        ("Bluefin Learning", False, 1, 0, 0),
+        ("Quarry Street Studio", False, 0, 0, 0),
+    ]
+    assert rows(demo, "SELECT count(*) FROM job_posting WHERE header_id IS NULL")[0][0] == 0
+    bases = rows(demo, "SELECT name FROM resume WHERE job_posting_id IS NULL"
+                       " UNION ALL SELECT name FROM cover_letter WHERE job_posting_id IS NULL")
+    assert [b[0] for b in bases] == ["Front End", "Front End"]
+    # Each posting's version starts from the base version.
+    assert rows(demo, "SELECT count(*) FROM resume WHERE job_posting_id IS NOT NULL"
+                      " AND based_on_resume_id IS NULL")[0][0] == 0
+    # The account defaults are there too.
+    assert rows(demo, "SELECT count(*) FROM writing_rule")[0][0] > 0
+
+
+def test_demo_documents_read_through_the_api(demo: Connection, client: TestClient):
+    for kind, key in (("resumes", "resume_id"), ("cover-letters", "letter_id")):
+        listed = client.get(f"/api/{kind}").json()
+        assert listed
+        for doc in listed:
+            detail = client.get(f"/api/{kind}/{doc[key]}")
+            assert detail.status_code == 200
+            assert "Riley Moreno" in detail.json()["output"]["text"]
+            posting = doc["job_posting"]
+            assert doc["locked"] == (posting is not None
+                                     and posting["organization"] == "Marigold Health")
+
+
+def test_demo_lists_every_library_item_under_a_parent(demo: Connection):
+    unlisted = rows(demo, """
+        SELECT 'bullet', content FROM bullet_point b
+        WHERE NOT EXISTS (SELECT 1 FROM experience_bullet_point x WHERE x.bullet_id = b.bullet_id)
+          AND NOT EXISTS (SELECT 1 FROM project_bullet_point x WHERE x.bullet_id = b.bullet_id)
+          AND NOT EXISTS (SELECT 1 FROM section_bullet_point x WHERE x.bullet_id = b.bullet_id)
+        UNION ALL
+        SELECT 'skill', skill_name FROM skill k
+        WHERE NOT EXISTS (SELECT 1 FROM skill_category_skill x WHERE x.skill_id = k.skill_id)
+        UNION ALL
+        SELECT 'excerpt', content FROM narrative_content n
+        WHERE NOT EXISTS (SELECT 1 FROM section_narrative_content x
+                          WHERE x.content_id = n.content_id)
+        UNION ALL
+        SELECT 'role', role_title FROM experience e
+        WHERE NOT EXISTS (SELECT 1 FROM section_experience x
+                          WHERE x.experience_id = e.experience_id)
+        UNION ALL
+        SELECT 'project', project_title FROM project p
+        WHERE NOT EXISTS (SELECT 1 FROM section_project x WHERE x.project_id = p.project_id)
+        UNION ALL
+        SELECT 'education', degree FROM education d
+        WHERE NOT EXISTS (SELECT 1 FROM section_education x
+                          WHERE x.education_id = d.education_id)
+    """)
+    assert unlisted == []
+
+
+def test_demo_text_follows_the_writing_rules(demo: Connection):
+    # The file's own text (the comments too), without the files it includes.
+    demo_text = (DB_DIR / DEMO).read_text().lower()
+    terms = demo.execute(select(WritingRule.rule_text).where(WritingRule.kind == "term"))
+    # From the patterns: intensifiers, "responsible for" and "helped with", and em dashes.
+    banned = [*terms.scalars(), "very", "really", "highly", "extremely", "responsible for",
+              "helped with"]
+    found = [t for t in banned if re.search(rf"\b{re.escape(t.lower())}\b", demo_text)]
+    assert found == []
+    assert "\u2014" not in demo_text
+
+
+def test_demo_loads_only_into_a_database_with_no_account(connection: Connection, account: int):
+    # The raw driver cursor raises the driver's own error, not SQLAlchemy's.
+    with pytest.raises(psycopg.Error, match="no account yet"), connection.begin_nested():
+        run_sql_file(connection, DEMO)
