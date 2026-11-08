@@ -11,7 +11,6 @@ docs/FRONTEND_CHECKS.md:
   every one is picked and no sent version uses the excerpt, it's edited in place.
 - Otherwise the new text is saved as a new excerpt, listed right after the original in its
   sections, and only the picked ones switch to it.
-A version added on purpose is listed the same way, and nothing switches to it.
 
 Creating or editing an excerpt can also choose every section that lists it. Those lists only
 drive suggestions, so changing them never makes a new excerpt; when a text edit does, the

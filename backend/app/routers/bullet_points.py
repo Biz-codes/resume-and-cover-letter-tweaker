@@ -12,7 +12,6 @@ docs/FRONTEND_CHECKS.md:
   every one is picked and no sent version uses the bullet, it's edited in place.
 - Otherwise the new text is saved as a new bullet, listed right after the original wherever
   it's listed, and only the picked ones switch to it.
-A version added on purpose is listed the same way, and nothing switches to it.
 """
 
 from fastapi import APIRouter, status

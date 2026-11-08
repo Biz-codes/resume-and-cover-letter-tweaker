@@ -4,8 +4,7 @@ A cover letter points to its sign-off (sign_off_id) and prints its text. So edit
 follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent letters never change, and letters
 in progress change only if the user picks them (apply_to). Unless every one is picked and no
 sent letter uses it, the new text is saved as a new sign-off, and only the picked ones switch to
-it. A version added on purpose is a new sign-off nothing switches to. Deleting one leaves the
-letters that used it with no closing.
+it. Deleting one leaves the letters that used it with no closing.
 """
 
 from fastapi import APIRouter, status

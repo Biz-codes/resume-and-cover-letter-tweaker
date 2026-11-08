@@ -66,7 +66,7 @@ Note: one row for now (the app's owner). Login fields such as a password will be
 
 Note: the top of a resume or cover letter: name, then the headline, then contact details and links. A posting's resume and cover letter each point to a header through `header_id`, always the posting's header.
 
-Note: headers are library items with versions, like roles. A different headline or contact detail is a new row, and identical headers are reused. Sent resumes and cover letters keep the header they went out with, so changing a phone number later means adding a header, not editing the old one (see "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: headers are library items with versions, like roles, and identical headers are reused. Editing one follows the same rules as every library item: sent resumes and cover letters, and applied postings, keep the header they went out with, and the postings and base resumes and cover letters in progress switch to the edited header only if the user picks them (a posting's resumes and cover letters always share its header). Unless every one in progress is picked and nothing sent uses it, the edit is saved as a new header, or an identical one is reused (see "Changing an item" and "Headers" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### job_posting
 | Column         | Type         | Constraints                                               | Description                                     |
@@ -206,9 +206,7 @@ Note: there are no content rules. Any kind of content (narrative content, skill 
 
 Note: the backend refuses to delete or rename a built-in section, and a database trigger blocks it as a backstop.
 
-Note: titles are unique in the account, ignoring capitals and counting the built-in titles (the database checks exact matches; the app checks the rest and returns `DUPLICATE`). Renaming a section that a sent (locked) resume or cover letter uses saves a new section with the new title and the same lists; unsent versions switch to it (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
-
-Note: "New version" on a resume or cover letter saves a new section with a new title and the same lists (only the account's items, for a built-in section), in the original's place there. It must change the title (`VALIDATION_FAILED`), and the title must be new (`DUPLICATE`). See "New versions in a resume or cover letter" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+Note: titles are unique in the account, ignoring capitals and counting the built-in titles (the database checks exact matches; the app checks the rest and returns `DUPLICATE`). Renaming a section follows the same rules as every library item: resumes and cover letters in progress switch to the new title only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the new title is saved as a new section with the same lists (only the account's items, for a built-in section), and the picked ones switch to it. A built-in section can't be renamed, so a new title for one always saves a new section (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### narrative_content
 | Column     | Type      | Constraints                                               | Description                                              |
@@ -222,9 +220,9 @@ Note: "New version" on a resume or cover letter saves a new section with a new t
 
 Note: each row (an "excerpt" in the app) holds anything from one sentence to a full paragraph. Narrative sections, such as a resume summary or a cover letter paragraph, combine the excerpts chosen and ordered by `position` in `resume_narrative_content` / `cover_letter_narrative_content`. The user decides how to split text: for example, a paragraph used in many resumes with only its first sentence changed can be one row per first sentence plus one row for the rest of the paragraph. No label column is needed, because sections list their excerpts in `section_narrative_content`.
 
-Note: editing an excerpt's text in the library follows the same rules as a role, project, or bullet: resumes and cover letters in progress switch to the edited excerpt only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original in its sections (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: editing an excerpt's text follows the same rules as every library item: resumes and cover letters in progress switch to the edited excerpt only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original in its sections (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
-Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row. A new version must differ from the original (`VALIDATION_FAILED`).
+Note: a rewording of Claude's that the user keeps is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row (see "Rewordings" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### skill_category
 | Column        | Type         | Constraints                                      | Description                                           |
@@ -244,7 +242,7 @@ Note: a built-in "Other" category is created with the database, with the fixed i
 
 Note: when a category is deleted, the app first lists any of its skills that no other category lists under "Other", and moves its resume and cover letter selections under "Other" in the same section, so no skill is left without a category and no resume loses skills. See "Deleting a skill category" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
-Note: "New version" on a resume or cover letter saves a new category with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in its sections and listing the same skills (only the account's, for "Other"), in the original's place there.
+Note: renaming a category follows the same rules as every library item: resumes and cover letters in progress switch to the new name only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the new name is saved as a new category, listed right after the original in its sections and listing the same skills (only the account's, for "Other"). "Other" can't be renamed, so a new name for it always saves a new category (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### skill
 | Column     | Type         | Constraints                                               | Description                                  |
@@ -262,7 +260,7 @@ Note: names are unique in the account, ignoring capitals. The app checks this an
 
 Note: every skill is listed under at least one category. Taking a skill out of its only category lists it under "Other" (an app rule; see "Suggesting and adding items" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
-Note: "New version" on a resume or cover letter saves a new skill with a new name (`DUPLICATE` if it isn't new, `VALIDATION_FAILED` if unchanged), listed right after the original in every category and project, in the original's place there.
+Note: renaming a skill follows the same rules as every library item: resumes and cover letters in progress switch to the new name only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the new name is saved as a new skill, listed right after the original in every category and project (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### experience
 | Column        | Type         | Constraints                                               | Description                                       |
@@ -277,9 +275,7 @@ Note: "New version" on a resume or cover letter saves a new skill with a new nam
 | created_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience added to db                  |
 | updated_at    | TIMESTAMP    | DEFAULT NOW()                                             | date/time experience last updated                 |
 
-Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user picks them, and sent ones never do (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
-
-Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the bullets shown under it. It must change something (`VALIDATION_FAILED`).
+Note: an experience is any role: a paid job, volunteer work, or anything else. Each version of a role is its own row (e.g. "Software Engineer" and "Senior Software Engineer" at the same organization, or the same role with dates written differently on an older resume). The versions can list the same bullets in `experience_bullet_point`, so the bullets are stored once. A version saved from an edit is listed right after the original in its sections and lists the same bullets. Resumes and cover letters in progress switch to an edited role only if the user picks them, and sent ones never do (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### project
 | Column        | Type         | Constraints                                               | Description                                    |
@@ -298,9 +294,7 @@ Note: a project lists its skills in `project_skill` and its bullets in `project_
 
 Note: `done_for` is optional free text naming who or what the project is affiliated with, printed as written (e.g. "McGraw Hill", "Freelance", "Independent project"). Empty means the project line shows nothing there.
 
-Note: each version of a project is its own row, like a role's versions. A version added in the app, or saved from an edit, is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user picks them, and sent ones never do (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
-
-Note: "New version" on a resume or cover letter adds a version the same way, and puts it in the original's place there, keeping the skills and bullets shown under it. It must change something (`VALIDATION_FAILED`).
+Note: each version of a project is its own row, like a role's versions. A version saved from an edit is listed right after the original in its sections and lists the same skills and bullets. Resumes and cover letters in progress switch to an edited project only if the user picks them, and sent ones never do (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### bullet_point
 | Column     | Type      | Constraints                                               | Description                                         |
@@ -314,9 +308,9 @@ Note: "New version" on a resume or cover letter adds a version the same way, and
 
 Note: a bullet is listed under roles (`experience_bullet_point`), projects (`project_bullet_point`), or directly under sections (`section_bullet_point`), as many as fit.
 
-Note: editing a bullet's text in the library follows the same rules as a role, project, or narrative content: resumes and cover letters in progress switch to the edited bullet only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: editing a bullet's text follows the same rules as every library item: resumes and cover letters in progress switch to the edited bullet only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
-Note: an accepted rewording, or a new version written on a resume or cover letter, is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume or cover letter switches to the new bullet. A new version must differ from the original (`VALIDATION_FAILED`).
+Note: a rewording of Claude's that the user keeps is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume or cover letter switches to the new bullet (see "Rewordings" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### education
 | Column       | Type         | Constraints                                               | Description                                                              |
@@ -331,7 +325,7 @@ Note: an accepted rewording, or a new version written on a resume or cover lette
 | created_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education added to db                                          |
 | updated_at   | TIMESTAMP    | DEFAULT NOW()                                             | date/time education last updated                                         |
 
-Note: "New version" on a resume or cover letter saves a new entry, listed right after the original in its sections, in the original's place there. It must change something (`VALIDATION_FAILED`).
+Note: editing an entry follows the same rules as every library item: resumes and cover letters in progress switch to the edited entry only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new entry, listed right after the original in its sections (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### writing_rule
 | Column          | Type              | Constraints                                               | Description                                        |
@@ -360,7 +354,9 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 
 Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
 
-Note: names are unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`), whether a tone set is added, renamed, or saved as a new version, which copies its rules. See "Versions in the library" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+Note: a new tone set's name, or a new name for one, must be new in the account, ignoring capitals (the app checks and returns `DUPLICATE`). A set saved from an edit as a new row can keep its original's name, so two sets can share one; the app tells them apart by `created_at`.
+
+Note: a tone set is saved whole: its name and its rules, in order. Tones aren't printed, but a sent resume or cover letter keeps the tone it was written with, so editing one follows the same rules as every library item: resumes and cover letters in progress switch to the edited set only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new set with copies of the rules (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### tone_rule
 | Column       | Type         | Constraints                                                 | Description                                           |
@@ -372,7 +368,7 @@ Note: names are unique in the account, ignoring capitals (the app checks and ret
 | created_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule added to db                       |
 | updated_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule last updated                      |
 
-Note: deleting a tone set deletes its rules. Reordering a set's rules must send every rule in the set, once each; otherwise the app returns `VALIDATION_FAILED`. Tone sets and rules are never printed, so they're edited in place even when a sent version uses the set (see "Writing rules" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: deleting a tone set deletes its rules. Saving a set sends its rules in order: each kept rule with its `tone_rule_id` at most once, and new ones without; rules left out are deleted. An id that isn't one of the set's rules, or one sent twice, returns `VALIDATION_FAILED` (see "Writing rules" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### sign_off
 | Column      | Type         | Constraints                                               | Description                                        |
@@ -386,7 +382,7 @@ Note: deleting a tone set deletes its rules. Reordering a set's rules must send 
 
 Note: each account starts with "Sincerely", and the user can add others (e.g. "Best regards"). A cover letter ends with its sign-off, a comma, and its `signature_name` (or its header's `full_name`) on the next line. No sign-off means no closing.
 
-Note: editing a sign-off a sent (locked) cover letter uses saves a new sign-off with the new text; unsent letters switch to it (see "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: editing a sign-off follows the same rules as every library item: cover letters in progress switch to the new text only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent letter uses it, the new text is saved as a new sign-off (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ## Library Join Tables
 Each parent lists every child that can go under it. These lists are what the app suggests from (e.g. a role's bullets, a category's skills), and `position` is the default order for a new resume. They don't limit where an item can go: a resume can still place any item in any section.

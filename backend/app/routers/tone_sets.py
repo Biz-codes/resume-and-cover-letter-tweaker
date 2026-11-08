@@ -8,8 +8,7 @@ Unless every one is picked and nothing sent uses it, the edit is saved as a new 
 same name or the new one, and only the picked ones switch to it. A rule belongs to one set;
 deleting the set deletes its rules, and the resumes and cover letters that used it keep going
 with no tone set. A new set, or a new name, can't match another set's name (DUPLICATE); a set
-saved from an edit can share its original's name. A version added on purpose copies the
-set's rules and needs a new name.
+saved from an edit can share its original's name.
 """
 
 from datetime import datetime

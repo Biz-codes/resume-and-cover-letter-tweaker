@@ -25,7 +25,7 @@ The app fetches the posting and has Claude extract its organization, role title,
 ## How it's built
 - Python, FastAPI, PostgreSQL (SQLAlchemy, Alembic), and React with TypeScript
 - Claude API (Opus 5.5) with structured outputs, so AI suggestions come back as data the app checks before showing them
-- A content library where every role, project, bullet, and sentence is stored once and reused across resumes; versions sent to employers are locked, so the record of what went out never changes
+- A content library where every role, project, bullet, and sentence is stored once and reused across resumes; versions sent to employers are locked, so the record of what went out never changes, and editing an item asks which resumes in progress get the change
 - Accessible to WCAG 2.2 AA: automated accessibility checks in every front end test, full keyboard support, and screen reader announcements for every change
 - 600+ automated tests, including checks that the docs, models, and migrations agree
 

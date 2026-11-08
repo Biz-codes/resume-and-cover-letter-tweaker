@@ -4,8 +4,7 @@ Renaming a skill follows "Changing an item" in docs/FRONTEND_CHECKS.md: sent ver
 change, and resumes and cover letters in progress change only if the user picks them
 (apply_to). Unless every one is picked and nothing sent uses it, the new name is saved as a new
 skill, listed right after the original in every category and project, and only the picked ones
-switch to it. A version added on purpose is listed the same way, and nothing switches to it.
-Names are unique (DUPLICATE).
+switch to it. Names are unique (DUPLICATE).
 """
 
 from fastapi import APIRouter, status

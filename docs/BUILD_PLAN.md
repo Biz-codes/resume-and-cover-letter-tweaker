@@ -132,7 +132,7 @@ Steps:
 2. [x] **Every page** shows its notice in `AlertDialog` instead of the status line, and the tests that checked the status text check the alert dialog and close it.
 3. [x] **Docs:** "Messages" under "Accessibility" in [TECH_STACK.md](TECH_STACK.md), the `/a11y` checklist, and anything else that mentions the page's status line, then `/a11y` over the whole front end.
 
-## Before phase 5 continues: one way to change an item
+## Before phase 5 continues: one way to change an item (done)
 Goal: every kind of library item changes the same way, the way roles, projects, bullets, and narrative content do now: edit it in its dialog, then check which other resumes and cover letters in progress get the change. "New version" goes away everywhere, so there's one way to change things and nothing extra to explain.
 
 - [x] **Start after the user approves this plan.** Build it in the steps below, each with its tests, and check each off.
@@ -150,7 +150,7 @@ Steps:
    - Tone sets: `PUT /api/tone-sets/{id}` takes the name, every rule in order (with its `tone_rule_id`, or none for a new rule), and `apply_to`; the one-rule endpoints are gone. A new name can't match another tone's (`DUPLICATE`); an unchanged one can.
 2. [x] **Backend, removing New version:** the `POST /api/<items>/{id}/versions` endpoints and the tree's "new version in this item's place" path (`replaces` in `backend/app/routers/document_tree.py`), with their tests. An edit from a tree row already covers it: that document gets the change, and nothing else does unless it's checked.
 3. [x] **Front end:** `ApplyChoice` and the note in every kind's dialog (a header's from its `in_progress`), the tone dialog editing its rules in the form until Save (tones told apart by date, `created_at`), New version taken out of `ItemParts`, every item view, `itemHost.ts` (`placed.version`, `placedNote`), and the API modules, with tests and `/a11y`.
-4. [ ] **Docs:** FRONTEND_CHECKS.md ("Changing an item" for every item, tones in "Writing rules" no longer edited in place, "Sent versions are locked", "Headers", "Item dialogs", and "New versions in a resume or cover letter" removed), the DATABASE.md notes, APP_FLOW.md, TECH_STACK.md ("Item versions"), and README.md, then `/check`.
+4. [x] **Docs:** FRONTEND_CHECKS.md ("Changing an item" for every item, tones in "Writing rules" no longer edited in place, "Sent versions are locked", "Headers", "Item dialogs", and "New versions in a resume or cover letter" removed), the DATABASE.md notes, APP_FLOW.md, TECH_STACK.md ("Item versions"), and README.md, then `/check`.
 5. [x] **A resume's or cover letter's page, edited in place** (asked for during step 3): no "Edit this one" step, Rename, or Done editing. A base version, or one in progress, is edited right away, its name is changed under Contents with "New title", in a modal (a base version's title ends in "Base Resume", shown that way everywhere, so there's no "Base resume" line; name fields show the suffix beside them), and a note above Copy and Delete says what editing does. A sent one shows only its name to edit, with Copy and Hide (or Unhide): it can't be deleted (`VERSION_LOCKED`). Resumes and cover letters get `hidden`, with a "Hidden (n)" group on their list pages, and hidden ones aren't offered to start from.
 
 ## Alongside phase 5: show the project early
