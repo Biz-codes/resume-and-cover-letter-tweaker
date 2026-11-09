@@ -1,0 +1,33 @@
+/* The draft's rows: name, badge, and Reject on one line, with the rationale and what's under it
+   below. Colors come from index.css (the badges). */
+.sections,
+.entries,
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.entries,
+.children {
+  margin-top: 8px;
+  padding-left: 20px;
+}
+
+.children {
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.label {
+  margin-bottom: 0;
+  font-weight: 600;
+}

@@ -283,7 +283,10 @@ def restore_section(db: Session, kind: Kind, section_row: int, entries: list[Pla
     for entry_kind in LIBRARY:
         library, item_column, _ = LIBRARY[entry_kind]
         ids = [entry.item_id for entry in entries if entry.kind == entry_kind]
-        check_ids(db, library, getattr(library, item_column), ids, account_id, "entries")
+        # A document can show the built-in "Other" category (a deleted category's skills move
+        # there, and a document read from a file puts ungrouped skills there).
+        check_ids(db, library, getattr(library, item_column), ids, account_id, "entries",
+                  allow_built_in=entry_kind == "category")
     bullets = [entry.item_id for entry in entries if entry.kind == "bullet"]
     bullets += [bullet for entry in entries for bullet in entry.bullet_ids or []]
     if len(set(bullets)) != len(bullets):

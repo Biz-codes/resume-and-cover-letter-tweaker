@@ -34,7 +34,7 @@ from app.suggestions import SuggestedBullet, SuggestedEntry, SuggestedSection, S
 from tests.test_documents import header, posting
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_posting_reader import FakeMessages
-from tests.test_sections_skills import add, category, error, resume
+from tests.test_sections_skills import add, category, error, resume, show_skills
 
 
 @pytest.fixture
@@ -167,6 +167,73 @@ def test_leaves_out_what_it_cant_use(client: TestClient, db: Session, account_id
     assert skills[0]["skill_ids"] == []
 
 
+def test_asks_again_when_it_lists_only_what_it_changed(client: TestClient, db: Session,
+                                                       account_id: int, claude: FakeMessages):
+    job = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
+    front_end = category(db, account_id, "Front End", ["React"])
+    start = resume(db, account_id, "Tech base", sent=False)
+    show_job(db, start, job, ["Shipped it"])
+    show_skills(db, start, front_end, ["React"])
+    whole = Suggestion(starting_document_id=start.resume_id, starting_reason="Same.", sections=[
+        section(EXPERIENCE_SECTION_ID, entry("experience", job.experience_id)),
+        section(SKILLS_SECTION_ID, entry("category", front_end.category_id))])
+    # The first answer leaves out both of the starting resume's items; the second is the draft.
+    answers = [whole.model_copy(update={"sections": []}), whole]
+    stream = claude.stream
+
+    def next_answer(**request):
+        claude.reply = answers.pop(0)
+        return stream(**request)
+
+    claude.stream = next_answer
+    response = tailor(client, db, account_id)
+    assert response.status_code == 201, response.json()
+    assert [s["section_id"] for s in response.json()["draft"]["sections"]] == [
+        EXPERIENCE_SECTION_ID, SKILLS_SECTION_ID]
+    first, again = claude.calls
+    assert again["system"] == first["system"]
+    assert again["messages"][0]["content"].endswith(
+        "List the whole resume: every section and item, including the ones you keep as they are.")
+
+
+def test_starts_from_the_one_the_user_chose(client: TestClient, db: Session,
+                                           account_id: int, claude: FakeMessages):
+    job = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
+    chosen = resume(db, account_id, "Tech base", sent=False)
+    show_job(db, chosen, job, ["Shipped it"])
+    other = resume(db, account_id, "Teaching base", sent=False)
+    show_job(db, other, job, ["Shipped it"])
+    # Claude names another, but the starting point is the one the user chose.
+    claude.reply = Suggestion(starting_document_id=other.resume_id, starting_reason="Close.",
+                              sections=[section(EXPERIENCE_SECTION_ID,
+                                                entry("experience", job.experience_id))])
+    response = tailor(client, db, account_id, start_from_id=chosen.resume_id)
+    assert response.status_code == 201, response.json()
+    assert response.json()["draft"]["starting_document"] == {
+        "id": chosen.resume_id, "name": "Tech base"}
+    [request] = claude.calls
+    assert (f"Start from the resume with id {chosen.resume_id}, which the job seeker chose"
+            in request["messages"][0]["content"])
+    assert "Still look through the whole library" in request["messages"][0]["content"]
+    # Every earlier resume is still there to take items from.
+    documents = request["system"][1]["text"].split("<documents>\n")[1]
+    assert f'"id": {other.resume_id}' in documents
+    # The reply is the whole resume, not only what changes.
+    assert "not only what you change" in request["system"][0]["text"]
+
+
+def test_refuses_a_starting_point_it_cant_use(client: TestClient, db: Session, account_id: int,
+                                             claude: FakeMessages):
+    empty = resume(db, account_id, "Empty", sent=False)
+    theirs = resume(db, add(db, Account()).account_id, "Theirs", sent=False)
+    for start in (empty.resume_id, theirs.resume_id):
+        response = tailor(client, db, account_id, start_from_id=start)
+        assert error(response) == (422, "VALIDATION_FAILED", "start_from_id")
+    assert claude.calls == []
+    db.expire_all()
+    assert [r.name for r in db.scalars(select(Resume))] == ["Empty", "Theirs"]
+
+
 def test_refuses_a_posting_applied_to(client: TestClient, db: Session, account_id: int,
                                       claude: FakeMessages):
     assert error(tailor(client, db, account_id, sent=True)) == (
@@ -234,7 +301,7 @@ def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Sess
     tracking = f"/api/job-postings/{draft['job_posting']['job_posting_id']}/tracking"
     response = client.put(tracking, json={"applied_on": "2026-11-04"})
     assert error(response) == (422, "VALIDATION_FAILED", "applied_on")
-    assert "Finish reviewing Claude's suggestion for the resume" in response.json()["error"][
+    assert "Approve the first draft of the resume first." in response.json()["error"][
         "message"]
     # Other tracking still saves.
     assert client.put(tracking, json={"contacts": "Jamie Lee"}).status_code == 200

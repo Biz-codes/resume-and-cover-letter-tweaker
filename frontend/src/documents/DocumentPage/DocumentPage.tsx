@@ -40,6 +40,7 @@ import { usePageTitle } from '../../shared/hooks/usePageTitle'
 import type { ListState } from '../DocumentsPage'
 import styles from './DocumentPage.module.css'
 import { offered } from '../../shared/offered'
+import { postingName } from '../../postings/postings'
 import { sortByName } from '../../shared/sortByName'
 import AlertDialog from '../../shared/components/Dialog/AlertDialog'
 import Dialog from '../../shared/components/Dialog/Dialog'
@@ -61,13 +62,23 @@ function EditNote({ singular, sent, draft }: { singular: string; sent: boolean; 
       </p>
       <p>If you want to use this {singular} as a template for a new application, select "Copy".</p>
     </div>
+  ) : draft ? (
+    // Claude's draft is only reviewed, not edited, and isn't a version yet, so there's nothing
+    // to copy.
+    <div className="note">
+      <p>
+        Below is Claude&apos;s draft. Nothing is saved to this {singular} or your library until you approve the first
+        draft.
+      </p>
+      <p>
+        The purpose of this draft is just to accept or reject Claude&apos;s initial suggestions, so that suggestions you
+        discard on a first pass don&apos;t clutter your library. After approving this first draft, you will be able to
+        fine tune the entire {singular} in collaboration with Claude.
+      </p>
+      <p>The undo and redo buttons can make changes only while you stay on this page.</p>
+    </div>
   ) : (
     <div className="note">
-      {draft && (
-        <p>
-          Below is Claude&apos;s draft. Nothing is saved to this {singular} or your library until you finish the review.
-        </p>
-      )}
       <p>Edits to the {singular} below save instantly.</p>
       <p>The undo and redo buttons can make changes only while you stay on this page.</p>
       <p>If you want to preserve this version, select "Copy" instead.</p>
@@ -283,16 +294,16 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     )
   }
 
-  // The draft's lists announce their own changes, so only a change they don't gets a notice.
-  const saveDraft = (sections: DraftSection[], notice = '') => inTurn(() => docsApi(kind).saveDraft(id, sections), notice)
+  // The draft announces its own changes.
+  const saveDraft = (sections: DraftSection[]) => inTurn(() => docsApi(kind).saveDraft(id, sections), '')
 
   // Finishing saves to the library, which Undo never takes back, so the history starts again.
   const finishReview = (keep: number[]) =>
     inTurn(
       () => docsApi(kind).finishReview(id, keep),
       keep.length
-        ? `Saved the review. The ${singular} has what you kept, and Claude's text you kept for later is in your library.`
-        : `Saved the review. The ${singular} has what you kept.`,
+        ? `Approved the first draft. The ${singular} has what you kept, and Claude's text you kept for later is in your library.`
+        : `Approved the first draft. The ${singular} has what you kept.`,
       (next) => {
         setStacks([], [])
         latest.current = next
@@ -326,7 +337,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     setDeleteError(null)
     try {
       await docsApi(kind).delete(id)
-      navigate(path, { state: { notice: `Deleted "${shownName(kind, current)}".` } satisfies ListState })
+      // Back to the page it was opened from, or the list.
+      navigate((location.state as ListState | null)?.back ?? path, {
+        state: { notice: `Deleted "${shownName(kind, current)}".` } satisfies ListState,
+      })
     } catch (error) {
       setDeleteError(toApiError(error))
     }
@@ -399,7 +413,13 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === 'delete' && (
             <ConfirmDelete
-              what={`"${shownName(kind, doc)}"`}
+              // Named by kind and posting, so it isn't mistaken for the posting's own delete.
+              what={
+                doc.job_posting
+                  ? `${singular} for ${postingName(doc.job_posting)}`
+                  : `${singular} "${shownName(kind, doc)}"`
+              }
+              noun={singular}
               uses={doc.copies}
               usesLabel="Copies made from it"
               effect="They're kept."
@@ -410,15 +430,18 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
-              {/* Named for what it makes, since the page's other Copy buttons copy text. */}
-              <button
-                type="button"
-                id={BUTTON_IDS.copy}
-                aria-label={`Copy to a new base ${singular}`}
-                onClick={() => void openCopy()}
-              >
-                Copy
-              </button>
+              {/* Named for what it makes, since the page's other Copy buttons copy text. Claude's
+                  draft isn't a version yet, so there's nothing to copy. */}
+              {!doc.draft && (
+                <button
+                  type="button"
+                  id={BUTTON_IDS.copy}
+                  aria-label={`Copy to a new base ${singular}`}
+                  onClick={() => void openCopy()}
+                >
+                  Copy
+                </button>
+              )}
               {doc.locked ? (
                 // aria-disabled, not disabled, so the button keeps focus while it saves.
                 <button type="button" aria-disabled={hiding} onClick={() => void setHidden(doc, !doc.hidden)}>
@@ -426,7 +449,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 </button>
               ) : (
                 <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
-                  Delete
+                  Delete {singular}
                 </button>
               )}
             </div>
@@ -520,7 +543,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               {/* Claude's draft starts open, since it's what there is to do first. */}
               <Disclosure title={`Sections (${(doc.draft ?? doc).sections.length})`} initiallyOpen={Boolean(doc.draft)}>
                 {doc.draft && !readOnly ? (
-                  <DraftTree kind={kind} draft={doc.draft} onChange={saveDraft} onFinish={finishReview} />
+                  <DraftTree kind={kind} draft={doc.draft} ownSections={doc.sections} onChange={saveDraft} onFinish={finishReview} />
                 ) : (
                   <DocumentTree
                     kind={kind}

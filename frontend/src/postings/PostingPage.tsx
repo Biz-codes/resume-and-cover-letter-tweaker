@@ -1,6 +1,7 @@
 // One job posting, headed as the user's application to it: its link and job description (with
 // Edit details and Delete inside it), its header (used by all its versions), and its resume and
-// cover letter, each tailored by Claude, copied, or built from scratch (StartVersion), and named
+// cover letter, each tailored by Claude, copied, built from scratch, or read from the user's own
+// file or text (StartVersion), and named
 // for the posting. A new posting picks its header first, from the suggestion, with that section
 // open, since its versions use it; once picked, the section starts closed. Once the posting is applied to, its versions are
 // a record of what was sent, so no new ones start here. Below them, its tracking: the dates,
@@ -136,15 +137,22 @@ export function PostingPage({ id }: { id: number }) {
     const forPosting = { job_posting_id: id }
     const doc =
       choice.how === 'claude'
-        ? await api.tailor(name, forPosting, choice.toneSetId)
+        ? await api.tailor(name, forPosting, choice.toneSetId, choice.startFromId)
         : choice.how === 'copy'
           ? await api.copy(choice.fromId, name, forPosting)
-          : await api.create(name, forPosting, { empty: true, tone_set_id: choice.toneSetId })
+          : choice.how === 'imported'
+            ? await api.saveImported({ ...choice.body, name, tone_set_id: choice.toneSetId }, forPosting, choice.tailor)
+            : await api.create(name, forPosting, { empty: true, tone_set_id: choice.toneSetId })
+    const { singular } = KINDS[kind]
     const notice =
       choice.how === 'claude'
-        ? `Claude drafted "${doc.name}". Nothing is saved to it until you finish the review.`
-        : `Started "${doc.name}" for this posting.`
-    navigate(`${KINDS[kind].path}/${doc.id}`, { state: { notice } satisfies ListState })
+        ? `Claude drafted "${doc.name}". Nothing is saved to it until you approve the first draft.`
+        : choice.how === 'imported' && choice.tailor
+          ? `Started "${doc.name}" from your ${singular}, and its new items are in your library. Claude drafted changes for this posting; they're saved when you approve the first draft.`
+          : choice.how === 'imported'
+            ? `Started "${doc.name}" from your ${singular}, and its new items are in your library.`
+            : `Started "${doc.name}" for this posting.`
+    navigate(`${KINDS[kind].path}/${doc.id}`, { state: { notice, back: `/postings/${id}` } satisfies ListState })
   }
 
   async function confirmDelete(current: PostingDetail) {
@@ -207,7 +215,8 @@ export function PostingPage({ id }: { id: number }) {
             )}
             {mode === 'delete' && (
               <ConfirmDelete
-                what={`"${postingName(posting)}"`}
+                what={`job posting for ${postingName(posting)}`}
+                noun="job posting"
                 // Named by kind, since both are named for the posting.
                 uses={posting.versions.map((use) => ({ ...use, name: KIND_LABELS[use.kind] }))}
                 usesLabel="Its resumes and cover letters"
@@ -231,8 +240,9 @@ export function PostingPage({ id }: { id: number }) {
                 <button type="button" id={BUTTON_IDS.edit} onClick={() => open('edit')}>
                   Edit details
                 </button>
+                {/* Named by kind, since the page's resume and cover letter are named for it too. */}
                 <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
-                  Delete
+                  Delete job posting
                 </button>
               </div>
             )}
@@ -275,7 +285,11 @@ export function PostingPage({ id }: { id: number }) {
               <div key={kind}>
                 {version ? (
                   <p>
-                    <Link to={`${path}/${version.id}`} aria-label={`${name} for ${postingName(posting)}`}>
+                    <Link
+                      to={`${path}/${version.id}`}
+                      state={{ back: `/postings/${id}` } satisfies ListState}
+                      aria-label={`${name} for ${postingName(posting)}`}
+                    >
                       {name}
                     </Link>
                     {version.locked && <span className="tag">sent</span>}

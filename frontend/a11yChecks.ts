@@ -27,6 +27,9 @@ const CONTRAST_PAIRS: [string, string, string][] = [
   ["[role='alert']", '.note, .confirm', 'error text in a delete confirm'],
   [':root', '.note, .confirm', 'text in a note or delete confirm'],
   [':root', '.tag', 'tag text'],
+  [':root', '.badge-original', "an Original badge in Claude's draft"],
+  [':root', '.badge-library', "a Library badge in Claude's draft"],
+  [':root', '.badge-claude', "a Claude badge in Claude's draft"],
   [':root', '--highlight', 'text of an item being moved (OrderedList.module.css), and of a title being hovered to rename (DocumentPage.module.css)'],
 ]
 

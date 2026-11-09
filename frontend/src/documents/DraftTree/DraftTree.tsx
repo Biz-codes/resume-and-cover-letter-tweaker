@@ -1,21 +1,23 @@
 // The first pass over Claude's draft of a posting's resume or cover letter, in place of its tree
-// until the review is finished (docs/APP_FLOW.md, "Tailoring a posting's document"). The same
-// nested lists as DocumentTree, each row showing Claude's reason: sections, then each section's
-// items, then a category's or project's skills and a role's or project's bullets. Each list can be
-// reordered and taken from, and "More options" adds what the library lists there (that's how an
-// item is swapped). Where Claude reworded narrative content or a bullet, its wording is used,
-// with the original shown and a way back to it; Claude's new text is shown as new. An item added
-// here comes with every skill it lists and no bullets.
+// until the first draft is approved (docs/APP_FLOW.md, "Tailoring a posting's document"). It's
+// only for accepting or rejecting Claude's suggestions, so what the user throws out never
+// reaches the library; everything else is done after approving, in the usual tree.
 //
-// Each change saves the draft only (backend/app/drafts.py), so nothing reaches the document or the
-// library until "Finish review", which first asks which of Claude's texts the draft doesn't use
-// to keep in the library for later. Writing new content and View and Edit come back once the
-// review is finished.
-import { useCallback, useEffect, useState } from 'react'
+// Each section, item, bullet, and skill is shown in Claude's order with a badge saying where it
+// came from: "Original" (in the document Claude started from), "Library" (Claude brought it in
+// from the library), or "Claude" (Claude's wording or new text). Under each, "Rationale" opens
+// Claude's reason and, for a rewording, the other wording with a button to switch to it. What
+// Claude brought in or wrote new can be rejected, which takes it out of the draft.
+//
+// Each change saves the draft only (backend/app/drafts.py) and is announced here; Undo and Redo
+// on the page cover them. "Approve first draft" first asks which of Claude's texts the draft
+// doesn't use to keep in the library for later.
+import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import {
+  docsApi,
   KINDS,
   textsInUse,
   type ClaudeText,
@@ -24,310 +26,199 @@ import {
   type DraftBullet,
   type DraftEntry,
   type DraftSection,
+  type TreeSection,
 } from '../../shared/api/documents'
 import Checklist from '../../shared/components/Checklist'
 import Dialog from '../../shared/components/Dialog/Dialog'
-import OrderedList, { type ListItem } from '../../shared/components/OrderedList/OrderedList'
+import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { offered } from '../../shared/offered'
-import { entryItem, fromKey, KIND_NAMES, KINDS_IN_ORDER, listedIds, loadLibrary, savedItems, type Library } from '../treeItems'
-import styles from '../DocumentTree/DocumentTree.module.css'
+import { KIND_NAMES, keyOf, loadLibrary, savedItems, type Library } from '../treeItems'
+import styles from './DraftTree.module.css'
 
 const FINISH_ID = 'draft-finish'
 
 const isText = (kind: string) => kind === 'narrative' || kind === 'bullet'
 
-// A row's key in its list: the item's, or for Claude's new text, its text's.
-const entryKey = (entry: DraftEntry) =>
-  entry.item_id === null ? `new:${entry.text_key}` : `${entry.kind}:${entry.item_id}`
-const bulletKey = (bullet: DraftBullet) =>
-  bullet.bullet_id === null ? `new:${bullet.text_key}` : `bullet:${bullet.bullet_id}`
-
 type Texts = Map<number, ClaudeText>
+type Source = 'original' | 'library' | 'claude'
 
-// The wording a text row shows: Claude's, unless it went back to the original (`original`).
-function wording(texts: Texts, row: { text_key?: number | null; use_original?: boolean }, original: string) {
-  const claude = row.text_key != null ? texts.get(row.text_key) : undefined
-  return claude && !row.use_original ? claude.text : original
+const BADGES: Record<Source, string> = { original: 'Original', library: 'Library', claude: 'Claude' }
+
+// What the document Claude started from holds, to tell its items from ones Claude brought in.
+interface Start {
+  sections: Set<number>
+  entries: Set<string>
+  bullets: Set<number>
+  skills: Set<number>
 }
 
-// Claude's reason for a row, when it has one (what the user added has none).
-function Reason({ reason }: { reason?: string }) {
-  return reason ? <p className="muted">Claude: {reason}</p> : null
+function startOf(sections: TreeSection[]): Start {
+  const entries = sections.flatMap((section) => section.entries)
+  return {
+    sections: new Set(sections.map((section) => section.section_id)),
+    entries: new Set(entries.map((entry) => keyOf(entry.kind, entry.item_id))),
+    bullets: new Set([
+      ...entries.filter((entry) => entry.kind === 'bullet').map((entry) => entry.item_id),
+      ...entries.flatMap((entry) => entry.bullets.map((bullet) => bullet.item_id)),
+    ]),
+    skills: new Set(entries.flatMap((entry) => entry.skills.map((skill) => skill.item_id))),
+  }
 }
 
-// Claude's wording of a row, with the original and a button to switch between them.
-function Wording({
-  texts,
-  row,
-  original,
+// Claude's text for a row, when it has one.
+const claudeText = (texts: Texts, row: { text_key?: number | null }) =>
+  row.text_key != null ? texts.get(row.text_key) : undefined
+
+// Where a row's item or wording comes from: Claude's text (unless it went back to the
+// original), or a saved item that's in the starting document or not.
+function sourceOf(texts: Texts, row: { text_key?: number | null; use_original?: boolean }, inStart: boolean): Source {
+  if (claudeText(texts, row) && !row.use_original) return 'claude'
+  return inStart ? 'original' : 'library'
+}
+
+// "Source:" is for screen readers, so the badge makes sense heard after the row's name.
+function Badge({ source }: { source: Source }) {
+  return (
+    <span className={`badge badge-${source}`}>
+      <span className="visually-hidden">Source: </span>
+      {BADGES[source]}
+    </span>
+  )
+}
+
+// Claude's reason, then for a rewording, the wording not in use and a button to switch to it.
+// One button whose text changes, so it keeps focus.
+function Rationale({
   name,
+  reason,
+  claude,
+  original,
+  useOriginal,
   onSwitch,
 }: {
-  texts: Texts
-  row: { item_id?: number | null; bullet_id?: number | null; text_key?: number | null; use_original?: boolean }
-  original: string
-  // The row's name and where it is, for the button.
+  // The row's name and where it is, for the toggle and the button.
   name: string
-  onSwitch: (useOriginal: boolean) => Promise<void>
+  reason?: string
+  claude?: ClaudeText
+  // The saved item's own wording, when Claude reworded one.
+  original?: string
+  useOriginal?: boolean
+  onSwitch?: (useOriginal: boolean) => void
 }) {
-  const claude = row.text_key != null ? texts.get(row.text_key) : undefined
-  if (!claude) return null
-  if ((row.item_id ?? row.bullet_id) == null) return <p>New text from Claude.</p>
-  return row.use_original ? (
-    <>
-      <p>Your original wording. Claude&apos;s: &ldquo;{claude.text}&rdquo;</p>
-      <button type="button" aria-label={`Use Claude's wording of ${name}`} onClick={() => void onSwitch(false)}>
-        Use Claude&apos;s wording
-      </button>
-    </>
-  ) : (
-    <>
-      <p>Claude&apos;s wording. Original: &ldquo;{original}&rdquo;</p>
-      <button type="button" aria-label={`Use the original wording of ${name}`} onClick={() => void onSwitch(true)}>
-        Use the original
-      </button>
-    </>
+  const reworded = claude !== undefined && original !== undefined && onSwitch !== undefined
+  if (!reason && !reworded) return null
+  return (
+    <Disclosure
+      title={
+        <>
+          Rationale <span className="visually-hidden">for {name}</span>
+        </>
+      }
+    >
+      {reason && <p>{reason}</p>}
+      {reworded && (
+        <>
+          <p className={styles.label}>{useOriginal ? "Claude's suggestion" : 'Original'}</p>
+          <p>{useOriginal ? claude.text : original}</p>
+          <button
+            type="button"
+            aria-label={useOriginal ? `Use Claude's wording of ${name}` : `Use the original wording of ${name}`}
+            onClick={() => onSwitch(!useOriginal)}
+          >
+            {useOriginal ? "Use Claude's wording" : 'Use the original'}
+          </button>
+        </>
+      )}
+    </Disclosure>
   )
 }
 
-// What opens under one item: its reason, its wording, and its skills and bullets.
-function EntryBody({
-  entry,
-  library,
-  texts,
+// One row: its name, badge, and Reject for what Claude brought in or wrote, then its rationale
+// and what's under it.
+function Row({
   name,
-  rowLabel,
-  where,
-  taken,
-  onChange,
+  label,
+  source,
+  onReject,
+  children,
 }: {
-  entry: DraftEntry
-  library: Library
-  texts: Texts
-  // What it's called without its kind, which names its lists, and its row's label.
-  name: string
-  rowLabel: string
-  // The section it's in, which names its rows' buttons.
-  where: string
-  // Bullets elsewhere in the section, which can't be added here too.
-  taken: Set<number>
-  onChange: (entry: DraftEntry, notice?: string) => Promise<void>
+  name: ReactNode
+  // Its name and where it is, for the Reject button.
+  label: string
+  source: Source
+  // Absent for what was already in the starting document, and for a rewording, which goes back
+  // to the original instead.
+  onReject?: () => void
+  children?: ReactNode
 }) {
-  const category = entry.kind === 'category' ? library.categories.find((item) => item.category_id === entry.item_id) : undefined
-  const project = entry.kind === 'project' ? library.projects.find((item) => item.project_id === entry.item_id) : undefined
-  const role = entry.kind === 'experience' ? library.experience.find((item) => item.experience_id === entry.item_id) : undefined
-  const original = library.narrative.find((item) => item.content_id === entry.item_id)?.content ??
-    library.bullets.find((item) => item.bullet_id === entry.item_id)?.content ??
-    ''
-  const switchEntry = (useOriginal: boolean) =>
-    onChange({ ...entry, use_original: useOriginal }, useOriginal ? 'Using the original wording.' : "Using Claude's wording.")
-
-  const listedSkills = category?.skills ?? project?.skills ?? []
-  const skillName = (id: number) => listedSkills.find((skill) => skill.skill_id === id)?.skill_name ?? ''
-  const skills = (entry.skill_ids ?? []).map((id) => ({ id, name: skillName(id) }))
-  const skillChoices = offered(listedSkills).map((skill) => ({ id: skill.skill_id, name: skill.skill_name }))
-
-  const listedBullets = role?.bullets ?? project?.bullets ?? []
-  const hiddenBullets = new Set(library.bullets.filter((bullet) => bullet.hidden).map((bullet) => bullet.bullet_id))
-  const bulletText = (id: number | null) => library.bullets.find((bullet) => bullet.bullet_id === id)?.content ?? ''
-  const bullets = entry.bullets ?? []
-  const bulletItems = bullets.map((bullet) => {
-    const text = wording(texts, bullet, bulletText(bullet.bullet_id))
-    return { id: bulletKey(bullet), name: text, label: `"${shortBullet(text)}"` }
-  })
-  const bulletChoices = listedBullets
-    .filter((bullet) => !taken.has(bullet.bullet_id) && !hiddenBullets.has(bullet.bullet_id))
-    .map((bullet) => ({ id: `bullet:${bullet.bullet_id}`, name: bullet.content, label: `"${shortBullet(bullet.content)}"` }))
-  const bulletWhere = `under ${name} ${where}`
-
   return (
-    <>
-      <Reason reason={entry.reason} />
-      {isText(entry.kind) && <Wording texts={texts} row={entry} original={original} name={`${rowLabel} ${where}`} onSwitch={switchEntry} />}
-      {(entry.kind === 'category' || entry.kind === 'project') && (
-        <>
-          <p className={styles.listLabel}>Skills</p>
-          <OrderedList
-            label={`${name} skills`}
-            where={bulletWhere}
-            items={skills}
-            choices={skillChoices}
-            emptyText={`No skills shown with ${name}.`}
-            moreOptions
-            onChange={(ids) => onChange({ ...entry, skill_ids: ids })}
-          />
-        </>
-      )}
-      {(entry.kind === 'experience' || entry.kind === 'project') && (
-        <>
-          <p className={styles.listLabel}>Bullets</p>
-          <OrderedList<string>
-            label={`${name} bullets`}
-            where={bulletWhere}
-            items={bulletItems}
-            choices={bulletChoices}
-            emptyText={`No bullets shown with ${name}.`}
-            moreOptions
-            details={(item) => {
-              const bullet = bullets.find((row) => bulletKey(row) === item.id)
-              if (!bullet || (!bullet.reason && bullet.text_key == null)) return null
-              const switchBullet = (useOriginal: boolean) =>
-                onChange(
-                  { ...entry, bullets: bullets.map((row) => (row === bullet ? { ...row, use_original: useOriginal } : row)) },
-                  useOriginal ? 'Using the original wording.' : "Using Claude's wording.",
-                )
-              return (
-                <>
-                  <Reason reason={bullet.reason} />
-                  <Wording
-                    texts={texts}
-                    row={bullet}
-                    original={bulletText(bullet.bullet_id)}
-                    name={`${item.label} ${bulletWhere}`}
-                    onSwitch={switchBullet}
-                  />
-                </>
-              )
-            }}
-            onChange={(keys) =>
-              onChange({
-                ...entry,
-                bullets: keys.map(
-                  (key) => bullets.find((row) => bulletKey(row) === key) ?? { bullet_id: fromKey(key).item_id },
-                ),
-              })
-            }
-          />
-        </>
-      )}
-    </>
-  )
-}
-
-// One section's items, each opening to what's under it.
-function SectionBody({
-  section,
-  title,
-  library,
-  texts,
-  onChange,
-}: {
-  section: DraftSection
-  title: string
-  library: Library
-  texts: Texts
-  onChange: (section: DraftSection, notice?: string) => Promise<void>
-}) {
-  const where = `in ${title}`
-  const nameOf = (entry: DraftEntry) => {
-    const saved = entry.item_id === null ? undefined : savedItems(library, entry.kind).find((item) => item.id === entry.item_id)
-    return isText(entry.kind) ? wording(texts, entry, saved?.name ?? '') : (saved?.name ?? '')
-  }
-  const items = section.entries.map((entry) => {
-    const name = nameOf(entry)
-    return { ...entryItem(entry.kind, 0, name, isText(entry.kind) ? `"${shortBullet(name)}"` : name), id: entryKey(entry) }
-  })
-  const entryOf = (key: string) => section.entries.find((entry) => entryKey(entry) === key)
-  // Every bullet in the section, directly or under an item.
-  const bulletsHere = (except?: DraftEntry) =>
-    new Set(
-      section.entries
-        .filter((entry) => entry !== except)
-        .flatMap((entry) => [
-          ...(entry.kind === 'bullet' && entry.item_id !== null ? [entry.item_id] : []),
-          ...(entry.bullets ?? []).flatMap((bullet) => (bullet.bullet_id === null ? [] : [bullet.bullet_id])),
-        ]),
-    )
-  const taken = bulletsHere()
-  // What the library lists under the section, by type, for "More options".
-  const choices = KINDS_IN_ORDER.flatMap((itemKind) => {
-    const listed = new Set(listedIds(library, section.section_id, itemKind))
-    return savedItems(library, itemKind)
-      .filter((item) => listed.has(item.id) && !(itemKind === 'bullet' && taken.has(item.id)))
-      .map((item) => ({ ...entryItem(itemKind, item.id, item.name), group: KIND_NAMES[itemKind].type }))
-  })
-  // An item added here comes with every skill it lists, and no bullets.
-  function added(key: string): DraftEntry {
-    const { kind, item_id } = fromKey(key)
-    const skills =
-      kind === 'category'
-        ? library.categories.find((item) => item.category_id === item_id)?.skills
-        : kind === 'project'
-          ? library.projects.find((item) => item.project_id === item_id)?.skills
-          : undefined
-    return { kind, item_id, skill_ids: offered(skills ?? []).map((skill) => skill.skill_id), bullets: [] }
-  }
-
-  return (
-    <>
-      <Reason reason={section.reason} />
-      <OrderedList<string>
-        label={`Items in ${title}`}
-        where={where}
-        items={items}
-        choices={choices}
-        emptyText="Nothing here yet."
-        moreOptions
-        moreOpen={items.length === 0}
-        details={(item: ListItem<string>) => {
-          const entry = entryOf(item.id)
-          if (!entry) return null
-          if (isText(entry.kind) && !entry.reason && entry.text_key == null) return null
-          return (
-            <EntryBody
-              entry={entry}
-              library={library}
-              texts={texts}
-              name={item.name.replace(/^[^:]*: /, '')}
-              rowLabel={item.label ?? item.name}
-              where={where}
-              taken={bulletsHere(entry)}
-              onChange={(next, notice) =>
-                onChange({ ...section, entries: section.entries.map((row) => (row === entry ? next : row)) }, notice)
-              }
-            />
-          )
-        }}
-        onChange={(keys) => onChange({ ...section, entries: keys.map((key) => entryOf(key) ?? added(key)) })}
-      />
-    </>
+    <li>
+      <div className={styles.row}>
+        <span>{name}</span>
+        <Badge source={source} />
+        {onReject && (
+          <button type="button" aria-label={`Reject ${label}`} onClick={onReject}>
+            Reject
+          </button>
+        )}
+      </div>
+      {children}
+    </li>
   )
 }
 
 export default function DraftTree({
   kind,
   draft,
+  ownSections,
   onChange,
   onFinish,
 }: {
   kind: DocKind
   draft: Draft
-  // Saves the draft's new tree, with a notice for what the lists don't announce themselves.
-  onChange: (sections: DraftSection[], notice?: string) => Promise<void>
+  // The document's own tree: what Claude started from when it was read from the user's own file
+  // (the draft names no other document then).
+  ownSections: TreeSection[]
+  // Saves the draft's new tree.
+  onChange: (sections: DraftSection[]) => Promise<void>
   // `keep`: the keys of Claude's unused texts to keep in the library.
   onFinish: (keep: number[]) => Promise<void>
 }) {
   const { path, singular } = KINDS[kind]
   const [library, setLibrary] = useState<Library | null>(null)
+  const [start, setStart] = useState<Start | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const [changeError, setChangeError] = useState<ApiError | null>(null)
   const [asking, setAsking] = useState(false)
   const [keep, setKeep] = useState<number[]>([])
   const [finishError, setFinishError] = useState<ApiError | null>(null)
   const [finishing, setFinishing] = useState(false)
   const focusLater = useFocusLater()
+  const idBase = useId()
   const texts: Texts = new Map(draft.texts.map((text) => [text.key, text]))
+  const startingId = draft.starting_document?.id ?? null
 
-  const load = useCallback(
-    () =>
-      loadLibrary()
-        .then((loaded) => {
-          setLibrary(loaded)
-          setLoadError(null)
-        })
-        .catch((error: unknown) => setLoadError(toApiError(error))),
-    [],
-  )
+  const load = useCallback(async () => {
+    try {
+      const startTree = async () => {
+        if (startingId === null) return ownSections
+        try {
+          return (await docsApi(kind).get(startingId)).sections
+        } catch (error) {
+          // Deleted since: nothing to tell its items apart by.
+          if (toApiError(error).code === 'NOT_FOUND') return []
+          throw error
+        }
+      }
+      const [loaded, tree] = await Promise.all([loadLibrary(), startTree()])
+      setLibrary(loaded)
+      setStart(startOf(tree))
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(toApiError(error))
+    }
+  }, [kind, startingId, ownSections])
 
   useEffect(() => {
     void load()
@@ -343,10 +234,185 @@ export default function DraftTree({
       </div>
     )
   }
-  if (!library) return <p>Loading your library…</p>
+  if (!library || !start) return <p>Loading your library…</p>
 
   const titleOf = (sectionId: number) => library.sections.find((section) => section.id === sectionId)?.title ?? ''
+  const savedName = (entryKind: DraftEntry['kind'], itemId: number | null) =>
+    itemId === null ? '' : (savedItems(library, entryKind).find((item) => item.id === itemId)?.name ?? '')
+  const bulletText = (id: number | null) => library.bullets.find((bullet) => bullet.bullet_id === id)?.content ?? ''
   const unused = draft.texts.filter((text) => !textsInUse(draft.sections).has(text.key))
+  const listId = (key: string) => `${idBase}-${key}`
+
+  // Saves the new tree and announces it; after a rejection, focus goes to the list it was in, or
+  // once that's empty and gone, the list above it.
+  async function change(sections: DraftSection[], said: string, focusId?: string) {
+    setChangeError(null)
+    try {
+      await onChange(sections)
+      setAnnouncement(said)
+      if (focusId) focusLater(focusId)
+    } catch (error) {
+      setChangeError(toApiError(error))
+    }
+  }
+
+  const withSection = (section: DraftSection, next: DraftSection | null) =>
+    next === null
+      ? draft.sections.filter((row) => row !== section)
+      : draft.sections.map((row) => (row === section ? next : row))
+
+  function renderSkills(section: DraftSection, entry: DraftEntry, name: string, where: string) {
+    const listed = (entry.kind === 'category'
+      ? library!.categories.find((item) => item.category_id === entry.item_id)?.skills
+      : library!.projects.find((item) => item.project_id === entry.item_id)?.skills) ?? []
+    const skillIds = entry.skill_ids ?? []
+    if (skillIds.length === 0) return null
+    const id = listId(`skills-${entry.kind}-${entry.item_id}`)
+    // Once the last one is rejected, the list is gone, so focus goes to the section's items.
+    const after = skillIds.length > 1 ? id : listId(`section-${section.section_id}`)
+    return (
+      <ul id={id} tabIndex={-1} aria-label={`Skills under ${name} ${where}`} className={styles.children}>
+        {skillIds.map((skillId) => {
+          const skillName = listed.find((skill) => skill.skill_id === skillId)?.skill_name ?? ''
+          const inStart = start!.skills.has(skillId)
+          const reject = () =>
+            void change(
+              withSection(section, {
+                ...section,
+                entries: section.entries.map((row) =>
+                  row === entry ? { ...entry, skill_ids: skillIds.filter((other) => other !== skillId) } : row,
+                ),
+              }),
+              `Rejected ${skillName}.`,
+              after,
+            )
+          return (
+            <Row
+              key={skillId}
+              name={skillName}
+              label={`${skillName} under ${name} ${where}`}
+              source={inStart ? 'original' : 'library'}
+              onReject={inStart ? undefined : reject}
+            />
+          )
+        })}
+      </ul>
+    )
+  }
+
+  function renderBullets(section: DraftSection, entry: DraftEntry, name: string, where: string) {
+    const bullets = entry.bullets ?? []
+    if (bullets.length === 0) return null
+    const id = listId(`bullets-${entry.kind}-${entry.item_id}`)
+    const after = bullets.length > 1 ? id : listId(`section-${section.section_id}`)
+    const withBullets = (next: DraftBullet[]) =>
+      withSection(section, {
+        ...section,
+        entries: section.entries.map((row) => (row === entry ? { ...entry, bullets: next } : row)),
+      })
+    return (
+      <ul id={id} tabIndex={-1} aria-label={`Bullets under ${name} ${where}`} className={styles.children}>
+        {bullets.map((bullet) => {
+          const claude = claudeText(texts, bullet)
+          const original = bulletText(bullet.bullet_id)
+          const text = claude && !bullet.use_original ? claude.text : original
+          const label = `"${shortBullet(text)}" under ${name} ${where}`
+          const source = sourceOf(texts, bullet, bullet.bullet_id !== null && start!.bullets.has(bullet.bullet_id))
+          const isNew = bullet.bullet_id === null
+          const canReject = isNew || (source === 'library' && !claude)
+          return (
+            <Row
+              key={isNew ? `new:${bullet.text_key}` : bullet.bullet_id}
+              name={text}
+              label={label}
+              source={source}
+              onReject={
+                canReject
+                  ? () => void change(withBullets(bullets.filter((row) => row !== bullet)), `Rejected "${shortBullet(text)}".`, after)
+                  : undefined
+              }
+            >
+              <Rationale
+                name={label}
+                reason={bullet.reason}
+                claude={claude}
+                original={isNew ? undefined : original}
+                useOriginal={bullet.use_original}
+                onSwitch={(useOriginal) =>
+                  void change(
+                    withBullets(bullets.map((row) => (row === bullet ? { ...row, use_original: useOriginal } : row))),
+                    useOriginal ? 'Using the original wording.' : "Using Claude's wording.",
+                  )
+                }
+              />
+            </Row>
+          )
+        })}
+      </ul>
+    )
+  }
+
+  function renderEntries(section: DraftSection, title: string) {
+    const where = `in ${title}`
+    const id = listId(`section-${section.section_id}`)
+    if (section.entries.length === 0) return <p className="muted">Nothing here.</p>
+    const after = section.entries.length > 1 ? id : listId('sections')
+    return (
+      <ul id={id} tabIndex={-1} aria-label={`Items in ${title}`} className={styles.entries}>
+        {section.entries.map((entry) => {
+          const claude = claudeText(texts, entry)
+          const saved = savedName(entry.kind, entry.item_id)
+          const name = isText(entry.kind) && claude && !entry.use_original ? claude.text : saved
+          const short = isText(entry.kind) ? `"${shortBullet(name)}"` : name
+          const label = `${KIND_NAMES[entry.kind].one}: ${short} ${where}`
+          const isNew = entry.item_id === null
+          const source = sourceOf(texts, entry, !isNew && start!.entries.has(keyOf(entry.kind, entry.item_id!)))
+          const canReject = isNew || (source === 'library' && !claude)
+          return (
+            <Row
+              key={isNew ? `new:${entry.text_key}` : keyOf(entry.kind, entry.item_id!)}
+              name={
+                <>
+                  <span className="muted">{KIND_NAMES[entry.kind].one}:</span> {name}
+                </>
+              }
+              label={label}
+              source={source}
+              onReject={
+                canReject
+                  ? () =>
+                      void change(
+                        withSection(section, { ...section, entries: section.entries.filter((row) => row !== entry) }),
+                        `Rejected ${KIND_NAMES[entry.kind].one}: ${short}.`,
+                        after,
+                      )
+                  : undefined
+              }
+            >
+              <Rationale
+                name={label}
+                reason={entry.reason}
+                claude={isText(entry.kind) ? claude : undefined}
+                original={isText(entry.kind) && !isNew ? saved : undefined}
+                useOriginal={entry.use_original}
+                onSwitch={(useOriginal) =>
+                  void change(
+                    withSection(section, {
+                      ...section,
+                      entries: section.entries.map((row) => (row === entry ? { ...entry, use_original: useOriginal } : row)),
+                    }),
+                    useOriginal ? 'Using the original wording.' : "Using Claude's wording.",
+                  )
+                }
+              />
+              {(entry.kind === 'category' || entry.kind === 'project') && renderSkills(section, entry, short, where)}
+              {(entry.kind === 'experience' || entry.kind === 'project') && renderBullets(section, entry, short, where)}
+            </Row>
+          )
+        })}
+      </ul>
+    )
+  }
 
   async function finish(kept: number[]) {
     if (finishing) return
@@ -375,6 +441,8 @@ export default function DraftTree({
     setAsking(true)
   }
 
+  const sectionsId = listId('sections')
+
   return (
     <>
       <p>
@@ -382,47 +450,58 @@ export default function DraftTree({
           <>
             Claude started from <Link to={`${path}/${draft.starting_document.id}`}>{draft.starting_document.name}</Link>.{' '}
           </>
+        ) : startingId === null && ownSections.length > 0 ? (
+          `Claude started from your ${singular}. `
         ) : (
           'Claude started from your library. '
         )}
         {draft.starting_reason}
       </p>
-      <OrderedList
-        label="Sections"
-        items={draft.sections.map((section) => ({ id: section.section_id, name: titleOf(section.section_id) }))}
-        choices={offered(library.sections).map((section) => ({ id: section.id, name: section.title }))}
-        emptyText="No sections in the draft."
-        moreOptions
-        details={(item) => {
-          const section = draft.sections.find((row) => row.section_id === item.id)
-          return section ? (
-            <SectionBody
-              section={section}
-              title={item.name}
-              library={library}
-              texts={texts}
-              onChange={(next, notice) =>
-                onChange(
-                  draft.sections.map((row) => (row === section ? next : row)),
-                  notice,
-                )
-              }
-            />
-          ) : null
-        }}
-        onChange={(ids) =>
-          onChange(ids.map((id) => draft.sections.find((section) => section.section_id === id) ?? { section_id: id, entries: [] }))
-        }
-      />
+      {draft.sections.length === 0 ? (
+        <p className="muted">No sections in the draft.</p>
+      ) : (
+        <ul id={sectionsId} tabIndex={-1} aria-label="Sections" className={styles.sections}>
+          {draft.sections.map((section) => {
+            const title = titleOf(section.section_id)
+            const inStart = start.sections.has(section.section_id)
+            return (
+              <Row
+                key={section.section_id}
+                name={<strong>{title}</strong>}
+                label={`section "${title}"`}
+                source={inStart ? 'original' : 'library'}
+                onReject={
+                  inStart
+                    ? undefined
+                    : () =>
+                        void change(
+                          withSection(section, null),
+                          `Rejected section "${title}".`,
+                          draft.sections.length > 1 ? sectionsId : FINISH_ID,
+                        )
+                }
+              >
+                <Rationale name={`section "${title}"`} reason={section.reason} />
+                {renderEntries(section, title)}
+              </Row>
+            )
+          })}
+        </ul>
+      )}
+      {changeError && <p role="alert">{changeError.message}</p>}
+      {/* A plain live region rather than role="status", so the page's notices stay in AlertDialog. */}
+      <p aria-live="polite" className="visually-hidden">
+        {announcement}
+      </p>
       <p className="muted">
-        Finishing saves what you kept to this {singular}, and Claude&apos;s wordings to your library, used in this {singular}{' '}
-        only. It can&apos;t be undone.
+        Approving saves what you kept to this {singular}, and Claude&apos;s wordings to your library, used in this{' '}
+        {singular} only. It can&apos;t be undone.
       </p>
       {finishError && !asking && <p role="alert">{finishError.message}</p>}
       <div className="actions">
         {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
         <button type="button" id={FINISH_ID} aria-disabled={finishing} onClick={startFinish}>
-          {finishing && !asking ? 'Finishing…' : 'Finish review'}
+          {finishing && !asking ? 'Approving…' : 'Approve first draft'}
         </button>
       </div>
       {asking && (
@@ -444,7 +523,7 @@ export default function DraftTree({
             {finishError && <p role="alert">{finishError.message}</p>}
             <div className="actions">
               <button type="submit" aria-disabled={finishing}>
-                {finishing ? 'Finishing…' : 'Finish review'}
+                {finishing ? 'Approving…' : 'Approve first draft'}
               </button>
               <button type="button" onClick={closeAsking}>
                 Cancel

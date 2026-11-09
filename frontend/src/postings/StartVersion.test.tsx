@@ -4,6 +4,7 @@ import { ApiError } from '../shared/api/client'
 import type { Doc } from '../shared/api/documents'
 import type { ToneSet } from '../shared/api/toneSets'
 import { expectNoA11yViolations } from '../test/axe'
+import { sentBody, stubApi } from '../test/stubApi'
 import StartVersion from './StartVersion'
 
 const doc = (id: number, name: string, organization?: string): Doc => ({
@@ -46,12 +47,15 @@ describe('StartVersion', () => {
       'Claude tailors one of your saved resumes',
       'Copy a saved resume as is',
       'Build from scratch (empty)',
+      'Upload a resume (PDF or Word)',
+      "Paste a resume's text",
     ])
     // Hidden tones aren't offered. It's named for the posting, and uses its header.
     expect(options('Tone')).toEqual(['None', 'Warm'])
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Header')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Start from')).not.toBeInTheDocument()
+    // Claude picks the starting point unless one is chosen.
+    expect(options('Start from')).toEqual(['The best fit (Claude picks)', 'Tech Base Resume', 'Acme resume (for Acme)'])
     await expectNoA11yViolations()
   })
 
@@ -59,9 +63,24 @@ describe('StartVersion', () => {
     const onStart = renderStart(vi.fn(() => new Promise<void>(() => {})))
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
-    expect(onStart).toHaveBeenCalledWith({ how: 'claude', toneSetId: 2 })
+    expect(onStart).toHaveBeenCalledWith({ how: 'claude', toneSetId: 2, startFromId: null })
     expect(await screen.findByRole('button', { name: 'Tailoring…' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText('Claude is tailoring your resume. This can take a few minutes.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+  })
+
+  it('has Claude tailor the one chosen, and points to it when it has nothing to start from', async () => {
+    const onStart = renderStart(
+      vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', 'That resume has nothing in it to start from.', 'start_from_id', 422))),
+    )
+    const from = screen.getByLabelText('Start from')
+    fireEvent.change(from, { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(onStart).toHaveBeenCalledWith({ how: 'claude', toneSetId: null, startFromId: 1 })
+    expect(await screen.findByRole('alert')).toHaveTextContent('That resume has nothing in it to start from.')
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    expect(from).toHaveAccessibleDescription('That resume has nothing in it to start from.')
+    await vi.waitFor(() => expect(from).toHaveFocus())
     await expectNoA11yViolations()
   })
 
@@ -107,6 +126,63 @@ describe('StartVersion', () => {
     await screen.findByRole('alert')
     const form = screen.getByRole('form', { name: 'Start a resume for this posting' })
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Start a resume' })).toHaveFocus())
+  })
+
+  it('reads an uploaded one, then saves what the user checked', async () => {
+    const read = {
+      header: null,
+      header_saved: false,
+      sections: [{ values: { title: 'Summary' }, saved: true, similar: null, entries: [] }],
+      addressee: null,
+      sign_off: null,
+      signature_name: null,
+    }
+    const fetchMock = stubApi({ 'POST /api/resumes/read': [{ status: 200, body: read }] })
+    const onStart = renderStart()
+    fireEvent.click(screen.getByRole('radio', { name: 'Upload a resume (PDF or Word)' }))
+    // It takes a tone, for Claude's tailoring and the resume.
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
+    const input = screen.getByLabelText('Resume file, PDF or Word (required)')
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a resume file to upload.')
+    await vi.waitFor(() => expect(input).toHaveFocus())
+    expect(input).toHaveAccessibleDescription('Choose a resume file to upload.')
+    await expectNoA11yViolations()
+    fireEvent.change(input, { target: { files: [new File(['%PDF'], 'me.pdf', { type: 'application/pdf' })] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    const review = await screen.findByRole('form', { name: 'Check the resume Claude read' })
+    expect(sentBody(fetchMock, 'POST /api/resumes/read')).toEqual({ file: { name: 'me.pdf', data: btoa('%PDF') } })
+    fireEvent.click(within(review).getByRole('button', { name: 'Save as is' }))
+    expect(onStart).toHaveBeenCalledWith({
+      how: 'imported',
+      toneSetId: 2,
+      tailor: false,
+      body: {
+        header: null,
+        sections: [{ item_id: null, values: { title: 'Summary' }, entries: [] }],
+        addressee: null,
+        sign_off: null,
+        signature_name: null,
+      },
+    })
+  })
+
+  it('cancels a review back to its button', async () => {
+    stubApi({
+      'POST /api/resumes/read': [
+        {
+          status: 200,
+          body: { header: null, header_saved: false, sections: [], addressee: null, sign_off: null, signature_name: null },
+        },
+      ],
+    })
+    renderStart()
+    fireEvent.click(screen.getByRole('radio', { name: "Paste a resume's text" }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resume text (required)' }), { target: { value: 'Sam' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    const review = await screen.findByRole('form', { name: 'Check the resume Claude read' })
+    fireEvent.click(within(review).getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Start a resume' })).toHaveFocus())
   })
 })

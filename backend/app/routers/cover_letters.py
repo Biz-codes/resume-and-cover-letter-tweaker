@@ -4,7 +4,8 @@ copy, and delete.
 They work like resumes (app/routers/resumes.py), plus a greeting (addressee), a sign-off, and
 the name under it. A new letter greets "[organization] Hiring Team" (just "Hiring Team" for a
 base letter) and signs off with the account's "Sincerely" (docs/FRONTEND_CHECKS.md, "Default
-greeting" and "Default sign-off").
+greeting" and "Default sign-off"). Like a resume, one can start from the user's own file or
+pasted text (app/imports.py), with the greeting, sign-off, and name read from it.
 """
 
 from fastapi import APIRouter, status
@@ -35,9 +36,11 @@ from app.documents import (
 from app.drafts import Draft, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
+from app.imports import Imported, ImportIn, Matcher, ReadIn, read_document, save_item, save_items
 from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
 from app.plain_text import Output, letter_output
-from app.routers.document_tree import add_tree_routes, fill_document
+from app.routers.document_tree import add_tree_routes, fill_document, restore
+from app.routers.headers import find_or_add
 from app.routers.resumes import CopyIn
 from app.schemas import OptionalText, RequiredText
 
@@ -65,6 +68,13 @@ class NewLetter(LetterIn):
     job_posting_id: int | None = None
     # Starts with no sections at all ("Build from scratch"), not the defaults.
     empty: bool = False
+
+
+class TailoredLetter(NewLetter):
+    """A new cover letter for a posting, started by Claude, from the earlier one it picks or
+    with start_from_id, that one (as resumes.TailoredResume)."""
+
+    start_from_id: int | None = None
 
 
 class LetterOut(LetterIn, DocInfo):
@@ -161,7 +171,7 @@ def create_letter(body: NewLetter, db: DbSession, account_id: AccountId) -> Lett
 
 
 @router.post("/tailored", status_code=status.HTTP_201_CREATED)
-def tailor_letter(body: NewLetter, db: DbSession, account_id: AccountId,
+def tailor_letter(body: TailoredLetter, db: DbSession, account_id: AccountId,
                   client: Claude) -> LetterDetail:
     """A new cover letter for a posting, started by Claude, like a resume
     (resumes.tailor_resume). If Claude fails, nothing is created."""
@@ -169,8 +179,59 @@ def tailor_letter(body: NewLetter, db: DbSession, account_id: AccountId,
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Claude tailors a cover letter only for a job posting.",
                        field="job_posting_id")
-    letter = new_letter(db, body.model_copy(update={"empty": True}), account_id)
-    start_draft(db, client, COVER_LETTER, account_id, letter)
+    letter = new_letter(db, NewLetter.model_validate(body.model_dump(exclude={"start_from_id"},
+                                                                     exclude_unset=True)
+                                                     | {"empty": True}), account_id)
+    start_draft(db, client, COVER_LETTER, account_id, letter, start_from=body.start_from_id)
+    db.refresh(letter)
+    return detail(db, letter)
+
+
+@router.post("/read")
+def read_letter(body: ReadIn, db: DbSession, account_id: AccountId, client: Claude) -> Imported:
+    """The sections and items Claude reads in an uploaded cover letter or pasted text, like a
+    resume's (resumes.read_resume), with its greeting, sign-off, and name. Saves nothing."""
+    return read_document(db, client, COVER_LETTER, account_id, body)
+
+
+def imported_letter(db: Session, body: ImportIn, account_id: int) -> CoverLetter:
+    """A new cover letter with the corrected items, like a resume (resumes.imported_resume).
+    The sign-off is a saved one with the same text, or a new one. Left out, the greeting and
+    sign-off are a new letter's usual ones."""
+    match = Matcher(db, account_id)
+    fields = {"name": body.name, "tone_set_id": body.tone_set_id,
+              "job_posting_id": body.job_posting_id, "signature_name": body.signature_name,
+              "empty": True}
+    if body.job_posting_id is None and body.header is not None:
+        fields["header_id"] = find_or_add(db, account_id, body.header)[0].header_id
+    if body.addressee is not None:
+        fields["addressee"] = body.addressee
+    if body.sign_off is not None:
+        fields["sign_off_id"] = save_item(db, match, account_id, "sign_off", body.sign_off)
+    letter = new_letter(db, NewLetter(**fields), account_id)
+    restore(db, COVER_LETTER, letter.letter_id, save_items(db, account_id, body.sections, match),
+            account_id)
+    return letter
+
+
+@router.post("/imported", status_code=status.HTTP_201_CREATED)
+def import_letter(body: ImportIn, db: DbSession, account_id: AccountId) -> LetterDetail:
+    letter = imported_letter(db, body, account_id)
+    db.refresh(letter)
+    return detail(db, letter)
+
+
+@router.post("/imported/tailored", status_code=status.HTTP_201_CREATED)
+def import_and_tailor_letter(body: ImportIn, db: DbSession, account_id: AccountId,
+                             client: Claude) -> LetterDetail:
+    """A posting's cover letter from the corrected items, which Claude then tailors, like a
+    resume (resumes.import_and_tailor_resume). If Claude fails, nothing is saved."""
+    if body.job_posting_id is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Claude tailors a cover letter only for a job posting.",
+                       field="job_posting_id")
+    letter = imported_letter(db, body, account_id)
+    start_draft(db, client, COVER_LETTER, account_id, letter, start_from=letter.letter_id)
     db.refresh(letter)
     return detail(db, letter)
 

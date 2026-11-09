@@ -32,6 +32,15 @@ describe('ConfirmDelete', () => {
     await expectNoA11yViolations()
   })
 
+  it('names its Delete button by kind when given one', () => {
+    render(
+      <ConfirmDelete what="job posting for Educator at Marigold" noun="job posting" uses={[]} effect="" error={null}
+        onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    )
+    const confirm = screen.getByRole('group', { name: 'Delete job posting for Educator at Marigold?' })
+    expect(within(confirm).getByRole('button', { name: 'Delete job posting' })).toBeInTheDocument()
+  })
+
   it('calls back for each button', () => {
     const { onConfirm, onCancel } = renderConfirm()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))

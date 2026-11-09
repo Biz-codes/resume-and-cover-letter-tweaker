@@ -181,6 +181,30 @@ h2[tabindex='-1']:focus {
   font-size: 0.85em;
 }
 
+/* Where a row of Claude's draft comes from (DraftTree). The text tells them apart; the colors
+   only help. */
+.badge {
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-original {
+  background: #ece9f0;
+}
+
+.badge-library {
+  background: #dcecf7;
+}
+
+.badge-claude {
+  background: #f8e6c4;
+}
+
 .note,
 .confirm {
   background: #fdf6e3;
@@ -348,4 +372,13 @@ form .suffixed > input {
   flex: 1 1 12em;
   width: auto;
   min-width: 0;
+}
+
+/* The review of a resume or cover letter Claude read (ImportReview): its rows are fieldsets, so
+   the lists that hold them need no bullets. */
+.import-entries {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 0.75rem;
 }

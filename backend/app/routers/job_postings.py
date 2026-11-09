@@ -243,7 +243,7 @@ def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
             if db.scalar(select(model.draft.is_not(None))
                          .where(model.job_posting_id == posting_id)):
                 raise AppError(ErrorCode.VALIDATION_FAILED,
-                               f"Finish reviewing Claude's suggestion for the {what} first.",
+                               f"Approve the first draft of the {what} first.",
                                "applied_on")
     for name, value in body.model_dump().items():
         setattr(posting, name, value)

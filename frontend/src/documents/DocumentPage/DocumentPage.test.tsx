@@ -73,11 +73,12 @@ async function openPreview() {
   fireEvent.click(await screen.findByRole('button', { name: 'Preview and copy' }))
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, state?: unknown) {
   render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[{ pathname: path, state }]}>
       <Routes>
         <Route path="/resumes" element={<DocumentsPage kind="resume" />} />
+        <Route path="/postings/:id" element={<h2>The posting</h2>} />
         <Route path="/resumes/:id" element={<DocumentRoute kind="resume" />} />
         <Route path="/cover-letters/:id" element={<DocumentRoute kind="cover_letter" />} />
       </Routes>
@@ -147,7 +148,7 @@ describe('DocumentPage', () => {
     expect(await screen.findByText('Edits to the resume below save instantly.')).toBeInTheDocument()
     expect(screen.getByText('If you want to preserve this version, select "Copy" instead.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy to a new base resume' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete resume' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
@@ -385,7 +386,7 @@ describe('DocumentPage', () => {
     expect(screen.getByText('Tone: None')).toBeInTheDocument()
     // Nothing else can change, so there's nothing to undo, and it can be hidden, not deleted.
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete resume' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Application header' }))
     // The header's values are listed, with nothing to pick.
@@ -465,14 +466,26 @@ describe('DocumentPage', () => {
       'GET /api/resumes': [{ status: 200, body: [] }],
     })
     renderAt('/resumes/11')
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
-    const confirm = screen.getByRole('group', { name: 'Delete "Tech Base Resume"?' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete resume' }))
+    const confirm = screen.getByRole('group', { name: 'Delete resume "Tech Base Resume"?' })
     expect(within(confirm).getByRole('button', { name: 'Cancel' })).toHaveFocus()
     expect(confirm).toHaveTextContent("Copies made from it: Acme copy. They're kept.")
     await expectNoA11yViolations()
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete resume' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Resumes' })).toBeInTheDocument()
     await expectNotice('Deleted "Tech Base Resume".')
+  })
+
+  it("names a posting's resume by its posting when deleting it, and goes back to the posting", async () => {
+    stub(14, resume(14, { name: 'Acme resume', job_posting: SENT.job_posting }), {
+      'DELETE /api/resumes/14': [{ status: 204 }],
+    })
+    renderAt('/resumes/14', { back: '/postings/4' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete resume' }))
+    const confirm = screen.getByRole('group', { name: 'Delete resume for Engineer at Acme?' })
+    await expectNoA11yViolations()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete resume' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'The posting' })).toBeInTheDocument()
   })
 
   it('keeps the confirm open when a delete fails', async () => {
@@ -480,13 +493,13 @@ describe('DocumentPage', () => {
       'DELETE /api/resumes/12': [{ status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') }],
     })
     renderAt('/resumes/12')
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete resume' }))
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Delete "Tech Base Resume"?' })).getByRole('button', { name: 'Delete' }),
+      within(screen.getByRole('group', { name: 'Delete resume "Tech Base Resume"?' })).getByRole('button', { name: 'Delete resume' }),
     )
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus())
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Delete resume' })).toHaveFocus())
   })
 
   it("saves a cover letter's greeting and sign-off as they change, one after the other", async () => {
@@ -567,7 +580,7 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
-  it("reviews Claude's draft in place of the tree, with Undo, then finishes", async () => {
+  it("reviews Claude's draft in place of the tree, with Undo, then approves it", async () => {
     const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
     const texts = [
       { key: 1, kind: 'narrative', text: 'Builds accessible React apps.', replaces: 6 },
@@ -616,39 +629,45 @@ describe('DocumentPage', () => {
       'POST /api/resumes/5/draft/finish': [{ status: 200, body: finished }],
     })
     renderAt('/resumes/5')
-    expect(await screen.findByText(/Below is Claude's draft\. Nothing is saved to this resume or your library until you finish the review\./)).toBeInTheDocument()
+    expect(
+      await screen.findByText("Below is Claude's draft. Nothing is saved to this resume or your library until you approve the first draft."),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/^The purpose of this draft is just to accept or reject Claude's initial suggestions/)).toBeInTheDocument()
+    // It's only reviewed, so there's no saving-as-you-edit note, and nothing to copy yet.
+    expect(screen.queryByText('Edits to the resume below save instantly.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy to a new base resume' })).not.toBeInTheDocument()
     // The draft is what there is to do first, so it starts open.
     expect(screen.getByRole('button', { name: 'Sections (1)' })).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.click(await screen.findByRole('button', { name: 'Summary' }))
+    await screen.findByRole('list', { name: 'Items in Summary' })
     await expectNoA11yViolations()
 
-    // Taking out the new text saves the draft only, and Undo puts it back.
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Text: "Teaches web basics." in Summary' }))
+    // Rejecting the new text saves the draft only, and Undo puts it back.
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject Text: "Teaches web basics." in Summary' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'false'))
     expect(sentBody(fetchMock, 'PUT /api/resumes/5/draft').sections[0].entries).toEqual([reworded])
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await expectNotice('Undid a change. Nothing more to undo.')
     expect(sentBody(fetchMock, 'PUT /api/resumes/5/draft', 1).sections[0].entries).toEqual([reworded, added])
 
-    // Back to the original wording, which the lists don't announce, so the page does.
-    fireEvent.click(await screen.findByRole('button', { name: 'Text: Builds accessible React apps. in Summary' }))
+    // Back to the original wording, which the draft announces itself.
+    fireEvent.click(await screen.findByRole('button', { name: 'Rationale for Text: "Builds accessible React apps." in Summary' }))
     const useOriginal = screen.getByRole('button', { name: 'Use the original wording of Text: "Builds accessible React apps." in Summary' })
     useOriginal.focus()
     fireEvent.click(useOriginal)
-    await expectNotice('Using the original wording.')
+    await vi.waitFor(() => expect(screen.getByText('Using the original wording.')).toHaveAttribute('aria-live', 'polite'))
     // The button stays where it was, now offering the way back, and keeps focus.
     expect(screen.getByRole('button', { name: `Use Claude's wording of Text: "Builds accessible apps." in Summary` })).toHaveFocus()
 
-    // Claude's rewording is now unused, so finishing asks whether to keep it.
-    fireEvent.click(screen.getByRole('button', { name: 'Finish review' }))
+    // Claude's rewording is now unused, so approving asks whether to keep it.
+    fireEvent.click(screen.getByRole('button', { name: 'Approve first draft' }))
     const dialog = await screen.findByRole('dialog', { name: "Claude's text you didn't use" })
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Builds accessible React apps.' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Finish review' }))
-    await expectNotice("Saved the review. The resume has what you kept, and Claude's text you kept for later is in your library.")
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Approve first draft' }))
+    await expectNotice("Approved the first draft. The resume has what you kept, and Claude's text you kept for later is in your library.")
     expect(sentBody(fetchMock, 'POST /api/resumes/5/draft/finish')).toEqual({ keep: [1] })
     // The usual tree is back, and the library rows it saved can't be undone.
     expect(screen.queryByText(/Below is Claude's draft/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Finish review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve first draft' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sections (1)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('heading', { level: 2, name: 'Engineer at Acme Resume' })).toHaveFocus()

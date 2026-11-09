@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
@@ -70,14 +70,25 @@ function stub(posting: unknown = POSTING, extra: Record<string, Reply[]> = {}, h
   })
 }
 
+// A document's page, saying where a delete would go back to.
+function Opened({ kind }: { kind: string }) {
+  const back = (useLocation().state as { back?: string } | null)?.back
+  return (
+    <>
+      <h2>Opened {kind}</h2>
+      <p>Goes back to {back ?? 'its list'}</p>
+    </>
+  )
+}
+
 function renderPage(state?: unknown) {
   render(
     <MemoryRouter initialEntries={[{ pathname: '/postings/9', state }]}>
       <Routes>
         <Route path="/postings" element={<h2>All postings</h2>} />
         <Route path="/postings/:id" element={<PostingRoute />} />
-        <Route path="/resumes/:id" element={<h2>Opened resume</h2>} />
-        <Route path="/cover-letters/:id" element={<h2>Opened cover letter</h2>} />
+        <Route path="/resumes/:id" element={<Opened kind="resume" />} />
+        <Route path="/cover-letters/:id" element={<Opened kind="cover letter" />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -138,6 +149,9 @@ describe('PostingPage', () => {
     // One of each per posting, worked on in place.
     expect(screen.queryByRole('button', { name: /^Start a/ })).not.toBeInTheDocument()
     await expectNoA11yViolations()
+    // Deleting the resume comes back here.
+    fireEvent.click(screen.getByRole('link', { name: 'Resume for English Teacher at Lincoln High' }))
+    expect(await screen.findByText('Goes back to /postings/9')).toBeInTheDocument()
   })
 
   it('has Claude tailor a resume for it', async () => {
@@ -154,10 +168,45 @@ describe('PostingPage', () => {
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '4' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
     expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    expect(screen.getByText('Goes back to /postings/9')).toBeInTheDocument()
     expect(sentBody(fetchMock, 'POST /api/resumes/tailored')).toEqual({
       name: 'English Teacher at Lincoln High',
       job_posting_id: 9,
       tone_set_id: 4,
+      start_from_id: null,
+    })
+  })
+
+  it('starts a resume from pasted text, which Claude then tailors', async () => {
+    const read = {
+      header: null,
+      header_saved: false,
+      sections: [{ values: { title: 'Summary' }, saved: true, similar: null, entries: [] }],
+      addressee: null,
+      sign_off: null,
+      signature_name: null,
+    }
+    const created = { ...doc(20, 'English Teacher at Lincoln High'), sections: [], output: { parts: [], text: '' } }
+    const fetchMock = stub(EMPTY, {
+      'POST /api/resumes/read': [{ status: 200, body: read }],
+      'POST /api/resumes/imported/tailored': [{ status: 201, body: created }],
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start a resume' }))
+    fireEvent.click(screen.getByRole('radio', { name: "Paste a resume's text" }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resume text (required)' }), { target: { value: 'Sam' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save, then Claude tailors it' }))
+    expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    expect(sentBody(fetchMock, 'POST /api/resumes/imported/tailored')).toEqual({
+      name: 'English Teacher at Lincoln High',
+      job_posting_id: 9,
+      tone_set_id: null,
+      header: null,
+      sections: [{ item_id: null, values: { title: 'Summary' }, entries: [] }],
+      addressee: null,
+      sign_off: null,
+      signature_name: null,
     })
   })
 
@@ -189,6 +238,7 @@ describe('PostingPage', () => {
         name: `${'R'.repeat(100)} at ${'O'.repeat(100)}`,
         job_posting_id: 9,
         tone_set_id: null,
+        start_from_id: null,
       }),
     )
   })
@@ -231,17 +281,17 @@ describe('PostingPage', () => {
     renderPage()
     // Edit details and Delete are inside the job description.
     const description = await screen.findByRole('button', { name: 'Job description' })
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete job posting' })).not.toBeInTheDocument()
     fireEvent.click(description)
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    const confirm = screen.getByRole('group', { name: 'Delete "English Teacher at Lincoln High"?' })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete job posting' }))
+    const confirm = screen.getByRole('group', { name: 'Delete job posting for English Teacher at Lincoln High?' })
     expect(confirm).toHaveTextContent(
       'Its resumes and cover letters: Resume; Cover letter. They\'re deleted too.',
     )
     expect(confirm).toHaveTextContent('Its 2 interviews with no other posting will be deleted too.')
     expect(within(confirm).getByRole('button', { name: 'Cancel' })).toHaveFocus()
     await expectNoA11yViolations()
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete job posting' }))
     expect(await screen.findByRole('heading', { name: 'All postings' })).toBeInTheDocument()
   })
 

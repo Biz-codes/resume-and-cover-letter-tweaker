@@ -46,10 +46,12 @@ Claude = Annotated[anthropic.Anthropic, Depends(get_client)]
 
 
 def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str,
-                      system: str | list[dict[str, Any]], content: str, reply: type[T],
+                      system: str | list[dict[str, Any]], content: str | list[dict[str, Any]],
+                      reply: type[T],
                       effort: Effort, max_tokens: int = MAX_TOKENS) -> T:
     """One request for one step, returning the reply as `reply`. `system` is the instructions,
     or a list of text blocks, where one marked with cache_control caches everything up to it.
+    `content` is the user message: text, or a list of blocks (a PDF and the text about it).
     Any failure, after the SDK's own retries, is AI_UNAVAILABLE (docs/API_ERRORS.md), and the
     user's work is kept."""
     try:

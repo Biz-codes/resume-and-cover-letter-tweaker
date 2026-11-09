@@ -3,6 +3,7 @@
 // are locked" in docs/FRONTEND_CHECKS.md.
 import { api } from './client'
 import type { HeaderFields } from './headers'
+import { base64, type ImportBody, type Imported, type Source } from './imports'
 import type { Use } from './usage'
 
 export type DocKind = 'resume' | 'cover_letter'
@@ -235,13 +236,34 @@ export function docsApi(kind: DocKind) {
       one(api.post<Raw>(path, { name, ...forPosting, ...options })),
     // A posting's version started by Claude: empty, with Claude's suggestion in its draft to review.
     // If Claude fails (AI_UNAVAILABLE), nothing is created.
-    tailor: (name: string, forPosting: ForPosting, toneSetId: number | null) =>
-      one(api.post<Raw>(`${path}/tailored`, { name, ...forPosting, tone_set_id: toneSetId })),
+    // With `startFromId`, Claude starts from that saved one instead of picking one.
+    tailor: (name: string, forPosting: ForPosting, toneSetId: number | null, startFromId: number | null = null) =>
+      one(
+        api.post<Raw>(`${path}/tailored`, {
+          name,
+          ...forPosting,
+          tone_set_id: toneSetId,
+          start_from_id: startFromId,
+        }),
+      ),
     // The first pass over Claude's draft, as its whole tree. Only the draft changes.
     saveDraft: (id: number, sections: DraftSection[]) => one(api.put<Raw>(`${path}/${id}/draft`, { sections })),
     // Saves the reviewed draft: Claude's kept wordings become new library rows used here, and `keep`
     // (keys of Claude's texts the draft doesn't use) are kept in the library for later.
     finishReview: (id: number, keep: number[]) => one(api.post<Raw>(`${path}/${id}/draft/finish`, { keep })),
+    // What Claude reads in the user's own file or pasted text, each item matched against the
+    // library (shared/api/imports.ts). Saves nothing. A file it can't read, or one with no resume
+    // (or letter) in it, is VALIDATION_FAILED, on "file" or "text".
+    readExisting: async (source: Source) =>
+      api.post<Imported>(
+        `${path}/read`,
+        'file' in source ? { file: { name: source.file.name, data: await base64(source.file) } } : source,
+      ),
+    // A new one from the corrected items: a base one, or with `forPosting`, one for that posting.
+    // With `tailor` (a posting's only), Claude then tailors it from there, with its suggestion in
+    // the draft; if Claude fails, nothing is saved.
+    saveImported: (body: ImportBody & { name: string; tone_set_id: number | null }, forPosting?: ForPosting, tailor = false) =>
+      one(api.post<Raw>(`${path}/imported${tailor ? '/tailored' : ''}`, { ...body, ...forPosting })),
     // A sent version can only be renamed (VERSION_LOCKED otherwise).
     update: (id: number, fields: DocFields) => one(api.put<Raw>(`${path}/${id}`, fields)),
     // A new version with the original's fields, sections, and selections: a base version, or

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoA11yViolations } from '../test/axe'
@@ -60,8 +60,9 @@ describe('DocumentsPage', () => {
     await expectNoA11yViolations()
     // Not offered to start from.
     fireEvent.click(screen.getByRole('button', { name: 'New base resume' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Copy a saved resume' }))
     expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'Fresh, with the usual defaults',
+      'Choose a resume',
       'Tech Base Resume',
     ])
     fireEvent.click(screen.getByRole('button', { name: 'Unhide "Acme resume"' }))
@@ -80,13 +81,15 @@ describe('DocumentsPage', () => {
     await vi.waitFor(() => expect(field).toHaveFocus())
     // What the app adds after the name is shown beside the field, and read with it.
     expect(field).toHaveAccessibleDescription('Followed by "Base Resume".')
-    // Fresh unless another is picked: base versions first, then the ones for postings.
-    expect(screen.getByLabelText('Start from')).toHaveValue('')
-    expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+    // Fresh unless another way is picked.
+    expect(screen.getAllByRole('radio').map((radio) => radio.parentElement?.textContent)).toEqual([
       'Fresh, with the usual defaults',
-      'Tech Base Resume',
-      'Acme resume (for Acme)',
+      'Copy a saved resume',
+      'Upload a resume (PDF or Word)',
+      "Paste a resume's text",
     ])
+    expect(screen.getByRole('radio', { name: 'Fresh, with the usual defaults' })).toBeChecked()
+    expect(screen.queryByLabelText('Start from')).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.change(field, { target: { value: 'Teaching' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
@@ -116,11 +119,93 @@ describe('DocumentsPage', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Name of the new base resume (required)' }), { target: { value: 'Acme base' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Copy a saved resume' }))
+    // Base versions first, then the ones for postings.
+    expect([...screen.getByLabelText('Start from').querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'Choose a resume',
+      'Tech Base Resume',
+      'Acme resume (for Acme)',
+    ])
+    // One has to be chosen first.
+    fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a resume to copy.')
+    await vi.waitFor(() => expect(screen.getByLabelText('Start from')).toHaveFocus())
+    expect(screen.getByLabelText('Start from')).toHaveAccessibleDescription('Choose a resume to copy.')
+    await expectNoA11yViolations()
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create base resume' }))
     expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
     // No posting, so it's a new base version; the original isn't changed.
     expect(sentBody(fetchMock, 'POST /api/resumes/2/copies')).toEqual({ name: 'Acme base' })
+  })
+
+  it('creates a base version from a pasted resume, after checking what Claude read', async () => {
+    const read = {
+      header: { full_name: 'Sam Rivera', headline: null, email: null, phone: null, location: null, linkedin_url: null, github_url: null, portfolio_url: null },
+      header_saved: false,
+      sections: [{ values: { title: 'Summary' }, saved: true, similar: null, entries: [] }],
+      addressee: null,
+      sign_off: null,
+      signature_name: null,
+    }
+    const created = { ...TECH, resume_id: 5, name: 'Pasted', output: { parts: [], text: '' } }
+    const fetchMock = stub({
+      'POST /api/resumes/read': [{ status: 200, body: read }],
+      'POST /api/resumes/imported': [{ status: 201, body: created }],
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
+    const name = screen.getByRole('textbox', { name: 'Name of the new base resume (required)' })
+    fireEvent.click(screen.getByRole('radio', { name: "Paste a resume's text" }))
+    const box = screen.getByRole('textbox', { name: 'Resume text (required)' })
+    // The name is checked first, since it's only saved after the review.
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a name.')
+    await vi.waitFor(() => expect(name).toHaveFocus())
+    fireEvent.change(name, { target: { value: 'tech' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('There\'s already a resume named "Tech".')
+    fireEvent.change(name, { target: { value: 'Pasted' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    expect(screen.getByRole('alert')).toHaveTextContent("Paste the resume's text in.")
+    await vi.waitFor(() => expect(box).toHaveFocus())
+    expect(box).toHaveAccessibleDescription("Paste the resume's text in.")
+    await expectNoA11yViolations()
+    fireEvent.change(box, { target: { value: 'Sam Rivera\nSummary' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    const review = await screen.findByRole('form', { name: 'Check the resume Claude read' })
+    expect(sentBody(fetchMock, 'POST /api/resumes/read')).toEqual({ text: 'Sam Rivera\nSummary' })
+    await expectNoA11yViolations()
+    fireEvent.click(within(review).getByRole('button', { name: 'Save resume' }))
+    expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    expect(sentBody(fetchMock, 'POST /api/resumes/imported')).toMatchObject({
+      name: 'Pasted',
+      tone_set_id: null,
+      header: { full_name: 'Sam Rivera' },
+      sections: [{ item_id: null, values: { title: 'Summary' }, entries: [] }],
+    })
+  })
+
+  it('says it is reading, and shows what it could not read', async () => {
+    stub({
+      'POST /api/resumes/read': [
+        { status: 422, body: errorBody('VALIDATION_FAILED', 'Upload a PDF or Word (.docx) file.', 'file'), delayMs: 20 },
+      ],
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'New base resume' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name of the new base resume (required)' }), { target: { value: 'File' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Upload a resume (PDF or Word)' }))
+    const input = screen.getByLabelText('Resume file, PDF or Word (required)')
+    fireEvent.change(input, { target: { files: [new File(['hi'], 'me.txt', { type: 'text/plain' })] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read resume' }))
+    expect(await screen.findByRole('button', { name: 'Reading…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Claude is reading your resume.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Upload a PDF or Word (.docx) file.')
+    await vi.waitFor(() => expect(input).toHaveFocus())
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await expectNoA11yViolations()
   })
 
   it('says it is creating', async () => {

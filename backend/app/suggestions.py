@@ -3,9 +3,9 @@ posting's document"; docs/FRONTEND_CHECKS.md, "Claude's suggestions").
 
 One request per document, when it's started. Claude reads the posting, the library, and the
 earlier documents of the same kind; picks the one that fits the posting best as the starting
-point; swaps items that don't match well for better ones from the library; then makes minimal
-tweaks to the wording. The reply is the whole tree by id, each choice with a reason, plus any
-reworded or new text tied to the item it replaces.
+point (or starts from the one the user chose); swaps items that don't match well for better
+ones from the library; then makes minimal tweaks to the wording. The reply is the whole tree
+by id, each choice with a reason, plus any reworded or new text tied to the item it replaces.
 
 The reply is checked before it's kept: an id that isn't the account's own, a hidden item, or a
 skill or bullet its item doesn't list is left out and logged, so one mistake doesn't lose the
@@ -23,12 +23,13 @@ from collections import defaultdict
 from typing import Any
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.claude import ask
 from app.documents import EntryKind, Kind, doc_info, list_docs, load_tree
+from app.errors import AppError, ErrorCode
 from app.models import (
     BulletPoint,
     Education,
@@ -94,7 +95,11 @@ class Suggestion(BaseModel):
     # The earlier document it starts from, or null when there's none.
     starting_document_id: int | None
     starting_reason: str
-    sections: list[SuggestedSection]
+    # Said in the schema too, which Claude reads as it writes the reply: left to itself, it
+    # sometimes lists only what it changed.
+    sections: list[SuggestedSection] = Field(description=(
+        "The whole document, every section and item in order, including the ones kept exactly "
+        "as they are in the starting point, not only what changed."))
 
 
 INSTRUCTIONS = """\
@@ -131,7 +136,12 @@ original's id) or write a new one (with a null id). Leave it null to use the ite
 - For a role, project, skill category, or education entry, item_id is required and new_text is \
 null. skill_ids and bullets list what shows under it, in order, and are empty for kinds that \
 have none.
-- Each reason is one short, plain sentence saying why the choice fits this posting.
+- Each reason is one short, plain sentence saying why the choice fits this posting: for an item \
+kept as it is in the starting point, why it stays; for one brought in from the library, why it's \
+a better fit; for a rewording, why the new wording fits better than the original.
+- sections is the whole {doc}, not only what you change: every section and item it should \
+have, including the ones you keep exactly as they are in the starting point. Anything you leave \
+out is left out of the {doc}.
 - List sections, items, skills, and bullets in the order they should appear.{letter}
 
 Everything you write (new text and reasons) follows the person's writing rules:
@@ -261,9 +271,12 @@ def library_json(library: Library) -> dict[str, Any]:
     }
 
 
-def documents_json(db: Session, kind: Kind, account_id: int, doc_id: int) -> list[dict[str, Any]]:
-    """The account's other documents of this kind, most recently updated first, as trees of ids."""
-    docs = [doc for doc in list_docs(db, kind, account_id) if getattr(doc, kind.doc_id) != doc_id]
+def documents_json(db: Session, kind: Kind, account_id: int, doc_id: int,
+                   with_itself: bool = False) -> list[dict[str, Any]]:
+    """The account's other documents of this kind, most recently updated first, as trees of ids,
+    and with `with_itself`, this one too."""
+    docs = [doc for doc in list_docs(db, kind, account_id)
+            if with_itself or getattr(doc, kind.doc_id) != doc_id]
     info = doc_info(db, kind, docs)
     found = []
     for doc in docs:
@@ -316,26 +329,66 @@ def _words(kind: Kind) -> tuple[str, str]:
 
 
 def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
-            doc: Any) -> Suggestion:
-    """Claude's suggestion for a posting's document, checked (see check)."""
+            doc: Any, start_from: int | None = None) -> Suggestion:
+    """Claude's suggestion for a posting's document, checked (see check). With `start_from`,
+    Claude starts from that document instead of picking one, still looking through the whole
+    library for better items: one the user chose, or the document itself (its tree just read
+    from the user's own file, app/imports.py). One that isn't the account's own, or has nothing
+    in it, is VALIDATION_FAILED, before Claude is asked."""
     doc_id = getattr(doc, kind.doc_id)
     posting = db.get(JobPosting, doc.job_posting_id)
     library = load_library(db, account_id)
-    documents = documents_json(db, kind, account_id, doc_id)
+    documents = documents_json(db, kind, account_id, doc_id, with_itself=start_from == doc_id)
     one, many = _words(kind)
+    if start_from is not None and start_from not in {document["id"] for document in documents}:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"That {one} has nothing in it to start from. Choose another, or let "
+                       "Claude pick.", field="start_from_id")
     instructions = INSTRUCTIONS.format(doc=one, docs=many, rules=rules_text(db, account_id),
                                        letter=LETTER_NOTE if kind.prefix == "cover_letter" else "")
     data = (f"<library>\n{json.dumps(library_json(library), ensure_ascii=False)}\n</library>\n"
             f"<documents>\n{json.dumps(documents, ensure_ascii=False)}\n</documents>")
-    content = (f"Tailor a new {one} for this posting.\n<posting>\n"
+    if start_from == doc_id:
+        start = (f" Start from the {one} with id {doc_id}, which the job seeker just added from "
+                 f"their own file, instead of picking one.")
+    elif start_from is not None:
+        start = (f" Start from the {one} with id {start_from}, which the job seeker chose, "
+                 f"instead of picking one. Still look through the whole library for better "
+                 f"items for its content.")
+    else:
+        start = ""
+    content = (f"Tailor a new {one} for this posting.{start}\n<posting>\n"
                f"Organization: {posting.organization}\nRole: {posting.role_title}\n\n"
                f"{posting.description}\n</posting>{tone_text(db, doc)}")
-    reply = ask(client, step=f"suggest {one}",
-                system=[{"type": "text", "text": instructions},
-                        {"type": "text", "text": data, "cache_control": {"type": "ephemeral"}}],
-                content=content, reply=Suggestion, effort="high", max_tokens=MAX_TOKENS)
+    system = [{"type": "text", "text": instructions},
+              {"type": "text", "text": data, "cache_control": {"type": "ephemeral"}}]
+    reply = ask(client, step=f"suggest {one}", system=system, content=content,
+                reply=Suggestion, effort="high", max_tokens=MAX_TOKENS)
+    start_id = start_from if start_from is not None else reply.starting_document_id
+    if _left_out_most(reply, next((document for document in documents
+                                   if document["id"] == start_id), None)):
+        # Asked once more (the cached library makes it cheaper), saying what went wrong.
+        logger.warning("Claude's suggestion for %s %s listed only part of the starting point; "
+                       "asking again", one, doc_id)
+        reply = ask(client, step=f"suggest {one} again", system=system, content=(
+            f"{content}\n\nA first answer listed only the items it changed and left out most "
+            f"of the starting {one}. List the whole {one}: every section and item, including "
+            f"the ones you keep as they are."),
+            reply=Suggestion, effort="high", max_tokens=MAX_TOKENS)
+    if start_from is not None:
+        # The starting point is the one asked for, whichever id Claude gave.
+        reply.starting_document_id = start_from
     return check(reply, library, {document["id"] for document in documents},
                  f"{one} {doc_id}")
+
+
+def _left_out_most(reply: Suggestion, start: dict[str, Any] | None) -> bool:
+    """Whether the reply has fewer than half the starting document's items, which means Claude
+    listed only what it changed (it's told to stay close to the starting point)."""
+    if start is None:
+        return False
+    started = sum(len(section["entries"]) for section in start["sections"])
+    return sum(len(section.entries) for section in reply.sections) * 2 < started
 
 
 def _new_text(text: str | None, original: str | None) -> str | None:

@@ -140,11 +140,14 @@ def to_draft(suggestion: Suggestion, starting: StartingDocument | None) -> Draft
 
 
 def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
-                doc: Any) -> None:
-    """Claude's suggestion for a new posting's document, stored in its draft."""
-    suggestion = suggest(db, client, kind, account_id, doc)
+                doc: Any, start_from: int | None = None) -> None:
+    """Claude's suggestion for a new posting's document, stored in its draft. With
+    `start_from`, Claude starts from that document (see suggestions.suggest). When that's the
+    document's own tree, the finished review replaces it, so there's no other document it's
+    based on."""
+    suggestion = suggest(db, client, kind, account_id, doc, start_from)
     starting = None
-    if suggestion.starting_document_id is not None:
+    if suggestion.starting_document_id not in (None, getattr(doc, kind.doc_id)):
         pk = getattr(kind.doc, kind.doc_id)
         name = db.scalar(select(shown_name(kind.doc)).where(
             pk == suggestion.starting_document_id))

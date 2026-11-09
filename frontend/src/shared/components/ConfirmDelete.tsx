@@ -7,6 +7,7 @@ import { anyLocked, type Use } from '../api/usage'
 
 export default function ConfirmDelete({
   what,
+  noun,
   uses,
   usesLabel = 'Used by',
   effect,
@@ -18,6 +19,9 @@ export default function ConfirmDelete({
   onCancel,
 }: {
   what: string
+  // What kind of thing it is, for the Delete button ("Delete job posting"), where a page has
+  // more than one kind to delete.
+  noun?: string
   uses: Use[]
   // What `uses` lists (e.g. "Copies made from it").
   usesLabel?: string
@@ -50,7 +54,7 @@ export default function ConfirmDelete({
       {error && <p role="alert">{error.message}</p>}
       <div className="actions">
         <button type="button" onClick={onConfirm}>
-          Delete
+          {noun ? `Delete ${noun}` : 'Delete'}
         </button>
         <button type="button" ref={cancelRef} onClick={onCancel}>
           Cancel

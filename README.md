@@ -17,7 +17,7 @@ The goal of this app is to streamline the resume and cover letter writing proces
 The app and AI do most of the heavy lifting. You keep final control over what goes into every resume and cover letter.
 
 ## Basics
-Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and drafts a tailored resume or cover letter for the user to review; chatting with Claude about the draft is being built now, and a public demo is planned.
+Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and the user's existing resumes and cover letters (PDF, Word, or pasted text) into the library, and drafts a tailored resume or cover letter for the user to review; chatting with Claude about the draft is being built now, and a public demo is planned.
 
 Input: URL of a job posting (or none, when working on a base resume)
 Output: plain text for a resume and cover letter tailored to that posting, ready to copy and paste

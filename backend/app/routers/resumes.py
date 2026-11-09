@@ -2,7 +2,8 @@
 delete.
 
 A resume with no job posting is a base resume, an ongoing starting point edited in place. One
-for a posting uses the posting's header, starting fresh or as a copy of any earlier resume. A
+for a posting uses the posting's header, starting fresh, as a copy of any earlier resume, or
+tailored by Claude. Either can start from the user's own file or pasted text (app/imports.py). A
 resume for a posting that was applied to is locked: only its name can change
 (docs/FRONTEND_CHECKS.md, "Versions" and "Sent versions are locked"). app/documents.py reads
 and copies its sections and selections, and app/routers/document_tree.py adds the endpoints
@@ -36,9 +37,11 @@ from app.documents import (
 from app.drafts import Draft, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
+from app.imports import Imported, ImportIn, ReadIn, read_document, save_items
 from app.models import Header, Resume, ToneSet
 from app.plain_text import Output, resume_output
-from app.routers.document_tree import add_tree_routes, fill_document
+from app.routers.document_tree import add_tree_routes, fill_document, restore
+from app.routers.headers import find_or_add
 from app.schemas import RequiredText
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
@@ -57,6 +60,13 @@ class NewResume(ResumeIn):
     job_posting_id: int | None = None
     # Starts with no sections at all ("Build from scratch"), not the defaults.
     empty: bool = False
+
+
+class TailoredResume(NewResume):
+    """A new resume for a posting, started by Claude. Leaving start_from_id out has Claude pick
+    the earlier resume that fits best; with it, Claude starts from that one."""
+
+    start_from_id: int | None = None
 
 
 class CopyIn(BaseModel):
@@ -135,7 +145,7 @@ def create_resume(body: NewResume, db: DbSession, account_id: AccountId) -> Resu
 
 
 @router.post("/tailored", status_code=status.HTTP_201_CREATED)
-def tailor_resume(body: NewResume, db: DbSession, account_id: AccountId,
+def tailor_resume(body: TailoredResume, db: DbSession, account_id: AccountId,
                   client: Claude) -> ResumeDetail:
     """A new resume for a posting, started by Claude: it starts empty, with Claude's
     suggestion in its draft for the user to review (app/drafts.py). If Claude fails, nothing
@@ -143,8 +153,53 @@ def tailor_resume(body: NewResume, db: DbSession, account_id: AccountId,
     if body.job_posting_id is None:
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Claude tailors a resume only for a job posting.", field="job_posting_id")
-    resume = new_resume(db, body.model_copy(update={"empty": True}), account_id)
-    start_draft(db, client, RESUME, account_id, resume)
+    resume = new_resume(db, NewResume.model_validate(body.model_dump(exclude={"start_from_id"},
+                                                                     exclude_unset=True)
+                                                     | {"empty": True}), account_id)
+    start_draft(db, client, RESUME, account_id, resume, start_from=body.start_from_id)
+    db.refresh(resume)
+    return detail(db, resume)
+
+
+@router.post("/read")
+def read_resume(body: ReadIn, db: DbSession, account_id: AccountId, client: Claude) -> Imported:
+    """The sections and items Claude reads in an uploaded resume (PDF or Word) or pasted text,
+    each matched against the library, for the user to correct (app/imports.py). Saves
+    nothing."""
+    return read_document(db, client, RESUME, account_id, body)
+
+
+def imported_resume(db: Session, body: ImportIn, account_id: int) -> Resume:
+    """A new resume with the corrected items, each reused from the library or added to it
+    (app/imports.py). A base one uses the header read from it (a saved one with the same
+    values, or a new one); one for a posting uses the posting's."""
+    fields = {"name": body.name, "tone_set_id": body.tone_set_id,
+              "job_posting_id": body.job_posting_id, "empty": True}
+    if body.job_posting_id is None and body.header is not None:
+        fields["header_id"] = find_or_add(db, account_id, body.header)[0].header_id
+    resume = new_resume(db, NewResume(**fields), account_id)
+    restore(db, RESUME, resume.resume_id, save_items(db, account_id, body.sections), account_id)
+    return resume
+
+
+@router.post("/imported", status_code=status.HTTP_201_CREATED)
+def import_resume(body: ImportIn, db: DbSession, account_id: AccountId) -> ResumeDetail:
+    resume = imported_resume(db, body, account_id)
+    db.refresh(resume)
+    return detail(db, resume)
+
+
+@router.post("/imported/tailored", status_code=status.HTTP_201_CREATED)
+def import_and_tailor_resume(body: ImportIn, db: DbSession, account_id: AccountId,
+                             client: Claude) -> ResumeDetail:
+    """A posting's resume from the corrected items (as import_resume), which Claude then
+    tailors to the posting from there, with its suggestion in the draft (as tailor_resume).
+    If Claude fails, nothing is saved."""
+    if body.job_posting_id is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "Claude tailors a resume only for a job posting.", field="job_posting_id")
+    resume = imported_resume(db, body, account_id)
+    start_draft(db, client, RESUME, account_id, resume, start_from=resume.resume_id)
     db.refresh(resume)
     return detail(db, resume)
 
