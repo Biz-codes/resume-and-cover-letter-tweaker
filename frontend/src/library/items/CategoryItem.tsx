@@ -33,7 +33,7 @@ export default function CategoryItem({ id }: { id: number }) {
   const category = data?.[0].find((item) => item.category_id === id)
   if (!data || !category) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const skills = data[1]
-  const { here, others } = inProgressUses(category.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(category.used_by, host.placed?.where)
   const sentNote = anyLocked(category.used_by) ? lockedNote('category') : undefined
 
   async function refresh() {
@@ -78,7 +78,7 @@ export default function CategoryItem({ id }: { id: number }) {
           label="Category name"
           field="category_name"
           initial={category.category_name}
-          lockedNote={changeNote(here, others, host.placed?.doc, category.built_in ? BUILT_IN_NOTE : sentNote)}
+          lockedNote={changeNote(here, others, host.placed?.doc, category.built_in ? BUILT_IN_NOTE : sentNote, category.built_in || elsewhere)}
           onSave={(name) => rename(category, name)}
           focusOnOpen={false}
           onCancel={host.close}

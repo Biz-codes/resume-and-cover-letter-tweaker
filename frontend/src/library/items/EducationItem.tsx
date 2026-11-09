@@ -37,7 +37,7 @@ export default function EducationItem({ id }: { id: number }) {
   const entry = data?.find((item) => item.education_id === id)
   if (!data || !entry) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = educationLabels(data)(entry)
-  const { here, others } = inProgressUses(entry.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(entry.used_by, host.placed?.where)
 
   async function update(original: Education, fields: EducationFields) {
     const saved = await educationApi.update(original.education_id, fields, pickedFor(here, applyTo))
@@ -77,7 +77,7 @@ export default function EducationItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={EDUCATION_FIELDS}
           initial={fieldsOf(entry)}
-          note={changeNote(here, others, host.placed?.doc, anyLocked(entry.used_by) ? SENT_NOTE : undefined)}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(entry.used_by) ? SENT_NOTE : undefined, elsewhere)}
           onSave={(fields) => update(entry, fields)}
           focusOnOpen={false}
           onCancel={host.close}

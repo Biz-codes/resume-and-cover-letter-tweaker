@@ -43,7 +43,7 @@ export default function ExperienceItem({ id }: { id: number }) {
   const [roles, bullets] = data
   const labelOf = roleLabels(roles)
   const label = labelOf(role)
-  const { here, others } = inProgressUses(role.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(role.used_by, host.placed?.where)
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
@@ -87,7 +87,7 @@ export default function ExperienceItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={ROLE_FIELDS}
           initial={fieldsOf(role)}
-          note={changeNote(here, others, host.placed?.doc, anyLocked(role.used_by) ? SENT_NOTE : undefined)}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(role.used_by) ? SENT_NOTE : undefined, elsewhere)}
           onSave={(fields) => update(role, fields)}
           focusOnOpen={false}
           onCancel={host.close}

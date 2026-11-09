@@ -89,7 +89,7 @@ export default function SectionItem({ id }: { id: number }) {
   if (section && !shown) setShown(shownKindsOf(section))
   if (!data || !section) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const [, categories, roles, projects, bullets, narrative, education] = data
-  const { here, others } = inProgressUses(section.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(section.used_by, host.placed?.where)
   const sentNote = anyLocked(section.used_by) ? LOCKED_NOTE : undefined
 
   // Labels that tell versions apart (labels.ts), for what's listed and what can be added. A
@@ -265,7 +265,7 @@ export default function SectionItem({ id }: { id: number }) {
           label="Section title"
           field="title"
           initial={section.title}
-          lockedNote={changeNote(here, others, host.placed?.doc, section.built_in ? BUILT_IN_NOTE : sentNote)}
+          lockedNote={changeNote(here, others, host.placed?.doc, section.built_in ? BUILT_IN_NOTE : sentNote, section.built_in || elsewhere)}
           onSave={(title) => rename(section, title)}
           focusOnOpen={false}
           onCancel={host.close}

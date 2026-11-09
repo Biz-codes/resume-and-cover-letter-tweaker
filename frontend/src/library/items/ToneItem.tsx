@@ -95,8 +95,8 @@ function ToneForm({ toneSet, all }: { toneSet: ToneSet; all: ToneSet[] }) {
   const id = useId()
   const noteId = `${id}-note`
   const errorId = `${id}-error`
-  const { here, others } = inProgressUses(toneSet.used_by, host.placed?.where)
-  const note = changeNote(here, others, host.placed?.doc, anyLocked(toneSet.used_by) ? SENT_NOTE : undefined)
+  const { here, others, elsewhere } = inProgressUses(toneSet.used_by, host.placed?.where)
+  const note = changeNote(here, others, host.placed?.doc, anyLocked(toneSet.used_by) ? SENT_NOTE : undefined, elsewhere)
 
   function addRule() {
     const text = newRule.trim()

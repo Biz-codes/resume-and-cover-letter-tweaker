@@ -26,7 +26,7 @@ export default function SkillItem({ id }: { id: number }) {
 
   const skill = data?.find((item) => item.skill_id === id)
   if (!data || !skill) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
-  const { here, others } = inProgressUses(skill.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(skill.used_by, host.placed?.where)
 
   async function rename(original: Skill, name: string) {
     const saved = await skillsApi.rename(original.skill_id, name, pickedFor(here, applyTo))
@@ -66,7 +66,7 @@ export default function SkillItem({ id }: { id: number }) {
           label="Skill name"
           field="skill_name"
           initial={skill.skill_name}
-          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(skill.used_by) ? lockedNote('skill') : undefined)}
+          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(skill.used_by) ? lockedNote('skill') : undefined, elsewhere)}
           onSave={(name) => rename(skill, name)}
           focusOnOpen={false}
           onCancel={host.close}

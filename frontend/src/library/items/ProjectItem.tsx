@@ -44,7 +44,7 @@ export default function ProjectItem({ id }: { id: number }) {
   if (!data || !project) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const [projects, skills, bullets] = data
   const label = projectLabels(projects)(project)
-  const { here, others } = inProgressUses(project.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(project.used_by, host.placed?.where)
 
   async function refresh() {
     await Promise.all([load(), host.refresh()])
@@ -88,7 +88,7 @@ export default function ProjectItem({ id }: { id: number }) {
           label={`Edit "${label}"`}
           fields={PROJECT_FIELDS}
           initial={fieldsOf(project)}
-          note={changeNote(here, others, host.placed?.doc, anyLocked(project.used_by) ? SENT_NOTE : undefined)}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(project.used_by) ? SENT_NOTE : undefined, elsewhere)}
           onSave={(fields) => update(project, fields)}
           focusOnOpen={false}
           onCancel={host.close}

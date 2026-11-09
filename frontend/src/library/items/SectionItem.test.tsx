@@ -57,7 +57,7 @@ describe('SectionItem', () => {
     })
     const host = await renderItem(<SectionItem id={2} />, { doc: 'resume', where: { kind: 'resume', id: 3 } })
     expect(screen.getByLabelText('Section title')).toHaveAccessibleDescription(
-      'Built-in sections keep their title, so saving adds a new section. Saving changes it in this resume only.',
+      'Built-in sections keep their title, so saving adds a new section. The new one goes in your library, used in this resume only.',
     )
     expect(screen.queryByRole('group', { name: /^Apply this change/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Section title'), { target: { value: 'Tools' } })

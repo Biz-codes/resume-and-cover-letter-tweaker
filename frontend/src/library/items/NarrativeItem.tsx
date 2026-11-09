@@ -36,7 +36,7 @@ export default function NarrativeItem({ id }: { id: number }) {
   const sections = data[1]
   const checked = chosen ?? excerpt.sections.map((section) => section.id)
   const label = `"${shortBullet(excerpt.content)}"`
-  const { here, others } = inProgressUses(excerpt.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(excerpt.used_by, host.placed?.where)
 
   async function update(original: NarrativeContent, { content }: ExcerptFields) {
     const saved = await narrativeApi.update(original.content_id, content, checked, pickedFor(here, applyTo))
@@ -76,7 +76,7 @@ export default function NarrativeItem({ id }: { id: number }) {
           label={`Edit ${label}`}
           fields={EXCERPT_FIELDS}
           initial={{ content: excerpt.content }}
-          note={changeNote(here, others, host.placed?.doc, anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined)}
+          note={changeNote(here, others, host.placed?.doc, anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(fields) => update(excerpt, fields)}
           focusOnOpen={false}
           onCancel={host.close}

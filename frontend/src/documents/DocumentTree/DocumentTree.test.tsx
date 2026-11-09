@@ -373,7 +373,7 @@ describe('DocumentTree', () => {
     fireEvent.click(button)
     const dialog = await screen.findByRole('dialog', { name: 'Led the redesign.' })
     // Nothing else uses it, so saving changes it here only. There's no New version.
-    expect(within(dialog).getByLabelText('Bullet text')).toHaveAccessibleDescription('Saving changes it in this resume only.')
+    expect(within(dialog).getByLabelText('Bullet text')).toHaveAccessibleDescription('Saving changes it in your library and in this resume.')
     expect(within(dialog).queryByRole('button', { name: /New version/ })).not.toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.change(within(dialog).getByLabelText('Bullet text'), { target: { value: 'Led the whole redesign.' } })
@@ -421,7 +421,7 @@ describe('DocumentTree', () => {
     await expand('Experience')
     fireEvent.click(screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' }))
     const dialog = await screen.findByRole('dialog', { name: 'Engineer, Acme' })
-    expect(within(dialog).getByLabelText('Title (required)')).toHaveAccessibleDescription('Saving changes it in this resume only.')
+    expect(within(dialog).getByLabelText('Title (required)')).toHaveAccessibleDescription('Saving changes it in your library and in this resume.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Led the redesign.' }))
     await screen.findByRole('dialog', { name: 'Led the redesign.' })
     // Nothing uses it, and it isn't the row that was opened, so there's no note about this resume.
@@ -441,7 +441,7 @@ describe('DocumentTree', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View and Edit Experience' }))
     const dialog = await screen.findByRole('dialog', { name: 'Experience' })
     const field = within(dialog).getByLabelText('Section title')
-    expect(field).toHaveAccessibleDescription('Built-in sections keep their title, so saving adds a new section. Saving changes it in this resume only.')
+    expect(field).toHaveAccessibleDescription('Built-in sections keep their title, so saving adds a new section. The new one goes in your library, used in this resume only.')
     fireEvent.change(field, { target: { value: 'Talks' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(await within(dialog).findByText('A section named "Talks" already exists.')).toBeInTheDocument()

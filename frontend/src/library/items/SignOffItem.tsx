@@ -25,7 +25,7 @@ export default function SignOffItem({ id }: { id: number }) {
 
   const signOff = data?.find((item) => item.sign_off_id === id)
   if (!data || !signOff) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
-  const { here, others } = inProgressUses(signOff.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(signOff.used_by, host.placed?.where)
 
   async function save(original: SignOff, text: string) {
     const saved = await signOffsApi.update(original.sign_off_id, text, pickedFor(here, applyTo))
@@ -65,7 +65,7 @@ export default function SignOffItem({ id }: { id: number }) {
           label="Sign-off"
           field="text"
           initial={signOff.text}
-          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(signOff.used_by) ? LOCKED_NOTE : undefined)}
+          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(signOff.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(text) => save(signOff, text)}
           focusOnOpen={false}
           onCancel={host.close}

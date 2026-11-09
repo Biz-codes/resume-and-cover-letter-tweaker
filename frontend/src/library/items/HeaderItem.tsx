@@ -73,7 +73,7 @@ export default function HeaderItem({ id }: { id: number }) {
         <HeaderForm
           label="Edit header"
           initial={fieldsOf(header)}
-          note={changeNote(undefined, offeredUses, undefined, anyLocked(header.used_by) ? SENT_NOTE : undefined)}
+          note={changeNote(undefined, offeredUses, undefined, anyLocked(header.used_by) ? SENT_NOTE : undefined, false)}
           onSave={(fields) => update(header, fields)}
           focusOnOpen={false}
           onCancel={host.close}

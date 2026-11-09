@@ -29,7 +29,7 @@ export default function BulletItem({ id }: { id: number }) {
   const bullet = data?.find((item) => item.bullet_id === id)
   if (!data || !bullet) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = `"${shortBullet(bullet.content)}"`
-  const { here, others } = inProgressUses(bullet.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(bullet.used_by, host.placed?.where)
 
   async function save(original: Bullet, content: string) {
     const saved = await bulletsApi.update(original.bullet_id, content, pickedFor(here, applyTo))
@@ -70,7 +70,7 @@ export default function BulletItem({ id }: { id: number }) {
           field="content"
           initial={bullet.content}
           multiline
-          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined)}
+          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(content) => save(bullet, content)}
           focusOnOpen={false}
           onCancel={host.close}
