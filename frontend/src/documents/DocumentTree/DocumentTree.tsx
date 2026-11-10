@@ -144,10 +144,29 @@ function EntryChildren({
     entry.kind === 'experience' ? library?.experience.find((item) => item.experience_id === entry.item_id) : undefined
   // Hidden skills and bullets aren't offered (docs/FRONTEND_CHECKS.md, "Hiding").
   const hiddenBullets = new Set(library?.bullets.filter((bullet) => bullet.hidden).map((bullet) => bullet.bullet_id))
-  const skillChoices = offered(category?.skills ?? project?.skills ?? []).map((skill) => ({
-    id: skill.skill_id,
-    name: skill.skill_name,
-  }))
+  const listedSkills = offered(category?.skills ?? project?.skills ?? [])
+  // A category or project can show any skill in the library, since skill sets overlap: the ones
+  // it doesn't list yet come after its own, and adding one lists it there too
+  // (docs/FRONTEND_CHECKS.md, "Skills in a category" and "Skills in a project"). Every skill is
+  // in a category, so the categories hold them all.
+  const listedIds = new Set(listedSkills.map((skill) => skill.skill_id))
+  const otherSkills = category || project
+    ? [...new Map(offered(library?.categories.flatMap((item) => item.skills) ?? []).map((skill) => [skill.skill_id, skill])).values()].filter(
+        (skill) => !listedIds.has(skill.skill_id),
+      )
+    : []
+  const skillChoices = [
+    ...listedSkills.map((skill) => ({
+      id: skill.skill_id,
+      name: skill.skill_name,
+      group: otherSkills.length > 0 ? `Listed under ${name}` : undefined,
+    })),
+    ...otherSkills.map((skill) => ({
+      id: skill.skill_id,
+      name: skill.skill_name,
+      group: `Other skills in your library (adding one lists it under ${name} too)`,
+    })),
+  ]
   const bulletChoices = (role?.bullets ?? project?.bullets ?? [])
     .filter((bullet) => !taken.has(bullet.bullet_id) && !hiddenBullets.has(bullet.bullet_id))
     .map((bullet) => ({
@@ -328,6 +347,7 @@ function SectionBody({
   library,
   saved,
   written,
+  reloadLibrary,
   onNotice,
   editRow,
 }: {
@@ -339,6 +359,8 @@ function SectionBody({
   saved: (request: Promise<DocDetail>) => Promise<void>
   // Without a notice, the caller gives its own.
   written: (request: Promise<DocDetail>, notice: string) => Promise<void>
+  // Reads the library again, after a change that adds to its lists.
+  reloadLibrary: () => void
   onNotice: (notice: string) => void
   editRow: EditRow
 }) {
@@ -418,9 +440,16 @@ function SectionBody({
               entry={entry}
               library={library}
               taken={bulletsHere(entry)}
-              onSkills={(ids) =>
-                saved(api.setSkills(doc.id, entry.kind === 'project' ? 'project' : 'category', entry.row_id, ids))
-              }
+              onSkills={async (ids) => {
+                await saved(api.setSkills(doc.id, entry.kind === 'project' ? 'project' : 'category', entry.row_id, ids))
+                // A skill the category or project didn't list is listed under it now, so the library
+                // is read again.
+                const listed =
+                  (entry.kind === 'project'
+                    ? library?.projects.find((item) => item.project_id === entry.item_id)?.skills
+                    : library?.categories.find((item) => item.category_id === entry.item_id)?.skills) ?? []
+                if (ids.some((id) => !listed.some((skill) => skill.skill_id === id))) reloadLibrary()
+              }}
               onBullets={(ids) => saved(api.setBullets(doc.id, parent, entry.row_id, ids))}
               onWriteSkill={(skillName) =>
                 written(
@@ -575,6 +604,7 @@ export default function DocumentTree({
               library={shown}
               saved={saved}
               written={written}
+              reloadLibrary={() => void load()}
               onNotice={onNotice}
               editRow={editRow}
             />

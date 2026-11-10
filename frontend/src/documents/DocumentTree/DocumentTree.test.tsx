@@ -586,4 +586,73 @@ describe('DocumentTree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('group', { name: 'Sections' })).toBeInTheDocument()
   })
+  it("offers a project every skill in the library, listing a new one under the project", async () => {
+    const portfolio = {
+      project_id: 4,
+      project_title: 'Portfolio',
+      done_for: null,
+      url: null,
+      dates: null,
+      skills: [{ skill_id: 1, skill_name: 'React' }],
+      bullets: [],
+      sections: [],
+      used_by: [],
+    }
+    const project = {
+      kind: 'project' as const,
+      row_id: 302,
+      item_id: 4,
+      position: 1,
+      values: { project_title: 'Portfolio', done_for: null, url: null, dates: null },
+      skills: [{ row_id: 402, item_id: 1, position: 1, text: 'React' }],
+      bullets: [],
+    }
+    const doc = { ...DOC, sections: [{ row_id: 102, section_id: 4, title: 'Projects', entries: [project] }] }
+    const library = { ...libraryReplies(2), 'GET /api/projects': [{ status: 200, body: [portfolio] }, { status: 200, body: [portfolio] }] }
+    const fetchMock = stubApi({
+      ...library,
+      'PUT /api/resumes/1/items/project/302/skills': [{ status: 200, body: doc }],
+    })
+    renderTree(doc)
+    await expand('Projects')
+    await expand('Project: Portfolio in Projects')
+    await expand('Skills for Portfolio (1)')
+    fireEvent.click(await screen.findByRole('button', { name: /^More options for Portfolio skills \(/ }))
+    // Its own skills come first; the rest of the library after, saying what adding one does.
+    expect(screen.getByRole('group', { name: 'Other skills in your library (adding one lists it under Portfolio too)' })).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Other skills in your library (adding one lists it under Portfolio too)' })).getByRole('checkbox', { name: 'CSS' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'CSS' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add checked to Portfolio skills' }))
+    await vi.waitFor(() => expect(sentBody(fetchMock, 'PUT /api/resumes/1/items/project/302/skills')).toEqual({ skill_ids: [1, 3] }))
+    // CSS is listed under the project now, so the library is read again.
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => url === '/api/projects')).toHaveLength(2),
+    )
+  })
+  it('offers a category every skill in the library, listing a new one under the category', async () => {
+    const categories = [
+      ...LIBRARY['skill-categories'],
+      { category_id: 5, category_name: 'Tools', built_in: false, skills: [{ skill_id: 6, skill_name: 'Git' }], sections: [], used_by: [] },
+    ]
+    const fetchMock = stubApi({
+      ...libraryReplies(2),
+      'GET /api/skill-categories': [{ status: 200, body: categories }, { status: 200, body: categories }],
+      'PUT /api/resumes/1/items/category/301/skills': [{ status: 200, body: DOC }],
+    })
+    renderTree()
+    await expand('Experience')
+    await expand('Skills: Front End in Experience')
+    fireEvent.click(await screen.findByRole('button', { name: /^More options for Front End skills \(/ }))
+    expect(within(screen.getByRole('group', { name: 'Listed under Front End' })).getByRole('checkbox', { name: 'CSS' })).toBeInTheDocument()
+    const others = screen.getByRole('group', { name: 'Other skills in your library (adding one lists it under Front End too)' })
+    await expectNoA11yViolations()
+    fireEvent.click(within(others).getByRole('checkbox', { name: 'Git' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add checked to Front End skills' }))
+    await vi.waitFor(() => expect(sentBody(fetchMock, 'PUT /api/resumes/1/items/category/301/skills')).toEqual({ skill_ids: [1, 6] }))
+    // Git is listed under Front End now, so the library is read again.
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => url === '/api/skill-categories')).toHaveLength(2),
+    )
+  })
 })

@@ -167,7 +167,8 @@ def test_items_must_be_the_accounts_own_and_placed_once(client: TestClient, db: 
 # Skills and bullets under an item
 
 
-def test_category_skills_come_from_its_list(client: TestClient, db: Session, account_id: int):
+def test_category_skills_can_be_any_of_the_accounts_skills(client: TestClient, db: Session,
+                                                           account_id: int):
     doc = add(db, Resume(account_id=account_id, name="Tech base"))
     build_resume(db, account_id, doc)
     chosen = tree(client, doc.resume_id)[1]["entries"][0]
@@ -176,9 +177,20 @@ def test_category_skills_come_from_its_list(client: TestClient, db: Session, acc
     saved = client.put(url, json={"skill_ids": order}).json()
     assert [skill["item_id"] for skill in saved["sections"][1]["entries"][0]["skills"]] == order
     assert "Front End: CSS, TypeScript" in saved["output"]["text"]
+    # One the category doesn't list is shown, and listed last under it in the library too.
     unlisted = add(db, Skill(account_id=account_id, skill_name="Go"))
-    assert error(client.put(url, json={"skill_ids": [unlisted.skill_id]})) == (
-        422, "VALIDATION_FAILED", "skill_ids")
+    listed_before = list(db.scalars(select(SkillCategorySkill.skill_id).where(
+        SkillCategorySkill.category_id == chosen["item_id"]).order_by(SkillCategorySkill.position)))
+    saved = client.put(url, json={"skill_ids": [*order, unlisted.skill_id]}).json()
+    assert "Front End: CSS, TypeScript, Go" in saved["output"]["text"]
+    db.expire_all()
+    assert list(db.scalars(select(SkillCategorySkill.skill_id).where(
+        SkillCategorySkill.category_id == chosen["item_id"]).order_by(
+        SkillCategorySkill.position))) == [*listed_before, unlisted.skill_id]
+    # Another account's skill isn't.
+    theirs = add(db, Skill(account_id=add(db, Account()).account_id, skill_name="Rust"))
+    assert error(client.put(url, json={"skill_ids": [theirs.skill_id]}))[:2] == (
+        422, "CROSS_ACCOUNT_LINK")
     # The row must be one of this document's entries.
     other = add(db, Resume(account_id=account_id, name="Other"))
     assert error(client.put(f"/api/resumes/{other.resume_id}/items/category/{chosen['row_id']}"
@@ -192,8 +204,18 @@ def test_project_skills_can_be_any_of_the_accounts_skills(client: TestClient, db
     project = tree(client, doc.resume_id)[3]["entries"][0]
     category(db, account_id, "Tools", ["Git"])
     url = f"/api/resumes/{doc.resume_id}/items/project/{project['row_id']}/skills"
-    saved = client.put(url, json={"skill_ids": [skill_id(db, "Git"), skill_id(db, "React")]})
+    listed_before = list(db.scalars(select(ProjectSkill.skill_id).where(
+        ProjectSkill.project_id == project["item_id"]).order_by(ProjectSkill.position)))
+    chosen = [skill_id(db, "Git"), skill_id(db, "React")]
+    saved = client.put(url, json={"skill_ids": chosen})
     assert "Skills: Git, React" in saved.json()["output"]["text"]
+    # Ones the project didn't list are listed last under it in the library too, in the order
+    # chosen; what it listed stays as it was.
+    db.expire_all()
+    assert chosen[0] not in listed_before
+    assert list(db.scalars(select(ProjectSkill.skill_id).where(
+        ProjectSkill.project_id == project["item_id"]).order_by(ProjectSkill.position))) == [
+        *listed_before, *(skill for skill in chosen if skill not in listed_before)]
 
 
 def test_role_bullets_come_from_its_list(client: TestClient, db: Session, account_id: int):

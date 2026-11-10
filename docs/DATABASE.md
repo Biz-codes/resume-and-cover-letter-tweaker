@@ -559,7 +559,7 @@ Unique: (resume_section_id, category_id)
 
 Unique: (resume_skill_category_id, skill_id)
 
-Note: the database doesn't check that the skill is listed under the selected category in `skill_category_skill`. The app only offers skills from the category's list, so an unlisted skill can't be added. Undo can put back one the category no longer lists, since it restores what the resume showed (see "Undo" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: the database doesn't check that the skill is listed under the selected category in `skill_category_skill`. Any of the account's skills can be picked, since skill sets overlap; one the category doesn't list yet is listed last under it in `skill_category_skill` too, in the same transaction. Undo can put back one the category no longer lists, since it restores what the resume showed (see "Undo" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### resume_experience
 | Column               | Type         | Constraints                                                             | Description                    |
@@ -591,7 +591,7 @@ Unique: (resume_section_id, project_id)
 
 Unique: (resume_project_id, skill_id)
 
-Note: lets each resume show a different set of skills for the same project, chosen to match the job. The app suggests skills from `project_skill` for that project.
+Note: lets each resume show a different set of skills for the same project, chosen to match the job. The app suggests skills from `project_skill` for that project. Any of the account's skills can be picked; one the project doesn't list yet is listed last under it in `project_skill` too, in the same transaction.
 
 ### resume_bullet_point
 | Column                 | Type         | Constraints                                                             | Description                     |

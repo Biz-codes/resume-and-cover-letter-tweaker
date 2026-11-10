@@ -239,14 +239,15 @@ def _check_bullets_once(db: Session, kind: Kind, section_row: int, bullet_ids: l
 
 def apply_skills(db: Session, kind: Kind, entry_kind: str, row_id: int, item_id: int,
                  skill_ids: list[int], account_id: int) -> None:
-    """Show these skills under a placed category (only ones the category lists) or project
-    (the page offers the project's own list, but any of the account's skills is allowed;
-    docs/FRONTEND_CHECKS.md, "Skills in a project")."""
+    """Show these skills under a placed category or project: any of the account's skills, since
+    skill sets overlap. One the category or project doesn't list yet is listed last under it in
+    the library too, so later documents and Claude offer it there (docs/FRONTEND_CHECKS.md,
+    "Skills in a category" and "Skills in a project")."""
     check_ids(db, Skill, Skill.skill_id, skill_ids, account_id, "skill_ids")
-    if entry_kind == "category":
-        _check_listed(db, SkillCategorySkill, "category_id", item_id, "skill_id",
-                      skill_ids, "Only skills listed under this category can be shown "
-                      "with it. Add the skill to the category first.", "skill_ids")
+    link, parent_col = ((SkillCategorySkill, "category_id") if entry_kind == "category"
+                        else (ProjectSkill, "project_id"))
+    for skill_id in skill_ids:
+        append(db, link, parent_col, item_id, "skill_id", skill_id)
     model = kind.skill if entry_kind == "category" else kind.project_skill
     parent = kind.column("skill_category" if entry_kind == "category" else "project")
     _sync(db, model, model.__table__.c[parent] == row_id, ["skill_id"],
