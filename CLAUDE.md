@@ -15,6 +15,7 @@ Status: phase 1 (project setup) done; phase 2 (seed personal data) done: Tech ba
 - [docs/DATABASE.md](docs/DATABASE.md): every table, column, and relationship. Read before writing schema, migrations, or queries.
 - [docs/API_ERRORS.md](docs/API_ERRORS.md): error response shape, error codes, transactions, and how the front end handles failures. Read before writing any API endpoint or front end code that calls one.
 - [docs/FRONTEND_CHECKS.md](docs/FRONTEND_CHECKS.md): rules the database doesn't enforce. Read before building anything that adds, suggests, or deletes data.
+- [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md): the script and screenshot list for the README's recorded walkthrough. Update it when a step it shows changes (labels, the draft review, the demo data).
 
 ## Project skills and hooks
 - `/db-table`: add or change a table in docs/DATABASE.md following the conventions below, and update the dependent docs.
