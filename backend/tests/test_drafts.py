@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.claude import get_client
@@ -16,17 +16,26 @@ from app.models import (
     EXPERIENCE_SECTION_ID,
     SUMMARY_SECTION_ID,
     BulletPoint,
+    CoverLetter,
     ExperienceBulletPoint,
     JobPosting,
     NarrativeContent,
     Resume,
+    Section,
     SectionNarrativeContent,
 )
 from app.suggestions import Suggestion
 from tests.test_experience_projects_bullets import bullet, listed, role, show_job
 from tests.test_posting_reader import FakeMessages
 from tests.test_sections_skills import add, error, resume
-from tests.test_suggestions import entry, section, suggested, tailor
+from tests.test_suggestions import (
+    entry,
+    letter_reply,
+    letter_section,
+    section,
+    suggested,
+    tailor,
+)
 
 
 @pytest.fixture
@@ -64,12 +73,31 @@ def started(client: TestClient, db: Session, account_id: int, claude: FakeMessag
     return doc, ids, keys
 
 
-def put_draft(client: TestClient, doc: dict[str, Any], sections: list[dict[str, Any]]):
-    return client.put(f"/api/resumes/{doc['resume_id']}/draft", json={"sections": sections})
+def _url(doc: dict[str, Any]) -> str:
+    return (f"/api/resumes/{doc['resume_id']}" if "resume_id" in doc
+            else f"/api/cover-letters/{doc['letter_id']}")
+
+
+def put_draft(client: TestClient, doc: dict[str, Any], sections: list[dict[str, Any]],
+              **body):
+    return client.put(f"{_url(doc)}/draft", json={"sections": sections, **body})
 
 
 def finish(client: TestClient, doc: dict[str, Any], keep: list[int] = ()):
-    return client.post(f"/api/resumes/{doc['resume_id']}/draft/finish", json={"keep": list(keep)})
+    return client.post(f"{_url(doc)}/draft/finish", json={"keep": list(keep)})
+
+
+def started_letter(client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    """A cover letter started with Claude: a new paragraph of two sentences in a new section,
+    a new sentence in Summary, and a greeting for the hiring manager. Returns the letter and
+    Claude's texts by their wording."""
+    claude.reply = letter_reply(
+        letter_section(0, "why Acme", entry("narrative", None, new_text="Acme ships."),
+                       entry("narrative", None, new_text="I ship too.")),
+        letter_section(SUMMARY_SECTION_ID, "", entry("narrative", None, new_text="I teach.")),
+        addressee="Jordan Rivera", reason="The posting names them.")
+    doc = tailor(client, db, account_id, path="cover-letters").json()
+    return doc, {text["text"]: text["key"] for text in doc["draft"]["texts"]}
 
 
 def test_review_changes_only_the_draft(client: TestClient, db: Session, account_id: int,
@@ -175,3 +203,76 @@ def test_built_from_scratch_starts_empty(client: TestClient, db: Session, accoun
     body = client.post("/api/resumes", json={"name": "Blank", "empty": True}).json()
     assert (body["sections"], body["draft"]) == ([], None)
     assert client.post("/api/resumes", json={"name": "Usual"}).json()["sections"] != []
+
+
+def test_finishing_a_letter_adds_its_new_sections_and_greeting(client: TestClient, db: Session,
+                                                               account_id: int,
+                                                               claude: FakeMessages):
+    doc, keys = started_letter(client, db, account_id, claude)
+    response = finish(client, doc)
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["addressee"] == "Jordan Rivera"
+    why, summary = body["sections"]
+    assert (why["title"], summary["section_id"]) == ("why Acme", SUMMARY_SECTION_ID)
+    assert [e["values"]["content"] for e in why["entries"]] == ["Acme ships.", "I ship too."]
+    db.expire_all()
+    new = db.scalar(select(Section).where(Section.title == "why Acme"))
+    assert (new.id, new.account_id) == (why["section_id"], account_id)
+    # Claude's new sentences are listed under the section Claude made for them.
+    assert [db.get(NarrativeContent, content_id).content for content_id in listed(
+        db, SectionNarrativeContent, "section_id", new.id, "content_id")] == [
+        "Acme ships.", "I ship too."]
+
+
+def test_a_letter_review_can_keep_the_usual_greeting(client: TestClient, db: Session,
+                                                     account_id: int, claude: FakeMessages):
+    doc, keys = started_letter(client, db, account_id, claude)
+    sections = doc["draft"]["sections"]
+    body = put_draft(client, doc, sections, use_default_greeting=True).json()
+    assert body["draft"]["greeting"]["use_default"] is True
+    # Sending the tree alone goes back to Claude's greeting.
+    assert put_draft(client, doc, sections).json()["draft"]["greeting"]["use_default"] is False
+    put_draft(client, doc, sections, use_default_greeting=True)
+    assert finish(client, doc).json()["addressee"] == "Acme Hiring Team"
+
+
+def test_a_rejected_new_section_is_not_added(client: TestClient, db: Session, account_id: int,
+                                            claude: FakeMessages):
+    doc, keys = started_letter(client, db, account_id, claude)
+    _, summary = doc["draft"]["sections"]
+    put_draft(client, doc, [summary])
+    # Its sentence kept for later stands alone, since its section wasn't kept.
+    response = finish(client, doc, [keys["Acme ships."]])
+    assert response.status_code == 200, response.json()
+    db.expire_all()
+    assert db.scalar(select(Section).where(Section.title == "why Acme")) is None
+    kept = db.scalar(select(NarrativeContent).where(NarrativeContent.content == "Acme ships."))
+    assert kept is not None
+    assert db.scalar(select(SectionNarrativeContent).where(
+        SectionNarrativeContent.content_id == kept.content_id)) is None
+
+
+def test_a_new_section_titled_like_a_saved_one_uses_it(client: TestClient, db: Session,
+                                                       account_id: int, claude: FakeMessages):
+    hidden = add(db, Section(account_id=account_id, title="Why ACME", hidden=True))
+    doc, keys = started_letter(client, db, account_id, claude)
+    # Hidden, so Claude wasn't shown it, but titles are unique ignoring capitals.
+    assert doc["draft"]["new_sections"] == [{"key": 1, "title": "why Acme"}]
+    body = finish(client, doc).json()
+    assert body["sections"][0]["section_id"] == hidden.id
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(Section).where(
+        func.lower(Section.title) == "why acme")) == 1
+
+
+def test_a_letter_review_refuses_new_sections_claude_didnt_make(client: TestClient, db: Session,
+                                                               account_id: int,
+                                                               claude: FakeMessages):
+    doc, keys = started_letter(client, db, account_id, claude)
+    why, summary = doc["draft"]["sections"]
+    for sections in ([why | {"new_key": 9}], [why, why | {"entries": []}],
+                     [why | {"new_key": None}]):
+        assert error(put_draft(client, doc, sections)) == (422, "VALIDATION_FAILED", "sections")
+    db.expire_all()
+    assert db.get(CoverLetter, doc["letter_id"]).draft == doc["draft"]

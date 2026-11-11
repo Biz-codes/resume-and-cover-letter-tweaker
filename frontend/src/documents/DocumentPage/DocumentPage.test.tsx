@@ -674,6 +674,61 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it("reviews Claude's greeting in a letter's draft, saved with its tree, with Undo", async () => {
+    const greeting = { addressee: 'Jordan Rivera', reason: 'The posting names the hiring manager.', use_default: false }
+    const talks = { section_id: 12, reason: 'The posting mentions speaking.', entries: [] }
+    const drafted = (useDefault: boolean, sections: object[] = [talks]) => ({
+      ...resume(0),
+      resume_id: undefined,
+      letter_id: 15,
+      name: 'Engineer at Acme',
+      job_posting: { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' },
+      addressee: 'Acme Hiring Team',
+      sign_off_id: null,
+      signature_name: null,
+      output: { parts: [], text: '' },
+      draft: { starting_document: null, starting_reason: 'No earlier letters.', texts: [], sections, greeting: { ...greeting, use_default: useDefault } },
+    })
+    const none = { skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] }
+    const fetchMock = stubApi({
+      'GET /api/cover-letters/15': [{ status: 200, body: drafted(false) }],
+      'GET /api/headers': [{ status: 200, body: [SAM] }],
+      'GET /api/tone-sets': [{ status: 200, body: [] }],
+      'GET /api/sign-offs': [{ status: 200, body: [] }],
+      'GET /api/sections': [{ status: 200, body: [{ id: 12, title: 'Talks', built_in: false, narrative_content: [], ...none }] }],
+      ...Object.fromEntries(
+        ['narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education'].map((path) => [
+          `GET /api/${path}`,
+          [{ status: 200, body: [] }],
+        ]),
+      ),
+      'PUT /api/cover-letters/15/draft': [
+        { status: 200, body: drafted(true) },
+        { status: 200, body: drafted(true, []) },
+        { status: 200, body: drafted(true) },
+      ],
+    })
+    renderAt('/cover-letters/15')
+    // Claude's greeting is part of what there is to review, so it starts open too, in place of
+    // the greeting's field.
+    expect(await screen.findByRole('button', { name: 'Greeting' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByLabelText('Addressed to (after "Dear")')).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Greeting' })).toHaveTextContent('Dear Jordan Rivera,Source: Claude')
+    await screen.findByRole('list', { name: 'Sections' })
+    await expectNoA11yViolations()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rationale for greeting' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use the usual greeting' }))
+    await vi.waitFor(() => expect(screen.getByText('Using the usual greeting.')).toHaveAttribute('aria-live', 'polite'))
+    expect(sentBody(fetchMock, 'PUT /api/cover-letters/15/draft')).toEqual({ sections: [talks], use_default_greeting: true })
+    // A change to the tree keeps the greeting chosen.
+    fireEvent.click(screen.getByRole('button', { name: 'Reject section "Talks"' }))
+    await vi.waitFor(() => expect(sentBody(fetchMock, 'PUT /api/cover-letters/15/draft', 1)).toEqual({ sections: [], use_default_greeting: true }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    await expectNotice('Undid a change. 1 more can be undone.')
+    expect(sentBody(fetchMock, 'PUT /api/cover-letters/15/draft', 2)).toEqual({ sections: [talks], use_default_greeting: true })
+  })
+
   it('says when there is nothing in it yet', async () => {
     stub(14, resume(14, { output: { parts: [], text: '' } }))
     renderAt('/resumes/14')

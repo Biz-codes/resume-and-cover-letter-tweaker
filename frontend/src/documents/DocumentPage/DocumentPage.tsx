@@ -31,7 +31,7 @@ import { toneLabels } from '../../library/items/itemFields'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
-import DraftTree from '../DraftTree/DraftTree'
+import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
 import NameForm from '../../shared/components/NameForm/NameForm'
@@ -258,8 +258,9 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
         if (JSON.stringify(treeShape(current.sections)) !== JSON.stringify(treeShape(target.sections))) {
           next = await api.restoreTree(id, target.sections)
         }
-        if (target.draft && JSON.stringify(current.draft?.sections) !== JSON.stringify(target.draft.sections)) {
-          next = await api.saveDraft(id, target.draft.sections)
+        const draftOf = (one: DocDetail) => ({ sections: one.draft?.sections, usual: one.draft?.greeting?.use_default })
+        if (target.draft && JSON.stringify(draftOf(current)) !== JSON.stringify(draftOf(target))) {
+          next = await api.saveDraft(id, target.draft.sections, target.draft.greeting?.use_default)
         }
         if (direction === 'undo') setStacks(undo.slice(0, -1), [...redo, current])
         else setStacks([...undo, current], redo.slice(0, -1))
@@ -294,8 +295,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     )
   }
 
-  // The draft announces its own changes.
-  const saveDraft = (sections: DraftSection[]) => inTurn(() => docsApi(kind).saveDraft(id, sections), '')
+  // The draft announces its own changes. Each change sends the whole draft: its tree, and for a
+  // letter, whether it keeps its usual greeting.
+  const saveDraft = (sections: DraftSection[]) =>
+    inTurn((current) => docsApi(kind).saveDraft(id, sections, current.draft?.greeting?.use_default), '')
+  const saveGreeting = (useDefault: boolean) =>
+    inTurn((current) => docsApi(kind).saveDraft(id, current.draft?.sections ?? [], useDefault), '')
 
   // Finishing saves to the library, which Undo never takes back, so the history starts again.
   const finishReview = (keep: number[]) =>
@@ -562,13 +567,18 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             {kind === 'cover_letter' && (
               <>
                 <li>
-                  <Disclosure title="Greeting">
-                    <Greeting
-                      key={restored}
-                      doc={doc}
-                      readOnly={readOnly}
-                      onSave={(fields) => update(fields, 'Greeting saved.')}
-                    />
+                  {/* Claude's greeting waits in the draft, which approving saves. */}
+                  <Disclosure title="Greeting" initiallyOpen={Boolean(doc.draft?.greeting && !readOnly)}>
+                    {doc.draft?.greeting && !readOnly ? (
+                      <DraftGreeting greeting={doc.draft.greeting} usual={doc.addressee ?? null} onChange={saveGreeting} />
+                    ) : (
+                      <Greeting
+                        key={restored}
+                        doc={doc}
+                        readOnly={readOnly}
+                        onSave={(fields) => update(fields, 'Greeting saved.')}
+                      />
+                    )}
                   </Disclosure>
                 </li>
                 <li>

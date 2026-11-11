@@ -423,20 +423,25 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         doc = editable(db, doc_id, account_id)
         draft = current_draft(doc)
         check_sections(db, account_id, draft, body.sections)
-        doc.draft = draft.model_copy(update={"sections": body.sections}).model_dump()
+        greeting = draft.greeting and draft.greeting.model_copy(
+            update={"use_default": body.use_default_greeting})
+        doc.draft = draft.model_copy(update={"sections": body.sections,
+                                             "greeting": greeting}).model_dump()
         return changed(db, doc)
 
     @router.post("/{doc_id}/draft/finish")
     def finish_review(doc_id: int, body: FinishIn, db: DbSession, account_id: AccountId):
         """Save the reviewed draft: Claude's texts the user kept become new library rows
         (with any it didn't use that the user keeps for later), and the tree is placed with
-        them, in this document only. The draft is cleared, and the document is based on the
-        one Claude started from."""
+        them, in this document only, and a letter gets the greeting the user kept. The draft is
+        cleared, and the document is based on the one Claude started from."""
         doc = editable(db, doc_id, account_id)
         draft = current_draft(doc)
         sections = RestoredTree.model_validate({"sections": finish(db, account_id, draft,
                                                                    body.keep)}).sections
         restore(db, kind, doc_id, sections, account_id)
+        if draft.greeting is not None and not draft.greeting.use_default:
+            doc.addressee = draft.greeting.addressee
         start = draft.starting_document
         if start is not None and db.scalar(select(func.count()).select_from(kind.doc).where(
                 getattr(kind.doc, kind.doc_id) == start.id, kind.doc.account_id == account_id)):

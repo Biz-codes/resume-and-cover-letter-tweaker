@@ -12,6 +12,10 @@
 // Each change saves the draft only (backend/app/drafts.py) and is announced here; Undo and Redo
 // on the page cover them. "Approve first draft" first asks which of Claude's texts the draft
 // doesn't use to keep in the library for later.
+//
+// A cover letter's draft can have new sections Claude titled for its new paragraphs (badged
+// "Claude", and added to the library only if they're kept), and the greeting Claude suggests,
+// which DraftGreeting shows in the letter's Greeting level.
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { shortBullet } from '../../shared/api/bullets'
@@ -25,6 +29,7 @@ import {
   type Draft,
   type DraftBullet,
   type DraftEntry,
+  type DraftGreeting as Greeting,
   type DraftSection,
   type TreeSection,
 } from '../../shared/api/documents'
@@ -86,6 +91,13 @@ function Badge({ source }: { source: Source }) {
   )
 }
 
+// What the switch in a rationale says: its label for the other wording and its button.
+interface Words {
+  original: string
+  useOriginal: string
+  useClaude: string
+}
+
 // Claude's reason, then for a rewording, the wording not in use and a button to switch to it.
 // One button whose text changes, so it keeps focus.
 function Rationale({
@@ -95,18 +107,23 @@ function Rationale({
   original,
   useOriginal,
   onSwitch,
+  words,
 }: {
   // The row's name and where it is, for the toggle and the button.
   name: string
   reason?: string
-  claude?: ClaudeText
+  claude?: Pick<ClaudeText, 'text'>
   // The saved item's own wording, when Claude reworded one.
   original?: string
   useOriginal?: boolean
   onSwitch?: (useOriginal: boolean) => void
+  // In place of a rewording's: the button names say what they switch on their own.
+  words?: Words
 }) {
   const reworded = claude !== undefined && original !== undefined && onSwitch !== undefined
   if (!reason && !reworded) return null
+  const useOriginalName = words?.useOriginal ?? `Use the original wording of ${name}`
+  const useClaudeName = words?.useClaude ?? `Use Claude's wording of ${name}`
   return (
     <Disclosure
       title={
@@ -118,14 +135,14 @@ function Rationale({
       {reason && <p>{reason}</p>}
       {reworded && (
         <>
-          <p className={styles.label}>{useOriginal ? "Claude's suggestion" : 'Original'}</p>
+          <p className={styles.label}>{useOriginal ? "Claude's suggestion" : (words?.original ?? 'Original')}</p>
           <p>{useOriginal ? claude.text : original}</p>
           <button
             type="button"
-            aria-label={useOriginal ? `Use Claude's wording of ${name}` : `Use the original wording of ${name}`}
+            aria-label={words ? undefined : useOriginal ? useClaudeName : useOriginalName}
             onClick={() => onSwitch(!useOriginal)}
           >
-            {useOriginal ? "Use Claude's wording" : 'Use the original'}
+            {words ? (useOriginal ? useClaudeName : useOriginalName) : useOriginal ? "Use Claude's wording" : 'Use the original'}
           </button>
         </>
       )}
@@ -145,7 +162,8 @@ function Row({
   name: ReactNode
   // Its name and where it is, for the Reject button.
   label: string
-  source: Source
+  // Absent for what's neither Claude's nor the library's (a letter's usual greeting).
+  source?: Source
   // Absent for what was already in the starting document, and for a rewording, which goes back
   // to the original instead.
   onReject?: () => void
@@ -155,7 +173,7 @@ function Row({
     <li>
       <div className={styles.row}>
         <span>{name}</span>
-        <Badge source={source} />
+        {source && <Badge source={source} />}
         {onReject && (
           <button type="button" aria-label={`Reject ${label}`} onClick={onReject}>
             Reject
@@ -236,7 +254,12 @@ export default function DraftTree({
   }
   if (!library || !start) return <p>Loading your library…</p>
 
-  const titleOf = (sectionId: number) => library.sections.find((section) => section.id === sectionId)?.title ?? ''
+  // Claude's new sections have no id until they're kept, so they're told apart by key.
+  const sectionKey = (section: DraftSection) => section.section_id ?? `new-${section.new_key}`
+  const titleOf = (section: DraftSection) =>
+    (section.section_id === null
+      ? draft.new_sections?.find((row) => row.key === section.new_key)?.title
+      : library.sections.find((row) => row.id === section.section_id)?.title) ?? ''
   const savedName = (entryKind: DraftEntry['kind'], itemId: number | null) =>
     itemId === null ? '' : (savedItems(library, entryKind).find((item) => item.id === itemId)?.name ?? '')
   const bulletText = (id: number | null) => library.bullets.find((bullet) => bullet.bullet_id === id)?.content ?? ''
@@ -269,7 +292,7 @@ export default function DraftTree({
     if (skillIds.length === 0) return null
     const id = listId(`skills-${entry.kind}-${entry.item_id}`)
     // Once the last one is rejected, the list is gone, so focus goes to the section's items.
-    const after = skillIds.length > 1 ? id : listId(`section-${section.section_id}`)
+    const after = skillIds.length > 1 ? id : listId(`section-${sectionKey(section)}`)
     return (
       <ul id={id} tabIndex={-1} aria-label={`Skills under ${name} ${where}`} className={styles.children}>
         {skillIds.map((skillId) => {
@@ -304,7 +327,7 @@ export default function DraftTree({
     const bullets = entry.bullets ?? []
     if (bullets.length === 0) return null
     const id = listId(`bullets-${entry.kind}-${entry.item_id}`)
-    const after = bullets.length > 1 ? id : listId(`section-${section.section_id}`)
+    const after = bullets.length > 1 ? id : listId(`section-${sectionKey(section)}`)
     const withBullets = (next: DraftBullet[]) =>
       withSection(section, {
         ...section,
@@ -354,7 +377,7 @@ export default function DraftTree({
 
   function renderEntries(section: DraftSection, title: string) {
     const where = `in ${title}`
-    const id = listId(`section-${section.section_id}`)
+    const id = listId(`section-${sectionKey(section)}`)
     if (section.entries.length === 0) return <p className="muted">Nothing here.</p>
     const after = section.entries.length > 1 ? id : listId('sections')
     return (
@@ -462,14 +485,15 @@ export default function DraftTree({
       ) : (
         <ul id={sectionsId} tabIndex={-1} aria-label="Sections" className={styles.sections}>
           {draft.sections.map((section) => {
-            const title = titleOf(section.section_id)
-            const inStart = start.sections.has(section.section_id)
+            const title = titleOf(section)
+            const isNew = section.section_id === null
+            const inStart = !isNew && start.sections.has(section.section_id!)
             return (
               <Row
-                key={section.section_id}
+                key={sectionKey(section)}
                 name={<strong>{title}</strong>}
                 label={`section "${title}"`}
-                source={inStart ? 'original' : 'library'}
+                source={isNew ? 'claude' : inStart ? 'original' : 'library'}
                 onReject={
                   inStart
                     ? undefined
@@ -532,6 +556,61 @@ export default function DraftTree({
           </form>
         </Dialog>
       )}
+    </>
+  )
+}
+
+// The greeting Claude suggests for a cover letter, in the letter's Greeting level while there's a
+// draft, with Claude's reason and a switch to the letter's usual greeting (and back). Approving
+// the draft saves the one in use.
+export function DraftGreeting({
+  greeting,
+  usual,
+  onChange,
+}: {
+  greeting: Greeting
+  // The letter's own addressee, which it keeps without Claude's.
+  usual: string | null
+  // Saves whether the draft uses the usual greeting.
+  onChange: (useDefault: boolean) => Promise<void>
+}) {
+  const [announcement, setAnnouncement] = useState('')
+  const [error, setError] = useState<ApiError | null>(null)
+  const said = (addressee: string | null) => (addressee ? `Dear ${addressee},` : 'No greeting.')
+
+  async function choose(useDefault: boolean) {
+    setError(null)
+    try {
+      await onChange(useDefault)
+      setAnnouncement(useDefault ? 'Using the usual greeting.' : "Using Claude's greeting.")
+    } catch (caught) {
+      setError(toApiError(caught))
+    }
+  }
+
+  return (
+    <>
+      <ul aria-label="Greeting" className={styles.sections}>
+        <Row
+          name={said(greeting.use_default ? usual : greeting.addressee)}
+          label="greeting"
+          source={greeting.use_default ? undefined : 'claude'}
+        >
+          <Rationale
+            name="greeting"
+            reason={greeting.reason}
+            claude={{ text: said(greeting.addressee) }}
+            original={said(usual)}
+            useOriginal={greeting.use_default}
+            onSwitch={(useDefault) => void choose(useDefault)}
+            words={{ original: 'Usual greeting', useOriginal: 'Use the usual greeting', useClaude: "Use Claude's greeting" }}
+          />
+        </Row>
+      </ul>
+      {error && <p role="alert">{error.message}</p>}
+      <p aria-live="polite" className="visually-hidden">
+        {announcement}
+      </p>
     </>
   )
 }

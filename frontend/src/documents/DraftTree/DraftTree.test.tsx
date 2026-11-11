@@ -2,10 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import type { Draft, DraftSection, TreeSection } from '../../shared/api/documents'
+import type { Draft, DraftGreeting as Greeting, DraftSection, TreeSection } from '../../shared/api/documents'
 import { expectNoA11yViolations } from '../../test/axe'
 import { errorBody, stubApi } from '../../test/stubApi'
-import DraftTree from './DraftTree'
+import DraftTree, { DraftGreeting } from './DraftTree'
 
 const empty = { skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] }
 const SECTIONS = [
@@ -348,5 +348,91 @@ describe('DraftTree', () => {
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await rows('Sections')).toEqual(['SummarySource: Original', 'ExperienceSource: Original', 'TalksSource: LibraryReject'])
+  })
+
+  it("marks a section Claude titled for a new paragraph as Claude's, and rejects it", async () => {
+    stubLibrary()
+    const draft: Draft = {
+      ...DRAFT,
+      texts: [...DRAFT.texts, { key: 4, kind: 'narrative', text: 'Acme ships every week.', replaces: null }],
+      new_sections: [{ key: 1, title: 'why Acme' }],
+      sections: [
+        ...DRAFT.sections,
+        {
+          section_id: null,
+          new_key: 1,
+          reason: 'The posting says what Acme values.',
+          entries: [{ kind: 'narrative', item_id: null, text_key: 4, reason: 'From the posting.' }],
+        },
+      ],
+    }
+    const { onChange } = renderDraft(draft)
+    expect(await rows('Sections')).toEqual([
+      'SummarySource: Original',
+      'ExperienceSource: Original',
+      'TalksSource: LibraryReject',
+      'why AcmeSource: ClaudeReject',
+    ])
+    expect(await rows('Items in why Acme')).toEqual(['Text: Acme ships every week.Source: ClaudeReject'])
+    openRationale('section "why Acme"')
+    expect(screen.getByText('The posting says what Acme values.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Reject section "why Acme"' }))
+    await vi.waitFor(() => expect(announced()).toBe('Rejected section "why Acme".'))
+    expect(sent(onChange)).toEqual(DRAFT.sections)
+    await vi.waitFor(() => expect(screen.getByRole('list', { name: 'Sections' })).toHaveFocus())
+  })
+})
+
+const GREETING: Greeting = { addressee: 'Jordan Rivera', reason: 'The posting names the hiring manager.', use_default: false }
+
+describe('DraftGreeting', () => {
+  function renderGreeting(greeting: Greeting = GREETING, usual: string | null = 'Acme Hiring Team') {
+    const onChange = vi.fn((_useDefault: boolean) => Promise.resolve())
+    const view = render(<DraftGreeting greeting={greeting} usual={usual} onChange={onChange} />)
+    const rerender = (next: Greeting) => view.rerender(<DraftGreeting greeting={next} usual={usual} onChange={onChange} />)
+    return { onChange, rerender }
+  }
+
+  it("shows Claude's greeting with its reason, and switches to the usual one and back", async () => {
+    const { onChange, rerender } = renderGreeting()
+    expect(await rows('Greeting')).toEqual(['Dear Jordan Rivera,Source: Claude'])
+    openRationale('greeting')
+    expect(screen.getByText('The posting names the hiring manager.')).toBeInTheDocument()
+    expect(screen.getByText('Usual greeting')).toBeInTheDocument()
+    expect(screen.getByText('Dear Acme Hiring Team,')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    const button = screen.getByRole('button', { name: 'Use the usual greeting' })
+    button.focus()
+    fireEvent.click(button)
+    expect(onChange).toHaveBeenCalledWith(true)
+    await vi.waitFor(() => expect(announced()).toBe('Using the usual greeting.'))
+
+    // Saved, the usual one shows with no badge, and the same button offers Claude's back.
+    rerender({ ...GREETING, use_default: true })
+    expect(await rows('Greeting')).toEqual(['Dear Acme Hiring Team,'])
+    expect(screen.getByText("Claude's suggestion")).toBeInTheDocument()
+    expect(screen.getByText('Dear Jordan Rivera,')).toBeInTheDocument()
+    const back = screen.getByRole('button', { name: "Use Claude's greeting" })
+    expect(back).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.click(back)
+    expect(onChange).toHaveBeenLastCalledWith(false)
+    await vi.waitFor(() => expect(announced()).toBe("Using Claude's greeting."))
+  })
+
+  it('says when the letter has no usual greeting', async () => {
+    renderGreeting({ ...GREETING, use_default: true }, null)
+    expect(await rows('Greeting')).toEqual(['No greeting.'])
+  })
+
+  it('shows a change that fails, and says nothing', async () => {
+    const { onChange } = renderGreeting()
+    onChange.mockRejectedValueOnce(new ApiError('VALIDATION_FAILED', 'Something moved.', 'sections', 422))
+    openRationale('greeting')
+    fireEvent.click(screen.getByRole('button', { name: 'Use the usual greeting' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something moved.')
+    expect(announced()).toBe('')
+    await expectNoA11yViolations()
   })
 })

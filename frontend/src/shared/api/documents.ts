@@ -103,7 +103,10 @@ export interface DraftEntry {
 }
 
 export interface DraftSection {
-  section_id: number
+  // Null for a new section Claude titled for a cover letter's new paragraph (`new_key`, a key in
+  // Draft.new_sections).
+  section_id: number | null
+  new_key?: number | null
   reason?: string
   entries: DraftEntry[]
 }
@@ -116,12 +119,22 @@ export interface ClaudeText {
   replaces: number | null
 }
 
+// The greeting Claude suggests for a cover letter (everything after "Dear"), and whether the
+// user keeps the letter's usual one instead.
+export interface DraftGreeting {
+  addressee: string
+  reason: string
+  use_default: boolean
+}
+
 export interface Draft {
   // The earlier one Claude started from, or null for none.
   starting_document: { id: number; name: string } | null
   starting_reason: string
   texts: ClaudeText[]
   sections: DraftSection[]
+  new_sections?: { key: number; title: string }[]
+  greeting?: DraftGreeting | null
 }
 
 // The keys of Claude's texts the draft uses (not gone back to the original). The rest can be kept
@@ -246,8 +259,10 @@ export function docsApi(kind: DocKind) {
           start_from_id: startFromId,
         }),
       ),
-    // The first pass over Claude's draft, as its whole tree. Only the draft changes.
-    saveDraft: (id: number, sections: DraftSection[]) => one(api.put<Raw>(`${path}/${id}/draft`, { sections })),
+    // The first pass over Claude's draft, as its whole tree, and for a letter whether it keeps
+    // its usual greeting instead of Claude's. Only the draft changes.
+    saveDraft: (id: number, sections: DraftSection[], useDefaultGreeting = false) =>
+      one(api.put<Raw>(`${path}/${id}/draft`, { sections, use_default_greeting: useDefaultGreeting })),
     // Saves the reviewed draft: Claude's kept wordings become new library rows used here, and `keep`
     // (keys of Claude's texts the draft doesn't use) are kept in the library for later.
     finishReview: (id: number, keep: number[]) => one(api.post<Raw>(`${path}/${id}/draft/finish`, { keep })),

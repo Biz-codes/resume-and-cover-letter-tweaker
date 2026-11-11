@@ -30,7 +30,14 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
-from app.suggestions import SuggestedBullet, SuggestedEntry, SuggestedSection, Suggestion
+from app.suggestions import (
+    LetterSection,
+    LetterSuggestion,
+    SuggestedBullet,
+    SuggestedEntry,
+    SuggestedSection,
+    Suggestion,
+)
 from tests.test_documents import header, posting
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_posting_reader import FakeMessages
@@ -61,10 +68,11 @@ def suggested(bullet_id: int | None, new_text: str | None = None) -> SuggestedBu
 
 
 def tailor(client: TestClient, db: Session, account_id: int, *, sent: bool = False,
-           path: str = "resumes", **body):
+           path: str = "resumes", contacts: str | None = None, **body):
     """Start a posting's resume (or cover letter) with Claude."""
     job = posting(db, account_id, sent)
     job.header_id = header(db, account_id).header_id
+    job.contacts = contacts
     db.flush()
     return client.post(f"/api/{path}/tailored", json={
         "name": "Engineer at Acme", "job_posting_id": job.job_posting_id, **body})
@@ -95,7 +103,7 @@ def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: 
         id=earlier.resume_id, name="Tech base")).model_dump()
     assert body["draft"]["texts"] == [{
         "key": 1, "kind": "bullet", "text": "Tested it in React.", "replaces": tested,
-        "section_id": EXPERIENCE_SECTION_ID, "parent_kind": "experience",
+        "section_id": EXPERIENCE_SECTION_ID, "section_key": None, "parent_kind": "experience",
         "parent_id": job.experience_id}]
     db.expire_all()
     assert db.get(Resume, body["resume_id"]).draft == body["draft"]
@@ -293,6 +301,76 @@ def test_a_cover_letter_is_tailored_as_a_letter(client: TestClient, db: Session,
     [request] = claude.calls
     assert "each paragraph is its own section" in request["system"][0]["text"]
     assert request["messages"][0]["content"].startswith("Tailor a new cover letter")
+
+
+def letter_reply(*sections: LetterSection, addressee: str = "",
+                 reason: str = "") -> LetterSuggestion:
+    return LetterSuggestion(starting_document_id=None, starting_reason="None.",
+                            sections=list(sections), addressee=addressee,
+                            addressee_reason=reason)
+
+
+def letter_section(section_id: int, new_title: str, *entries: SuggestedEntry) -> LetterSection:
+    return LetterSection(section_id=section_id, new_title=new_title, reason="Fits.",
+                         entries=list(entries))
+
+
+def test_a_letter_gets_new_paragraphs_and_a_greeting(client: TestClient, db: Session,
+                                                     account_id: int, claude: FakeMessages):
+    claude.reply = letter_reply(
+        # New sections, one with spacing to tidy, and one titled like a library section.
+        letter_section(0, " why  Acme ", entry("narrative", None, new_text="Acme ships."),
+                       entry("narrative", None, new_text="I ship too.")),
+        letter_section(0, "summary", entry("narrative", None, new_text="I build tools.")),
+        # The same new title twice, one too long for the database, and an empty one.
+        letter_section(0, "Why acme"),
+        letter_section(0, "x" * 101),
+        letter_section(0, ""),
+        addressee=" Jordan  Rivera ", reason="The posting names the hiring manager.")
+    response = tailor(client, db, account_id, path="cover-letters",
+                      contacts="Hiring manager: Jordan Rivera")
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    # The greeting waits in the draft; the letter keeps its usual one until it's approved.
+    assert body["addressee"] == "Acme Hiring Team"
+    draft = body["draft"]
+    assert draft["greeting"] == {"addressee": "Jordan Rivera",
+                                 "reason": "The posting names the hiring manager.",
+                                 "use_default": False}
+    assert draft["new_sections"] == [{"key": 1, "title": "why Acme"}]
+    assert [(s["section_id"], s["new_key"]) for s in draft["sections"]] == [
+        (None, 1), (SUMMARY_SECTION_ID, None)]
+    assert [(t["text"], t["section_id"], t["section_key"]) for t in draft["texts"]] == [
+        ("Acme ships.", None, 1), ("I ship too.", None, 1),
+        ("I build tools.", SUMMARY_SECTION_ID, None)]
+
+    [request] = claude.calls
+    assert request["output_format"] is LetterSuggestion
+    assert "one sentence per item" in request["system"][0]["text"]
+    assert "Keep it rare" not in request["system"][0]["text"]
+    assert "<contacts>\nHiring manager: Jordan Rivera\n</contacts>" in request["messages"][0][
+        "content"]
+
+
+def test_a_letter_keeps_its_usual_greeting_without_a_new_one(client: TestClient, db: Session,
+                                                             account_id: int,
+                                                             claude: FakeMessages):
+    for addressee in ("", "acme hiring team", "x" * 101):
+        claude.reply = letter_reply(addressee=addressee, reason="?")
+        body = tailor(client, db, account_id, path="cover-letters").json()
+        assert body["draft"]["greeting"] is None
+        client.delete(f"/api/cover-letters/{body['letter_id']}")
+    # No contacts, no <contacts>.
+    assert "<contacts>" not in claude.calls[0]["messages"][0]["content"]
+
+
+def test_a_resume_has_no_new_sections(client: TestClient, db: Session, account_id: int,
+                                      claude: FakeMessages):
+    # A resume's reply has no titles, so a section id of 0 isn't a library section.
+    claude.reply = Suggestion(starting_document_id=None, starting_reason="None.", sections=[
+        section(0, entry("narrative", None, new_text="I build tools."))])
+    draft = tailor(client, db, account_id).json()["draft"]
+    assert (draft["sections"], draft["new_sections"], draft["greeting"]) == ([], [], None)
 
 
 def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Session,

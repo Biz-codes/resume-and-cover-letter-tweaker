@@ -8,17 +8,23 @@ draft's tree: removing, reordering, adding what the library lists there, and goi
 item's original wording. Each change is checked (check_sections) and saved in the draft, so
 nothing reaches the document or the library until the review is finished.
 
+A cover letter's draft can also hold new sections Claude titled for its new paragraphs (each
+once in `new_sections`, pointed to by key) and the greeting Claude suggests, which the user keeps
+or swaps for the letter's usual one.
+
 Finishing (finish) saves each of Claude's texts the user kept as a new library row, listed right
 after the original (or, for new text, under the section, role, or project Claude put it in), and
 the tree with those rows in place of the originals, used in this document only. Any of Claude's
-texts the user didn't use is kept in the library the same way only if the user asks.
+texts the user didn't use is kept in the library the same way only if the user asks. Claude's
+new sections the draft still has are added to the library first (or the saved one with the same
+title is used).
 """
 
 from typing import Any, Literal
 
 import anthropic
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.documents import EntryKind, Kind
@@ -29,6 +35,7 @@ from app.models import (
     ExperienceBulletPoint,
     NarrativeContent,
     ProjectBulletPoint,
+    Section,
     SectionBulletPoint,
     SectionNarrativeContent,
 )
@@ -36,6 +43,8 @@ from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
 from app.routers.narrative_content import NarrativeIn
 from app.suggestions import (
+    LetterSection,
+    LetterSuggestion,
     SuggestedBullet,
     SuggestedEntry,
     SuggestedSection,
@@ -70,7 +79,9 @@ class DraftEntry(BaseModel):
 
 
 class DraftSection(BaseModel):
-    section_id: int
+    # None for a new section Claude titled (new_key, a key in Draft.new_sections).
+    section_id: int | None
+    new_key: int | None = None
     reason: str = ""
     entries: list[DraftEntry] = []
 
@@ -83,10 +94,28 @@ class ClaudeText(BaseModel):
     text: str
     # The item it rewords, or None for new text.
     replaces: int | None
-    # Where Claude placed it: its section, and for a bullet under a role or project, that item.
-    section_id: int
+    # Where Claude placed it: its section (or the key of Claude's new section), and for a bullet
+    # under a role or project, that item.
+    section_id: int | None
+    section_key: int | None = None
     parent_kind: Literal["experience", "project"] | None = None
     parent_id: int | None = None
+
+
+class ClaudeSection(BaseModel):
+    """A new section Claude titled for a cover letter's new paragraph."""
+
+    key: int
+    title: str
+
+
+class DraftGreeting(BaseModel):
+    """The greeting Claude suggests for a cover letter (its addressee), and whether the user
+    keeps the letter's usual one instead."""
+
+    addressee: str
+    reason: str
+    use_default: bool = False
 
 
 class StartingDocument(BaseModel):
@@ -99,10 +128,14 @@ class Draft(BaseModel):
     starting_reason: str
     texts: list[ClaudeText]
     sections: list[DraftSection]
+    new_sections: list[ClaudeSection] = []
+    greeting: DraftGreeting | None = None
 
 
 class DraftSections(BaseModel):
     sections: list[DraftSection]
+    # The letter's usual greeting instead of Claude's (ignored without one).
+    use_default_greeting: bool = False
 
 
 class FinishIn(BaseModel):
@@ -110,33 +143,51 @@ class FinishIn(BaseModel):
     keep: list[int] = []
 
 
-def to_draft(suggestion: Suggestion, starting: StartingDocument | None) -> Draft:
-    """The checked suggestion as a draft, with each of Claude's texts kept once by key."""
+def to_draft(suggestion: Suggestion, starting: StartingDocument | None,
+             addressee: str | None = None) -> Draft:
+    """The checked suggestion as a draft, with each of Claude's texts and new sections kept
+    once by key. `addressee` is the letter's own greeting, which Claude's replaces only when
+    it differs."""
     texts: list[ClaudeText] = []
+    new_sections: list[ClaudeSection] = []
 
     def keep(kind: Literal["narrative", "bullet"], text: str | None, replaces: int | None,
-             section_id: int, parent: SuggestedEntry | None = None) -> int | None:
+             place: DraftSection, parent: SuggestedEntry | None = None) -> int | None:
         if text is None:
             return None
         texts.append(ClaudeText(
-            key=len(texts) + 1, kind=kind, text=text, replaces=replaces, section_id=section_id,
+            key=len(texts) + 1, kind=kind, text=text, replaces=replaces,
+            section_id=place.section_id, section_key=place.new_key,
             parent_kind=parent.kind if parent else None,
             parent_id=parent.item_id if parent else None))
         return len(texts)
 
-    sections = [DraftSection(section_id=section.section_id, reason=section.reason, entries=[
-        DraftEntry(
+    sections: list[DraftSection] = []
+    for section in suggestion.sections:
+        place = DraftSection(section_id=section.section_id, reason=section.reason)
+        if isinstance(section, LetterSection) and section.section_id == 0:
+            new_sections.append(ClaudeSection(key=len(new_sections) + 1,
+                                              title=section.new_title))
+            place = DraftSection(section_id=None, new_key=len(new_sections),
+                                 reason=section.reason)
+        place.entries = [DraftEntry(
             kind=entry.kind, item_id=entry.item_id, reason=entry.reason,
-            text_key=(keep(entry.kind, entry.new_text, entry.item_id, section.section_id)
+            text_key=(keep(entry.kind, entry.new_text, entry.item_id, place)
                       if entry.kind in ("narrative", "bullet") else None),
             skill_ids=entry.skill_ids,
             bullets=[DraftBullet(bullet_id=bullet.bullet_id, reason=bullet.reason,
                                  text_key=keep("bullet", bullet.new_text, bullet.bullet_id,
-                                               section.section_id, entry))
+                                               place, entry))
                      for bullet in entry.bullets])
-        for entry in section.entries]) for section in suggestion.sections]
+            for entry in section.entries]
+        sections.append(place)
+    greeting = None
+    if (isinstance(suggestion, LetterSuggestion) and suggestion.addressee
+            and suggestion.addressee.lower() != (addressee or "").strip().lower()):
+        greeting = DraftGreeting(addressee=suggestion.addressee,
+                                 reason=suggestion.addressee_reason)
     return Draft(starting_document=starting, starting_reason=suggestion.starting_reason,
-                 texts=texts, sections=sections)
+                 texts=texts, sections=sections, new_sections=new_sections, greeting=greeting)
 
 
 def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
@@ -152,7 +203,7 @@ def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id
         name = db.scalar(select(shown_name(kind.doc)).where(
             pk == suggestion.starting_document_id))
         starting = StartingDocument(id=suggestion.starting_document_id, name=name)
-    doc.draft = to_draft(suggestion, starting).model_dump()
+    doc.draft = to_draft(suggestion, starting, getattr(doc, "addressee", None)).model_dump()
     db.flush()
 
 
@@ -171,10 +222,21 @@ def check_sections(db: Session, account_id: int, draft: Draft,
     """Refuse a reviewed tree that Claude's suggestion couldn't have held: an id that isn't the
     account's own or is hidden, a skill or bullet its item doesn't list, a bullet twice in a
     section (as in suggestions.usable), or Claude's text anywhere but where Claude put it, and
-    each piece of it once. The user's own changes come from what the library lists, so only a
-    library changed since the page read it gets here."""
+    each piece of it once, and Claude's new sections once each. The user's own changes come
+    from what the library lists, so only a library changed since the page read it gets here."""
     texts = {text.key: text for text in draft.texts}
     used: set[int] = set()
+    titles = {new.key: new.title for new in draft.new_sections}
+    used_sections: set[int] = set()
+
+    def section_of(section: DraftSection, entries: list[SuggestedEntry]) -> SuggestedSection:
+        if section.section_id is not None:
+            return SuggestedSection(section_id=section.section_id, reason="", entries=entries)
+        if section.new_key not in titles or section.new_key in used_sections:
+            raise _refuse("Claude's new sections can each be in the draft once.")
+        used_sections.add(section.new_key)
+        return LetterSection(section_id=0, new_title=titles[section.new_key], reason="",
+                             entries=entries)
 
     def text_of(key: int | None, kind: str, item_id: int | None, use_original: bool) -> str | None:
         if key is None:
@@ -188,7 +250,7 @@ def check_sections(db: Session, account_id: int, draft: Draft,
         return text.text
 
     suggestion = Suggestion(starting_document_id=None, starting_reason="", sections=[
-        SuggestedSection(section_id=section.section_id, reason="", entries=[
+        section_of(section, [
             SuggestedEntry(
                 kind=entry.kind, item_id=entry.item_id, reason="", skill_ids=entry.skill_ids,
                 new_text=(text_of(entry.text_key, entry.kind, entry.item_id, entry.use_original)
@@ -220,9 +282,12 @@ def in_use(sections: list[DraftSection]) -> set[int]:
     return keys
 
 
-def _save_text(db: Session, account_id: int, text: ClaudeText) -> int:
+def _save_text(db: Session, account_id: int, text: ClaudeText,
+               new_sections: dict[int, int]) -> int:
     """A new library row with Claude's text: right after the original wherever it's listed, or
-    for new text, listed under the role, project, or section Claude put it in."""
+    for new text, listed under the role, project, or section Claude put it in (`new_sections`:
+    the ids Claude's new sections were saved as, by key). New text in a new section the user
+    rejected stands alone."""
     if text.kind == "bullet":
         if text.replaces is not None:
             original = db.get(BulletPoint, text.replaces)
@@ -248,9 +313,33 @@ def _save_text(db: Session, account_id: int, text: ClaudeText) -> int:
     row = NarrativeContent(account_id=account_id, content=text.text)
     db.add(row)
     db.flush()
-    append(db, SectionNarrativeContent, "section_id", text.section_id, "content_id",
-           row.content_id)
+    section_id = (text.section_id if text.section_key is None
+                  else new_sections.get(text.section_key))
+    if section_id is not None:
+        append(db, SectionNarrativeContent, "section_id", section_id, "content_id",
+               row.content_id)
     return row.content_id
+
+
+def _save_sections(db: Session, account_id: int, draft: Draft) -> dict[int, int]:
+    """Claude's new sections the draft still has, added to the library (or the saved one with
+    the same title, hidden ones too, since titles are unique ignoring capitals), by key."""
+    titles = {new.key: new.title for new in draft.new_sections}
+    saved: dict[int, int] = {}
+    for section in draft.sections:
+        if section.new_key is None:
+            continue
+        title = titles[section.new_key]
+        section_id = db.scalar(select(Section.id).where(
+            func.lower(Section.title) == title.lower(),
+            or_(Section.account_id == account_id, Section.account_id.is_(None))).limit(1))
+        if section_id is None:
+            row = Section(account_id=account_id, title=title)
+            db.add(row)
+            db.flush()
+            section_id = row.id
+        saved[section.new_key] = section_id
+    return saved
 
 
 def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[dict[str, Any]]:
@@ -263,13 +352,15 @@ def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[
     if not set(keep) <= unused:
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Only Claude's text you didn't use can be kept for later.", field="keep")
-    saved = {text.key: _save_text(db, account_id, text)
+    new_sections = _save_sections(db, account_id, draft)
+    saved = {text.key: _save_text(db, account_id, text, new_sections)
              for text in draft.texts if text.key in used or text.key in keep}
 
     def placed_id(item_id: int | None, key: int | None, use_original: bool) -> int:
         return saved[key] if key is not None and not use_original else item_id
 
-    return [{"section_id": section.section_id, "entries": [
+    return [{"section_id": (section.section_id if section.new_key is None
+                            else new_sections[section.new_key]), "entries": [
         {"kind": entry.kind,
          "item_id": placed_id(entry.item_id, entry.text_key, entry.use_original),
          "skill_ids": entry.skill_ids,
