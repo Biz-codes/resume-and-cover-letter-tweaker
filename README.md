@@ -2,7 +2,7 @@
 
 [![Checks](https://github.com/Biz-codes/resume-and-cover-letter-tweaker/actions/workflows/checks.yml/badge.svg)](https://github.com/Biz-codes/resume-and-cover-letter-tweaker/actions/workflows/checks.yml)
 
-A web app that tailors your resume and cover letter to each job posting, using content you've already written and suggestions from Claude, and saves every version so you never start over. Tailoring in an AI chat loses each version in an old conversation; here each new application builds on the best earlier one.
+A web app that tailors your resume and cover letter to each job posting, using a library of content you've already written and suggestions from Claude based on keyword matching and writing rules. Tailoring in an AI chat or in a word processor makes it tedious and time consuming to track down content you have written for past applications; here you can easily access that material, catalogued by similar purpose (ex. all versions of bullet points for a particular job) or complete document, making your application process more efficient.
 
 ## Walkthrough
 <!-- Video: replace this comment with the link to the recorded walkthrough (docs/WALKTHROUGH.md has the script). -->
