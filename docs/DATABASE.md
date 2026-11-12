@@ -361,7 +361,7 @@ Note: editing an entry follows the same rules as every library item: resumes and
 | created_at      | TIMESTAMP         | DEFAULT NOW()                                             | date/time writing rule added to db                 |
 | updated_at      | TIMESTAMP         | DEFAULT NOW()                                             | date/time writing rule last updated                |
 
-Note: the banned filler and AI-speak list from [WRITING_RULES.md](WRITING_RULES.md). Every rule applies to every resume and cover letter in the account. `kind` uses a Postgres enum type, `writing_rule_kind`, with the values `term` and `pattern`. A `term` (e.g. "leverage", "proven track record") is found by exact text match in code; a `pattern` (e.g. "lists of three used for rhythm") is a description Claude checks for. Exceptions for technical terms and proper nouns are Claude's judgment, as described in WRITING_RULES.md.
+Note: the banned filler and AI-speak list from [WRITING_RULES.md](WRITING_RULES.md). Every rule applies to every resume and cover letter in the account. `kind` uses a Postgres enum type, `writing_rule_kind`, with the values `term` and `pattern`. A `term` (e.g. "leverage", "proven track record") is found in code (whole words, ignoring capitals, with a single word's usual endings); a `pattern` (e.g. "lists of three used for rhythm") is a description Claude checks for. Exceptions for technical terms and proper nouns are Claude's judgment, as described in WRITING_RULES.md.
 
 Note: each account is seeded with the starting list in WRITING_RULES.md. Setting `active` to false switches a rule off without deleting it.
 

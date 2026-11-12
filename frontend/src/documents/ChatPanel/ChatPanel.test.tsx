@@ -258,4 +258,24 @@ describe('ChatPanel', () => {
     renderPanel({ proposals: (message) => <p>{message.proposals?.length} cards</p> })
     expect(await screen.findByText('1 cards')).toBeInTheDocument()
   })
+
+  it('lists what is waiting above the message box, from the whole conversation', async () => {
+    stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL]), asked(3, 'And skills?'), answered(4, 'They look fine.')])
+    renderPanel({ waiting: (messages) => <p>{messages.length} messages checked</p> })
+    const waiting = await screen.findByText('4 messages checked')
+    // After the conversation, before the message box, in reading and tab order.
+    const conversation = screen.getByRole('list', { name: 'Conversation' })
+    const box = screen.getByLabelText('Message to Claude')
+    expect(conversation.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(waiting.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await expectNoA11yViolations()
+  })
+
+  it("lists nothing waiting in a sent one's conversation", async () => {
+    stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL])])
+    const waiting = vi.fn(() => <p>waiting</p>)
+    renderPanel({ locked: true, waiting })
+    await screen.findByRole('list', { name: 'Conversation' })
+    expect(waiting).not.toHaveBeenCalled()
+  })
 })

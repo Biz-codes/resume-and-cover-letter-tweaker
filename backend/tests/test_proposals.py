@@ -10,18 +10,26 @@ from sqlalchemy.orm import Session
 from app.chat import Proposal
 from app.models import (
     EXPERIENCE_SECTION_ID,
+    OTHER_CATEGORY_ID,
+    PROJECTS_SECTION_ID,
+    SKILLS_SECTION_ID,
     SUMMARY_SECTION_ID,
     BulletPoint,
     ChatMessage,
     ChatRole,
     ExperienceBulletPoint,
     NarrativeContent,
+    Project,
+    ProjectSkill,
     ResumeBulletPoint,
     SectionNarrativeContent,
+    SectionProject,
+    Skill,
+    SkillCategorySkill,
 )
 from tests.test_chat import change, setup_resume
 from tests.test_experience_projects_bullets import listed, role
-from tests.test_sections_skills import add, error
+from tests.test_sections_skills import add, category, error, skill_id
 
 
 def proposed(db: Session, account_id: int, doc, *changes: dict[str, Any]) -> ChatMessage:
@@ -169,3 +177,57 @@ def test_refuses_what_isnt_there_or_cant_change(client: TestClient, db: Session,
     assert error(apply(client, sent, locked))[:2] == (409, "VERSION_LOCKED")
     assert error(client.put(url(sent, locked), json={"state": "dismissed"}))[:2] == (
         409, "VERSION_LOCKED")
+
+
+def test_any_skill_or_a_new_one_goes_under_a_category_or_project(client: TestClient, db: Session,
+                                                                 account_id: int):
+    """As on the page: any of the account's skills can be shown under a category or project, and
+    is listed under it in the library too; a new skill is saved the way the page saves one."""
+    doc, ids = setup_resume(db, account_id)
+    back = category(db, account_id, "Back End", ["Python"])
+    category(db, account_id, "Tools", ["Alembic"], section_id=None)
+    tweaker = add(db, Project(account_id=account_id, project_title="Tweaker"))
+    add(db, SectionProject(section_id=PROJECTS_SECTION_ID, project_id=tweaker.project_id,
+                           position=1))
+    python, alembic = skill_id(db, "Python"), skill_id(db, "Alembic")
+    placed = client.put(f"/api/resumes/{doc.resume_id}/tree", json={"sections": [
+        {"section_id": EXPERIENCE_SECTION_ID, "entries": [
+            {"kind": "experience", "item_id": ids["job"], "skill_ids": [],
+             "bullet_ids": [ids["Shipped it"], ids["Tested it"]]}]},
+        {"section_id": SKILLS_SECTION_ID, "entries": [
+            {"kind": "category", "item_id": back.category_id, "skill_ids": [python],
+             "bullet_ids": []}]},
+        {"section_id": PROJECTS_SECTION_ID, "entries": [
+            {"kind": "project", "item_id": tweaker.project_id, "skill_ids": [],
+             "bullet_ids": []}]}]})
+    assert placed.status_code == 200, placed.json()
+    under_back = {"parent_kind": "category", "parent_id": back.category_id}
+    under_tweaker = {"parent_kind": "project", "parent_id": tweaker.project_id}
+    message = proposed(
+        db, account_id, doc,
+        # Alembic is listed under Tools, not Back End.
+        change("add", "skill", SKILLS_SECTION_ID, alembic, **under_back),
+        change("add", "skill", SKILLS_SECTION_ID, 0, new_text="SQLAlchemy", **under_back),
+        change("add", "skill", PROJECTS_SECTION_ID, 0, new_text="Vite", **under_tweaker),
+        change("add", "skill", PROJECTS_SECTION_ID, 0, new_text="python", **under_tweaker),
+        change("add", "skill", PROJECTS_SECTION_ID, 0, new_text="x" * 101, **under_tweaker))
+    for proposal in ("toolu_1", "toolu_2", "toolu_3"):
+        response = apply(client, doc, message, proposal)
+        assert response.status_code == 200, response.json()
+        db.expire_all()
+    document = response.json()["document"]
+    sections = {section["section_id"]: section for section in document["sections"]}
+    assert [skill["text"] for skill in sections[SKILLS_SECTION_ID]["entries"][0]["skills"]] == [
+        "Python", "Alembic", "SQLAlchemy"]
+    assert [skill["text"] for skill in sections[PROJECTS_SECTION_ID]["entries"][0]["skills"]] == [
+        "Vite"]
+    sqlalchemy, vite = skill_id(db, "SQLAlchemy"), skill_id(db, "Vite")
+    assert listed(db, SkillCategorySkill, "category_id", back.category_id, "skill_id") == [
+        python, alembic, sqlalchemy]
+    assert listed(db, ProjectSkill, "project_id", tweaker.project_id, "skill_id") == [vite]
+    # Every skill has a category, so a project's new one is listed under "Other".
+    assert vite in listed(db, SkillCategorySkill, "category_id", OTHER_CATEGORY_ID, "skill_id")
+    assert db.get(Skill, vite).account_id == account_id
+    # A skill the library already has, by name, isn't saved again, and a name must fit.
+    assert error(apply(client, doc, message, "toolu_4"))[:2] == (422, "VALIDATION_FAILED")
+    assert error(apply(client, doc, message, "toolu_5"))[:2] == (422, "VALIDATION_FAILED")

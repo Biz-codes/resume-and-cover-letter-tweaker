@@ -21,10 +21,12 @@ from app.models import (
     SUMMARY_SECTION_ID,
     Account,
     BulletPoint,
+    JobPosting,
     NarrativeContent,
     Resume,
     Section,
     SectionNarrativeContent,
+    Skill,
     ToneRule,
     ToneSet,
     WritingRule,
@@ -41,7 +43,7 @@ from app.suggestions import (
 from tests.test_documents import header, posting
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_posting_reader import FakeMessages
-from tests.test_sections_skills import add, category, error, resume, show_skills
+from tests.test_sections_skills import add, category, error, resume, show_skills, skill_id
 
 
 @pytest.fixture
@@ -140,6 +142,10 @@ def test_leaves_out_what_it_cant_use(client: TestClient, db: Session, account_id
     intro = add(db, NarrativeContent(account_id=account_id, content="I build tools.")).content_id
     front_end = category(db, account_id, "Front End", ["React"])
     react = front_end.category_id
+    # Listed under another category: any of the account's skills can go under one.
+    category(db, account_id, "Other tools", ["Vue"], section_id=None)
+    vue = skill_id(db, "Vue")
+    old = add(db, Skill(account_id=account_id, skill_name="Old", hidden=True)).skill_id
     claude.reply = Suggestion(starting_document_id=999, starting_reason="?", sections=[
         section(SUMMARY_SECTION_ID,
                 entry("narrative", intro, new_text=" I build tools. "),
@@ -152,7 +158,7 @@ def test_leaves_out_what_it_cant_use(client: TestClient, db: Session, account_id
                                suggested(None, "Led a team.")]),
                 entry("bullet", shipped),
                 entry("experience", job.experience_id)),
-        section(SKILLS_SECTION_ID, entry("category", react, skill_ids=[999])),
+        section(SKILLS_SECTION_ID, entry("category", react, skill_ids=[999, vue, old])),
         section(hidden_section),
         section(SUMMARY_SECTION_ID),
     ])
@@ -172,7 +178,8 @@ def test_leaves_out_what_it_cant_use(client: TestClient, db: Session, account_id
     assert placed["text_key"] is None
     assert [(b["bullet_id"], texts.get(b["text_key"])) for b in placed["bullets"]] == [
         (shipped, None), (None, "Led a team.")]
-    assert skills[0]["skill_ids"] == []
+    # Another account's skill and a hidden one are left out; one listed elsewhere stays.
+    assert skills[0]["skill_ids"] == [vue]
 
 
 def test_asks_again_when_it_lists_only_what_it_changed(client: TestClient, db: Session,
@@ -388,3 +395,29 @@ def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Sess
     db.flush()
     final = client.put(tracking, json={"applied_on": "2026-11-04"})
     assert final.status_code == 200, final.json()
+
+
+def test_a_letter_reads_the_postings_resume(client: TestClient, db: Session, account_id: int,
+                                           claude: FakeMessages):
+    """A posting's cover letter is tailored with its resume in view, as plain text, and the
+    other way around; without one there's nothing to read."""
+    job = role(db, account_id, ["Shipped it"], section_id=EXPERIENCE_SECTION_ID)
+    doc = resume(db, account_id, "Engineer at Acme", sent=False)
+    show_job(db, doc, job, ["Shipped it"])
+    job_posting = db.get(JobPosting, doc.job_posting_id)
+    job_posting.header_id = header(db, account_id).header_id
+    db.flush()
+    claude.reply = LetterSuggestion(starting_document_id=None, starting_reason="", sections=[],
+                                    addressee="", addressee_reason="")
+    response = client.post("/api/cover-letters/tailored", json={
+        "name": "Engineer at Acme", "job_posting_id": doc.job_posting_id})
+    assert response.status_code == 201, response.json()
+    request = claude.calls[0]
+    content = request["messages"][0]["content"]
+    assert "<resume_for_this_posting>\nExperience\n" in content
+    assert "- Shipped it\n</resume_for_this_posting>" in content
+    assert "without repeating the resume's bullets" in request["system"][0]["text"]
+    # Another posting's resume has no cover letter to read.
+    claude.reply = Suggestion(starting_document_id=None, starting_reason="", sections=[])
+    tailor(client, db, account_id)
+    assert "_for_this_posting>" not in claude.calls[1]["messages"][0]["content"]

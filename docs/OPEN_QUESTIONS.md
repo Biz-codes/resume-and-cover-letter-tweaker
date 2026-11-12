@@ -23,12 +23,13 @@ Decisions and gaps to resolve before coding starts. When one is answered, record
 11. ~~**Seed data format**~~: decided. Existing resumes (PDF or pasted text) are translated into a SQL seed file of `INSERT` statements, kept out of git. See [DATABASE.md](DATABASE.md).
 
 ## For future consideration
-Small front end choices left as they are for now. None blocks the build plan.
+Choices left as they are for now. None blocks the build plan.
 
 12. **Skip link**: add a "Skip to content" link that appears only when it has focus? Not required, since the landmarks and the focused page heading already let keyboard and screen reader users get past the nav (see "Focus" in [TECH_STACK.md](TECH_STACK.md)), but it's a common extra.
 13. **Tabbing out mid-move**: when a keyboard user picks up an item in a reorderable list (`OrderedList`) and tabs out of the list, it stays picked up, with "Move here" buttons still showing. Should leaving the list cancel the move?
 14. ~~**`LIBRARY_PAGES` in its own file**~~: decided. Moved to `frontend/src/library/libraryPages.ts` in the front end reorganize (see [BUILD_PLAN.md](BUILD_PLAN.md)). oxlint warned that `LibraryPage.tsx` exported a list alongside its components, which only affects hot reload during development. Moving the list to its own file, as `modes.ts` is, would quiet it.
 15. **Headings in a job description**: keep the posting's heading levels and lists, not just its text? `page_text` in `backend/app/posting_reader.py` would mark each heading with `#` marks for its level and each list item with `- ` before Claude copies the description (for pasted text, Claude would judge which lines are headings), and the posting page would show them as real headings (starting at `h3`, under the page's own) and lists, so screen reader users can move through the description by heading. Existing postings would show as now. The edit form's description box would show the marks as typed text.
+26. **Exporting files:** the user wants, eventually, to download a resume or cover letter as a PDF, and maybe as a Word file (.docx), not only copy its plain text (see "Output" in [APP_FLOW.md](APP_FLOW.md)). Still to decide: the layout (one template, or a few to pick from), whether applicant tracking systems read it well, and where it's built (the backend, from the same parts as `backend/app/plain_text.py`). Phase 8 step 4 in [BUILD_PLAN.md](BUILD_PLAN.md) plans the same downloads for other users.
 
 ## Release (phase 6)
 Recommendations are in phase 6 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these when the phase starts.
@@ -46,3 +47,8 @@ Long term. The outline is in phase 8 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide t
 22. **Free tier:** how many tailored applications a month, and is it enough to show the value without costing more in API usage than it brings in?
 23. **The user's own data:** move the user's local account online at this point, or keep it local?
 24. **Name:** keep "Resume and Cover Letter Tweaker", or a product name (checked for trademarks and a free domain)?
+
+## Claude in a document
+Raised by the user to come back to later. Not tied to a phase.
+
+25. **Skill categories from Claude:** while working on a resume, should Claude be able to rename a skill category or make a new one (for example, grouping the posting's tools under a category the library doesn't have yet)? Now it can only use the library's categories as they are: tailoring places existing ones, and the chat can add, remove, or move one, or a skill under one, but only narrative content and bullets can be reworded or written new. A renamed or new category would follow the usual rules: nothing saved until the user approves, and a rename of one a sent version uses saved as a new row (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).

@@ -37,7 +37,7 @@ The goal of this app is to streamline the resume and cover letter writing proces
 The app and AI do most of the heavy lifting. You keep final control over what goes into every resume and cover letter.
 
 ## Basics
-Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and the user's existing resumes and cover letters (PDF, Word, or pasted text) into the library, and drafts a tailored resume or cover letter for the user to review; chatting with Claude about the draft is being built now, and a public demo is planned.
+Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and the user's existing resumes and cover letters (PDF, Word, or pasted text) into the library, drafts a tailored resume or cover letter for the user to review, and chats about any part of it, proposing changes the user applies or dismisses. A public demo is planned.
 
 Input: URL of a job posting (or none, when working on a base resume)
 Output: plain text for a resume and cover letter tailored to that posting, ready to copy and paste
@@ -50,7 +50,44 @@ The app fetches the posting and has Claude extract its organization, role title,
 - Claude API (Opus 5.5) through the `anthropic` SDK
 - Vitest, axe-core, and pytest; GitHub Actions for CI
 
-It runs locally for now. "Running it" in [Tech Stack](docs/TECH_STACK.md) has the commands, including `scripts/demo_db.sh`, which loads the demo data into its own database.
+## Run it locally
+It runs locally for now, on macOS with [Homebrew](https://brew.sh) (the scripts look for Homebrew's Postgres). You need:
+- Python 3.14
+- Node 24, through [nvm](https://github.com/nvm-sh/nvm) (`.nvmrc` names the version)
+- PostgreSQL 18, on port 5433
+- An Anthropic API key from [console.anthropic.com](https://console.anthropic.com), for the Claude features (reading postings and resumes, tailoring, and the chat). API usage is billed separately from a Claude.ai subscription. Everything else works without one.
+
+**1. Postgres.** Install it, set it to port 5433, and create the app's database and the one the tests use:
+```sh
+brew install postgresql@18
+# In $(brew --prefix)/var/postgresql@18/postgresql.conf, set: port = 5433
+brew services start postgresql@18
+$(brew --prefix postgresql@18)/bin/createdb -p 5433 resume_tweaker
+$(brew --prefix postgresql@18)/bin/createdb -p 5433 resume_tweaker_test
+```
+
+**2. The backend** (the API, on port 8000):
+```sh
+cd backend
+python3.14 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env    # then put your key in ANTHROPIC_API_KEY
+.venv/bin/alembic upgrade head
+.venv/bin/uvicorn app.main:app --reload
+```
+
+**3. The front end,** in a second terminal:
+```sh
+cd frontend
+nvm use
+npm install
+npm run dev
+```
+Then open http://localhost:5173. The first visit creates your account, with the starting writing rules and a "Sincerely" sign-off. Start by adding a job posting, or upload an existing resume to fill the library.
+
+**Demo data (optional).** `scripts/demo_db.sh` loads a made-up person's library, resumes, and postings into a separate database, `resume_tweaker_demo`. To use it, start the API with `DATABASE_URL=postgresql+psycopg://localhost:5433/resume_tweaker_demo .venv/bin/uvicorn app.main:app --reload` instead.
+
+**Checks.** `scripts/check.sh` runs every test, lint, and schema check, the same ones CI runs. To run them before each commit too, turn on the git hooks with `git config core.hooksPath .githooks`. More commands are in "Running it" in [Tech Stack](docs/TECH_STACK.md).
 
 ## Design docs
 - [Build Plan](docs/BUILD_PLAN.md): the order the app is built in, and what's done so far

@@ -33,7 +33,7 @@ import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
 import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
 import ChatPanel from '../ChatPanel/ChatPanel'
-import ProposalCards from '../ProposalCards/ProposalCards'
+import ProposalCards, { WaitingForYou } from '../ProposalCards/ProposalCards'
 import { chatApi, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
@@ -698,6 +698,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 announce={announce}
               />
             )}
+            waiting={(messages) => <WaitingForYou messages={messages} sections={doc.sections} />}
           />
         )}
         </div>

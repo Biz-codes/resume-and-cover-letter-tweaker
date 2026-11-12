@@ -28,3 +28,26 @@
 .change dd {
   margin: 0 0 4px;
 }
+
+/* The list of cards still waiting, above the chat panel's message box. */
+.waiting {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 0 8px;
+}
+
+.waiting h4 {
+  margin: 0 0 4px;
+}
+
+.waiting ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.waiting button {
+  text-align: left;
+}

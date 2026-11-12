@@ -6,8 +6,10 @@ checked again against the document and the library as they are now, the tree is 
 the change through the same code as Undo (document_tree.restore), and an added item gets the
 defaults it would get added by hand (a role's bullets, a section's items). Claude's new or
 reworded text becomes a new library row, used in this document only: a rewording is listed
-right after its original, and new text under the section, role, or project it goes in. The
-page keeps the document as it was for Undo.
+right after its original, and new text under the section, role, or project it goes in. A skill
+added under a skill category or project is listed under it in the library too, as on the page
+(document_tree.apply_skills), and a new skill is saved the way the page saves one (under its
+category, or under "Other" and the project). The page keeps the document as it was for Undo.
 """
 
 from typing import Any
@@ -18,16 +20,20 @@ from app.chat import Placed, Proposal, ProposedChange, check_change
 from app.defaults import default_bullets, default_skills
 from app.documents import Kind, load_tree
 from app.errors import AppError, ErrorCode
-from app.library import append
+from app.library import append, check_unique_name
 from app.models import (
+    OTHER_CATEGORY_ID,
     BulletPoint,
     ChatMessage,
     ChatRole,
     ExperienceBulletPoint,
     NarrativeContent,
     ProjectBulletPoint,
+    ProjectSkill,
     SectionBulletPoint,
     SectionNarrativeContent,
+    Skill,
+    SkillCategorySkill,
 )
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
@@ -101,6 +107,27 @@ def _new_text(db: Session, account_id: int, change: ProposedChange) -> int:
     return row.bullet_id
 
 
+def _new_skill(db: Session, account_id: int, change: ProposedChange) -> int:
+    """Claude's new skill, saved as write_skill saves one on the page: its name must be new
+    (DUPLICATE, hidden skills too), and a project's is listed under "Other", since every skill
+    has a category. _list_skill lists it under its category or project."""
+    check_unique_name(db, Skill.skill_name, account_id, change.new_text, "skill")
+    row = Skill(account_id=account_id, skill_name=change.new_text)
+    db.add(row)
+    db.flush()
+    if change.parent_kind == "project":
+        append(db, SkillCategorySkill, "category_id", OTHER_CATEGORY_ID, "skill_id", row.skill_id)
+    return row.skill_id
+
+
+def _list_skill(db: Session, change: ProposedChange, skill_id: int) -> None:
+    """List the skill last under its category or project in the library, unless it's there."""
+    if change.parent_kind == "category":
+        append(db, SkillCategorySkill, "category_id", change.parent_id, "skill_id", skill_id)
+    else:
+        append(db, ProjectSkill, "project_id", change.parent_id, "skill_id", skill_id)
+
+
 def _reworded(db: Session, account_id: int, change: ProposedChange) -> int:
     """Claude's wording as a new row, listed right after the original wherever it's listed."""
     if change.target == "narrative":
@@ -142,8 +169,14 @@ def apply(db: Session, kind: Kind, account_id: int, doc: Any, change: ProposedCh
                           if entry.kind == change.parent_kind and entry.item_id == change.parent_id)
             children = parent.skill_ids if target == "skill" else parent.bullet_ids
             if action == "add":
-                item_id = (_new_text(db, account_id, change) if change.item_id == 0
-                           else change.item_id)
+                if change.item_id != 0:
+                    item_id = change.item_id
+                elif target == "skill":
+                    item_id = _new_skill(db, account_id, change)
+                else:
+                    item_id = _new_text(db, account_id, change)
+                if target == "skill":
+                    _list_skill(db, change, item_id)
                 _at(children, item_id, change.position)
             elif action == "reword":
                 children[children.index(change.item_id)] = _reworded(db, account_id, change)

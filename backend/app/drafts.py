@@ -14,7 +14,9 @@ or swaps for the letter's usual one.
 
 Finishing (finish) saves each of Claude's texts the user kept as a new library row, listed right
 after the original (or, for new text, under the section, role, or project Claude put it in), and
-the tree with those rows in place of the originals, used in this document only. Any of Claude's
+the tree with those rows in place of the originals, used in this document only. A skill shown
+under a category or project that doesn't list it yet is listed there in the library, as on the
+page. Any of Claude's
 texts the user didn't use is kept in the library the same way only if the user asks. Claude's
 new sections the draft still has are added to the library first (or the saved one with the same
 title is used).
@@ -35,9 +37,11 @@ from app.models import (
     ExperienceBulletPoint,
     NarrativeContent,
     ProjectBulletPoint,
+    ProjectSkill,
     Section,
     SectionBulletPoint,
     SectionNarrativeContent,
+    SkillCategorySkill,
 )
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
@@ -220,7 +224,7 @@ def _refuse(message: str) -> AppError:
 def check_sections(db: Session, account_id: int, draft: Draft,
                    sections: list[DraftSection]) -> None:
     """Refuse a reviewed tree that Claude's suggestion couldn't have held: an id that isn't the
-    account's own or is hidden, a skill or bullet its item doesn't list, a bullet twice in a
+    account's own or is hidden, a bullet its item doesn't list, a bullet twice in a
     section (as in suggestions.usable), or Claude's text anywhere but where Claude put it, and
     each piece of it once, and Claude's new sections once each. The user's own changes come
     from what the library lists, so only a library changed since the page read it gets here."""
@@ -355,6 +359,15 @@ def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[
     new_sections = _save_sections(db, account_id, draft)
     saved = {text.key: _save_text(db, account_id, text, new_sections)
              for text in draft.texts if text.key in used or text.key in keep}
+
+    # Skills Claude put under a category or project that doesn't list them yet, listed last.
+    for section in draft.sections:
+        for entry in section.entries:
+            if entry.kind in ("category", "project"):
+                link, column = ((SkillCategorySkill, "category_id") if entry.kind == "category"
+                                else (ProjectSkill, "project_id"))
+                for skill_id in entry.skill_ids:
+                    append(db, link, column, entry.item_id, "skill_id", skill_id)
 
     def placed_id(item_id: int | None, key: int | None, use_original: bool) -> int:
         return saved[key] if key is not None and not use_original else item_id

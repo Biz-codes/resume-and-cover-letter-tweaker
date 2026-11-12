@@ -285,9 +285,9 @@ export default function DraftTree({
       : draft.sections.map((row) => (row === section ? next : row))
 
   function renderSkills(section: DraftSection, entry: DraftEntry, name: string, where: string) {
-    const listed = (entry.kind === 'category'
-      ? library!.categories.find((item) => item.category_id === entry.item_id)?.skills
-      : library!.projects.find((item) => item.project_id === entry.item_id)?.skills) ?? []
+    // Claude can put any of the account's skills under a category or project, not only the ones
+    // it lists, so a name comes from every list (every skill has a category).
+    const listed = [...library!.categories, ...library!.projects].flatMap((item) => item.skills)
     const skillIds = entry.skill_ids ?? []
     if (skillIds.length === 0) return null
     const id = listId(`skills-${entry.kind}-${entry.item_id}`)

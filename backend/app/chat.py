@@ -9,7 +9,8 @@ dismisses (app/routers/chat.py), and the next message tells Claude what became o
 
 The history only grows. Each turn's content blocks are saved exactly as Claude saw or wrote
 them (the user's: the results of Claude's last proposals, what the message is about, the
-document when it changed since Claude last saw it, then the text; Claude's: its thinking,
+document, and the posting's other document (its resume or cover letter), each when it changed
+since Claude last saw it, then the text; Claude's: its thinking,
 reply, and tool calls), and every request replays them unchanged. That keeps the conversation
 cached from one message to the next, and keeps Claude's thinking blocks valid.
 
@@ -32,11 +33,21 @@ from app.claude import converse
 from app.documents import EntryKind, Kind, SectionTree, doc_info, load_tree
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole, JobPosting
-from app.suggestions import Library, library_json, load_library, rules_text, tone_text
+from app.suggestions import (
+    Library,
+    companion,
+    companion_instructions,
+    library_json,
+    load_library,
+    rules_text,
+    tone_text,
+)
 
 logger = logging.getLogger(__name__)
 
 TEXT_MAX = 4000
+# The longest skill name the database holds (docs/DATABASE.md).
+SKILL_NAME_MAX = 100
 # Room for Claude's thinking and a reply with several proposals.
 MAX_TOKENS = 32000
 
@@ -76,12 +87,14 @@ class ProposedChange(BaseModel):
     section_id: int = Field(description=(
         "The section the change is in, or for a section itself, its id."))
     item_id: int = Field(description=(
-        "The item's id; 0 for a section, or for new narrative content or a new bullet."))
+        "The item's id; 0 for a section, or for new narrative content, a new bullet, or a new "
+        "skill."))
     parent_kind: Literal["", "experience", "project", "category"] = Field(description=(
         'For a skill or bullet under an item in the section: that item\'s kind; otherwise "".'))
     parent_id: int = Field(description="That item's id, or 0.")
     new_text: str = Field(description=(
-        'The new wording (reword) or new text (add with item_id 0); otherwise "".'))
+        'The new wording (reword), or the new text or new skill\'s name (add with item_id 0); '
+        'otherwise "".'))
     position: int = Field(description=(
         "Where it goes, counting from 1 in its list after the change (add, move); 0 for "
         "the end, or for reword and remove."))
@@ -127,13 +140,21 @@ change is made: it's only proposed. Propose only what they ask for, or what clea
 it.
 - Use only ids from the library and the document. Any kind of item can go in any section. To \
 reword, remove, or move something, it must be in the document where you say. To add a saved \
-item, use a library item that isn't already there; a skill or bullet under an item must be \
-listed under that item in the library.
-- Only narrative content and bullets are reworded, and only they can be new text (add with \
-item_id 0). Change as little as you can. Never add a skill, tool, result, number, or duty the \
-library doesn't support, and never change facts.
+item, use a library item that isn't already there; a bullet under a role or project must be \
+listed under it in the library, but any of their skills can go under any skill category or \
+project (the app lists it there in the library too).
+- Only narrative content and bullets are reworded. New text (add with item_id 0) is narrative \
+content, a bullet, or a skill under a skill category or project, with new_text its name, only \
+when the library has no skill by that name. Change as little as you can. Never add a skill, \
+tool, result, number, or duty the library doesn't support (a new skill only when the person \
+asks for it or their content shows it), and never change facts.
+- Anything they could do on this page, you can propose here. Never tell them to add or change \
+something in the library first: propose the change instead.
 - The results of your last proposals come back at the start of their next message: whether \
 each was shown, and whether they applied or dismissed it.{letter}
+
+{companion} It comes in a message when it changed since you last saw it; the latest one is \
+current.
 
 Everything you write follows the person's writing rules:
 {rules}
@@ -280,8 +301,16 @@ def check_change(change: ProposedChange, library: Library, placed: Placed) -> st
     if change.section_id not in placed.sections:
         return f"section {change.section_id} isn't in the document"
     new = change.item_id == 0
-    if new and not (action == "add" and target in ("narrative", "bullet") and text):
-        return "only new narrative content or a new bullet can have item_id 0, with its text"
+    if new and not (action == "add" and target in ("narrative", "bullet", "skill") and text):
+        return ("only new narrative content, a new bullet, or a new skill can have item_id 0, "
+                "with its text")
+    if new and target == "skill":
+        if len(text) > SKILL_NAME_MAX:
+            return f"a skill's name can be up to {SKILL_NAME_MAX} characters"
+        same = next((skill_id for skill_id, skill in library.items["skill"].items()
+                     if skill["name"].strip().lower() == text.lower()), None)
+        if same is not None:
+            return f'the library already has a skill named "{text}" (id {same}): add that one'
     if action == "reword" and not text:
         return "a rewording needs its new wording"
 
@@ -296,7 +325,12 @@ def check_change(change: ProposedChange, library: Library, placed: Placed) -> st
         if action == "add":
             if new:
                 return None
-            if change.item_id not in listed.get(change.parent_id, []):
+            # Any of the account's skills can go under a category or project, as on the page
+            # (document_tree.apply_skills); a bullet must be the role's or project's own.
+            if target == "skill":
+                if change.item_id not in library.items["skill"]:
+                    return f"skill {change.item_id} isn't a visible library item"
+            elif change.item_id not in listed.get(change.parent_id, []):
                 return (f"{target} {change.item_id} isn't listed under {change.parent_kind} "
                         f"{change.parent_id} in the library")
             if here is not None or (target == "bullet"
@@ -383,11 +417,13 @@ def tool_results(last: ChatMessage | None) -> list[dict[str, Any]]:
     return results
 
 
-def _last_document(turns: list[ChatMessage]) -> str | None:
+def _last_sent(turns: list[ChatMessage], start: str) -> str | None:
+    """The last text block the user's turns sent that starts with `start` (the document, or the
+    posting's other document), so it's sent again only when it changed."""
     for turn in reversed(turns):
         if turn.role == ChatRole.user:
             for block in turn.content:
-                if block.get("type") == "text" and block["text"].startswith("<document>"):
+                if block.get("type") == "text" and block["text"].startswith(start):
                     return block["text"]
     return None
 
@@ -396,7 +432,8 @@ def _system(db: Session, kind: Kind, account_id: int, doc: Any,
             library: Library) -> list[dict[str, Any]]:
     one, _ = _words(kind)
     instructions = INSTRUCTIONS.format(doc=one, rules=rules_text(db, account_id),
-                                       letter=LETTER_NOTE if kind.prefix == "cover_letter" else "")
+                                       letter=LETTER_NOTE if kind.prefix == "cover_letter" else "",
+                                       companion=companion_instructions(kind))
     posting = db.get(JobPosting, doc.job_posting_id) if doc.job_posting_id else None
     if posting is None:
         about = f"This is a base {one}, an ongoing starting point not made for one posting."
@@ -481,8 +518,11 @@ def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
         document = (f"<document>\n{json.dumps(document_json(sections), ensure_ascii=False)}"
                     "\n</document>")
         new_turn = [*tool_results(turns[-1] if turns else None)]
-        if document != _last_document(turns):
+        if document != _last_sent(turns, "<document>"):
             new_turn.append({"type": "text", "text": document})
+        other = companion(db, kind, doc)
+        if other and other != _last_sent(turns, other.split(">", 1)[0] + ">"):
+            new_turn.append({"type": "text", "text": other})
         new_turn.append({"type": "text", "text": about_text(about, placed, one)})
         new_turn.append({"type": "text", "text": text})
 

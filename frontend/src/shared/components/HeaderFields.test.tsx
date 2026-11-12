@@ -106,8 +106,11 @@ describe('HeaderFields', () => {
     const typed = within(dialog).getByLabelText('Headline')
     // A typed value says what it holds, as the library's header form does (WCAG 1.3.5).
     expect(typed).toHaveAttribute('autocomplete', 'organization-title')
+    // It starts from the current value, to tweak it.
+    expect(typed).toHaveValue('Front-End Engineer')
     await expectNoA11yViolations()
     // Applying nothing says so, and keeps it open.
+    fireEvent.change(typed, { target: { value: '  ' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Type the new headline.')
     expect(typed).toHaveAccessibleDescription('Type the new headline.')
@@ -123,6 +126,23 @@ describe('HeaderFields', () => {
     expect(onSave).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Save header' }))
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ headline: 'Tutor' })))
+  })
+
+  it('starts a new value empty for None, and changes nothing when the value is applied as it is', async () => {
+    render(<HeaderFields header={TECH} headers={[TECH]} readOnly={false} onSave={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'New location' }))
+    expect(within(screen.getByRole('dialog', { name: 'New location' })).getByLabelText('Location')).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const opener = screen.getByRole('button', { name: 'New email' })
+    opener.focus()
+    fireEvent.click(opener)
+    const dialog = screen.getByRole('dialog', { name: 'New email' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(said()).toBe('')
+    expect(screen.getByRole('button', { name: 'Save header' })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('cancels a new value and undoes changes', () => {

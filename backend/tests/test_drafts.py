@@ -14,6 +14,7 @@ from app.claude import get_client
 from app.main import app
 from app.models import (
     EXPERIENCE_SECTION_ID,
+    SKILLS_SECTION_ID,
     SUMMARY_SECTION_ID,
     BulletPoint,
     CoverLetter,
@@ -23,11 +24,12 @@ from app.models import (
     Resume,
     Section,
     SectionNarrativeContent,
+    SkillCategorySkill,
 )
 from app.suggestions import Suggestion
 from tests.test_experience_projects_bullets import bullet, listed, role, show_job
 from tests.test_posting_reader import FakeMessages
-from tests.test_sections_skills import add, error, resume
+from tests.test_sections_skills import add, category, error, resume, skill_id
 from tests.test_suggestions import (
     entry,
     letter_reply,
@@ -276,3 +278,22 @@ def test_a_letter_review_refuses_new_sections_claude_didnt_make(client: TestClie
         assert error(put_draft(client, doc, sections)) == (422, "VALIDATION_FAILED", "sections")
     db.expire_all()
     assert db.get(CoverLetter, doc["letter_id"]).draft == doc["draft"]
+
+
+def test_finishing_lists_a_skill_under_the_category_claude_put_it_in(
+        client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    back = category(db, account_id, "Back End", ["Python"])
+    category(db, account_id, "Tools", ["Alembic"], section_id=None)
+    python, alembic = skill_id(db, "Python"), skill_id(db, "Alembic")
+    claude.reply = Suggestion(starting_document_id=None, starting_reason="", sections=[
+        section(SKILLS_SECTION_ID, entry("category", back.category_id,
+                                         skill_ids=[alembic, python]))])
+    doc = tailor(client, db, account_id).json()
+    response = finish(client, doc)
+    assert response.status_code == 200, response.json()
+    [skills] = response.json()["sections"]
+    assert [skill["text"] for skill in skills["entries"][0]["skills"]] == ["Alembic", "Python"]
+    db.expire_all()
+    # Listed last under Back End, where Claude put it; Python stays where it was.
+    assert listed(db, SkillCategorySkill, "category_id", back.category_id, "skill_id") == [
+        python, alembic]

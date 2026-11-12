@@ -9,7 +9,8 @@
 // fails saves nothing, and the message stays in the box, with Retry.
 //
 // A sent document's conversation can be read, not added to. Claude's proposals show under its
-// reply through `proposals` (ProposalCards).
+// reply through `proposals` (ProposalCards), and the ones still waiting are listed above the
+// message box through `waiting` (WaitingForYou), except in a sent one.
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { KINDS, type DocKind } from '../../shared/api/documents'
@@ -46,6 +47,7 @@ export default function ChatPanel({
   focusRequest,
   version = 0,
   proposals,
+  waiting,
 }: {
   kind: DocKind
   docId: number
@@ -64,6 +66,8 @@ export default function ChatPanel({
   // Claude's proposals under a reply (ProposalCards), given a way to show the message's new
   // state and to say something in the panel's live region.
   proposals?: (message: ChatMessage, helpers: { update: (next: ChatMessage) => void; announce: (text: string) => void }) => ReactNode
+  // The proposals still waiting for the user, from the whole conversation (WaitingForYou).
+  waiting?: (messages: ChatMessage[]) => ReactNode
 }) {
   const { singular } = KINDS[kind]
   const api = chatApi(kind)
@@ -164,6 +168,9 @@ export default function ChatPanel({
         </button>
       </div>
       {conversation}
+      {/* Above the message box, where the user is after a reply, since the conversation above
+          scrolls out of view as it grows. */}
+      {!locked && messages && waiting?.(messages)}
       {locked ? (
         <p className="muted">This {singular} was sent, so its conversation can be read but not added to.</p>
       ) : (

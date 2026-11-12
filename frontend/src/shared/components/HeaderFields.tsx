@@ -1,7 +1,8 @@
 // A resume's, cover letter's, or job posting's header, one value at a time: each field shows its
 // current value under its name, then "More [field] options", which offers every other value saved
 // in any header and "None" (for all but the name), then a "New [field]" button, which opens a
-// small modal to type one in; Apply there puts it in the form. Each change is announced ("Location
+// small modal to type one in, starting from the current value so it can be tweaked; Apply there
+// puts it in the form. Each change is announced ("Location
 // changed to Boston, MA"). Nothing saves until "Save header" (or Enter), so
 // trying values out never adds headers; saving points it at the saved header with exactly these
 // values, or a new one, so no saved header changes (docs/FRONTEND_CHECKS.md, "Headers"). "Undo
@@ -215,8 +216,10 @@ export default function HeaderFields({
       {adding && (
         <NewValue
           field={adding}
+          current={values[adding.name]}
           onApply={(value) => {
-            change(adding, value, true)
+            // The same value again changes nothing, so there's nothing to say.
+            if (value !== values[adding.name]) change(adding, value, true)
             setAdding(null)
           }}
           onClose={() => setAdding(null)}
@@ -226,18 +229,21 @@ export default function HeaderFields({
   )
 }
 
-// The small modal for typing a field's new value. Apply puts it in the header's form; nothing
-// saves until "Save header". When it closes, focus goes back to the field's "New" button.
+// The small modal for typing a field's new value, starting from its current one (empty for
+// None), so a small change doesn't mean typing it all again. Apply puts it in the header's form;
+// nothing saves until "Save header". When it closes, focus goes back to the field's "New" button.
 function NewValue({
   field,
+  current,
   onApply,
   onClose,
 }: {
   field: (typeof FIELDS)[number]
+  current: string | null
   onApply: (value: string) => void
   onClose: () => void
 }) {
-  const [text, setText] = useState('')
+  const [text, setText] = useState(current ?? '')
   const [empty, setEmpty] = useState(false)
   const errorId = useId()
 

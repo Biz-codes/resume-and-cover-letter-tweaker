@@ -38,6 +38,15 @@ const LIBRARY: Record<string, unknown[]> = {
       sections: [],
       used_by: [],
     },
+    // Not in the draft's sections: a skill listed only here can still go under Front End.
+    {
+      category_id: 5,
+      category_name: 'Tools',
+      built_in: false,
+      skills: [{ skill_id: 4, skill_name: 'Vite', hidden: false }],
+      sections: [],
+      used_by: [],
+    },
   ],
   experience: [
     {
@@ -250,6 +259,15 @@ describe('DraftTree', () => {
     await vi.waitFor(() => expect(announced()).toBe('Rejected section "Talks".'))
     expect(sent(onChange).map((section) => section.section_id)).toEqual([1, 3])
     await vi.waitFor(() => expect(screen.getByRole('list', { name: 'Sections' })).toHaveFocus())
+  })
+
+  it('names a skill Claude put under a category that does not list it', async () => {
+    stubLibrary()
+    const draft = structuredClone(DRAFT)
+    draft.sections[1].entries[1].skill_ids = [1, 4]
+    renderDraft(draft)
+    expect(await screen.findByRole('button', { name: 'Reject Vite under Front End in Experience' })).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('moves focus to the list above once the last row of a list is rejected', async () => {

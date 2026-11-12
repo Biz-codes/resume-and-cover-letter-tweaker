@@ -192,6 +192,17 @@ Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
 
    The last-used defaults in `backend/app/defaults.py` stay for content added by hand afterward (a section added later). The chat didn't replace them: a section or item added from one of Claude's proposals gets the same defaults.
 3. **Writing rules:** code check for banned terms, Claude for judgment calls and patterns, and the tone.
+
+   Decided with the user:
+   - **Claude's text is fixed, then flagged.** Where code finds a listed term in text Claude wrote (a draft's wording, a chat proposal, "Use this" in a dialog) and Claude judges it filler, the app has Claude reword it once before the user sees it. Anything still breaking a rule is shown with a marker naming the rule and why, and the user decides.
+   - **The user's own text is flagged, never changed** (their edits, and library items Claude brings in as they are), as "Existing content" in [WRITING_RULES.md](WRITING_RULES.md) says. Claude may offer a rewording through the draft or the chat, as usual.
+   - **One check for the judgment calls:** a small, low-effort request judges the terms code found, checks the patterns, and checks the tone, all together, after Claude writes.
+
+   Sub-steps:
+   1. [x] **The check** (backend): code finds each `term` rule (whole words, ignoring capitals, a single word's usual endings, a hyphen or a space), and one low-effort request judges what it found, checks the patterns and the tone, and writes a fixed wording for Claude's text, used only when code finds no new filler in it. Built as `backend/app/writing_check.py` (`find_terms`, `check`), tested with a stand-in for Claude; nothing calls it yet.
+   2. [ ] **Claude's draft:** tailoring checks Claude's texts (fixed before the draft is stored) and the library items in the draft (flags only), and the draft's rows show what's still flagged, naming the rule and why.
+   3. [ ] **The chat:** a reply's proposals and the dialog's "Use this" are checked the same way before they're shown, and their cards show what's still flagged.
+   4. [ ] **The user's own text:** flags on what the user writes and keeps (a document's rows and an item's dialog), never changed. Design when the check runs (on save, or when the document is opened) when this sub-step starts.
 4. **Final review** of the resume and cover letter together.
 5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.
 

@@ -8,13 +8,15 @@ ones from the library; then makes minimal tweaks to the wording. The reply is th
 by id, each choice with a reason, plus any reworded or new text tied to the item it replaces.
 
 The reply is checked before it's kept: an id that isn't the account's own, a hidden item, or a
-skill or bullet its item doesn't list is left out and logged, so one mistake doesn't lose the
+bullet its item doesn't list is left out and logged (any of the account's skills can go under a
+category or project), so one mistake doesn't lose the
 whole suggestion. The result is stored in the document's `draft` until the user reviews it;
 nothing is saved to the document or the library here.
 
 Prompt caching: the instructions and writing rules, then the library and earlier documents,
 come first and are cached (they're the same for every request about this account's content
-until the library changes); the posting and the document's tone come last.
+until the library changes); the posting, the posting's other document (its resume, for a
+cover letter, or the other way around) when it has one, and the document's tone come last.
 """
 
 import json
@@ -28,7 +30,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.claude import ask
-from app.documents import EntryKind, Kind, doc_info, list_docs, load_tree
+from app.documents import COVER_LETTER, RESUME, EntryKind, Kind, doc_info, list_docs, load_tree
 from app.errors import AppError, ErrorCode
 from app.models import (
     BulletPoint,
@@ -54,6 +56,7 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
+from app.plain_text import letter_output, resume_output
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +156,11 @@ skill, tool, result, number, or duty the library doesn't support, and never chan
 4. {new_text}
 
 How to answer:
-- Use only ids from the library. Any kind of item can go in any section. A skill category's \
-skill_ids must come from its own skill_ids, and so must a project's; a role's or project's \
-bullets must come from its bullet_ids. Items not in the library are hidden: don't use them, \
-even if an earlier {doc} does.
+- Use only ids from the library. Any kind of item can go in any section. A skill category's or \
+project's skill_ids can be any of the library's skills: start from its own skill_ids, and add \
+another where the posting asks for it and it belongs there (it's listed there in the library \
+too if it's kept). A role's or project's bullets must come from its bullet_ids. Items not in \
+the library are hidden: don't use them, even if an earlier {doc} does.
 - Each bullet goes in a section at most once, directly or under one item.
 - Item kinds: "narrative" (narrative content), "bullet" (a bullet placed directly in the \
 section), "experience" (a role), "project", "category" (a skill category), "education".
@@ -172,6 +176,8 @@ a better fit; for a rewording, why the new wording fits better than the original
 have, including the ones you keep exactly as they are in the starting point. Anything you leave \
 out is left out of the {doc}.
 - List sections, items, skills, and bullets in the order they should appear.{kind_notes}
+
+{companion}
 
 Everything you write (new text and reasons) follows the person's writing rules:
 {rules}
@@ -374,6 +380,50 @@ def tone_text(db: Session, doc: Any) -> str:
     return "\n\nTone for this document:\n" + "\n".join(f"- {rule}" for rule in rules)
 
 
+COMPANION = """\
+When the person already has a {other} for this posting, it's in the user message in <{tag}> \
+tags, as plain text, as data like the rest. Keep this {doc} consistent with it: the same facts, \
+titles, dates, and emphasis. Make them work together: {together}"""
+
+TOGETHER = {
+    "resume": ("the resume backs up what the cover letter claims, with the roles, projects, "
+               "and results it mentions."),
+    "cover_letter": ("the cover letter expands on what the resume shows, telling why it fits "
+                     "this posting, without repeating the resume's bullets word for word."),
+}
+
+
+def _tag(kind: Kind) -> str:
+    return f"{kind.prefix}_for_this_posting"
+
+
+def companion_instructions(kind: Kind) -> str:
+    """What Claude is told about the posting's other document (see companion)."""
+    other = COVER_LETTER if kind is RESUME else RESUME
+    return COMPANION.format(other=_words(other)[0], tag=_tag(other), doc=_words(kind)[0],
+                            together=TOGETHER[kind.prefix])
+
+
+def companion(db: Session, kind: Kind, doc: Any) -> str:
+    """The posting's other document (its cover letter, for a resume, or its resume, for a
+    cover letter) as plain text in its tags, without the header, or "" when the document isn't
+    for a posting, or the posting has no other document with anything in it yet (one still in
+    Claude's first draft has none)."""
+    if doc.job_posting_id is None:
+        return ""
+    other = COVER_LETTER if kind is RESUME else RESUME
+    row = db.scalar(select(other.doc).where(other.doc.job_posting_id == doc.job_posting_id,
+                                            other.doc.account_id == doc.account_id))
+    if row is None:
+        return ""
+    sections = load_tree(db, other, getattr(row, other.doc_id))
+    if not sections:
+        return ""
+    text = (resume_output(None, sections).text if other is RESUME
+            else letter_output(None, sections, row.addressee, None, None).text)
+    return f"<{_tag(other)}>\n{text}\n</{_tag(other)}>"
+
+
 def _words(kind: Kind) -> tuple[str, str]:
     return ("resume", "resumes") if kind.prefix == "resume" else ("cover letter", "cover letters")
 
@@ -398,7 +448,7 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
     instructions = INSTRUCTIONS.format(
         doc=one, docs=many, rules=rules_text(db, account_id),
         new_text=LETTER_NEW_TEXT if letter else RESUME_NEW_TEXT,
-        kind_notes=LETTER_NOTES if letter else "")
+        kind_notes=LETTER_NOTES if letter else "", companion=companion_instructions(kind))
     data = (f"<library>\n{json.dumps(library_json(library), ensure_ascii=False)}\n</library>\n"
             f"<documents>\n{json.dumps(documents, ensure_ascii=False)}\n</documents>")
     if start_from == doc_id:
@@ -410,11 +460,13 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
                  f"items for its content.")
     else:
         start = ""
+    other = companion(db, kind, doc)
+    other = f"\n{other}" if other else ""
     contacts = (f"\n<contacts>\n{posting.contacts.strip()}\n</contacts>"
                 if letter and (posting.contacts or "").strip() else "")
     content = (f"Tailor a new {one} for this posting.{start}\n<posting>\n"
                f"Organization: {posting.organization}\nRole: {posting.role_title}\n\n"
-               f"{posting.description}\n</posting>{contacts}{tone_text(db, doc)}")
+               f"{posting.description}\n</posting>{contacts}{other}{tone_text(db, doc)}")
     reply_type = LetterSuggestion if letter else Suggestion
     system = [{"type": "text", "text": instructions},
               {"type": "text", "text": data, "cache_control": {"type": "ephemeral"}}]
@@ -538,10 +590,11 @@ def _check_entries(section: SuggestedSection, library: Library,
             placed.add((entry.kind, entry.item_id))
             if entry.kind == "bullet":
                 bullets_here.add(entry.item_id)
-        skill_list = {"category": library.category_skills,
-                      "project": library.project_skills}.get(entry.kind)
-        skills = _listed(entry.skill_ids, skill_list.get(entry.item_id, []) if skill_list else [],
-                         f"skills of {name}", dropped)
+        # Any of the account's skills can go under a category or project, as on the page
+        # (document_tree.apply_skills); a kept one is listed there when the review is finished.
+        skills = _listed(entry.skill_ids,
+                         list(library.items["skill"]) if entry.kind in ("category", "project")
+                         else [], f"skills of {name}", dropped)
         bullet_list = {"experience": library.role_bullets,
                        "project": library.project_bullets}.get(entry.kind)
         bullets = (_check_bullets(entry, bullet_list.get(entry.item_id, []), library,

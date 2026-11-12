@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Read(//Users/biz_codes/.nvm/versions/node/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(python3 scripts/check_demo_data.py)",
+      "Bash(dscl . -read /Users/biz_codes UserShell)",
+      "Read(//Users/biz_codes/**)",
+      "Bash(zsh -lic 'which python3; python3 --version; which node; node --version; which pg_isready')",
+      "Bash(bash -lc 'which python3; python3 --version; which node; which pg_isready')",
+      "Edit(/.claude/skills/check/**)",
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/documents/ProposalCards src/documents/ChatPanel src/documents/DocumentPage)",
+      "Bash(python3 -)",
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/oxlint)",
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/oxlint src/documents/ChatPanel/ChatPanel.tsx)",
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/shared/components/HeaderFields)",
+      "Bash(xargs -I{} sed -n '{}p' docs/FRONTEND_CHECKS.md)",
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/documents/DraftTree)"
     ]
   },
   "hooks": {

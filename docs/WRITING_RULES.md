@@ -31,5 +31,11 @@ The database will be seeded with the user's existing resume data, which may cont
   - **Filler:** it suggests a rewording. An accepted rewording is saved as a new bullet point or narrative content excerpt, and the original stays in the library (see [APP_FLOW.md](APP_FLOW.md)).
   - **Real term:** it leaves the word alone.
 
+### How the app checks
+- **Terms are found in code:** whole words, ignoring capitals, including a single word's usual endings ("leveraged", "spearheading") and a hyphen written as a space ("results driven"). Finding one only makes it a candidate.
+- **Claude judges the rest** in one quick check: whether each found term is filler or a real term (the test above), the patterns, and the document's tone.
+- **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. Whatever still breaks a rule is shown with the rule and why, and the user decides.
+- **The user's own text is only flagged,** never changed.
+
 ## Tone rules
 The user can add and adjust rules about tone and pick which set applies to a resume. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.

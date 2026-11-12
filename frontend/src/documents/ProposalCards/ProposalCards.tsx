@@ -3,13 +3,19 @@
 // ordinary change to the document (backend/app/proposals.py), which the page's Undo takes back;
 // Claude's new or reworded text becomes a new library row used in this document only. A dismissed
 // card can be restored. Each change is announced in the panel's live region, and focus stays on
-// the card.
-import { useState } from 'react'
+// the card. Once a card is applied or dismissed, its before and after and reason fold away under
+// "Details" (closed), leaving its title, its state, and Restore.
+//
+// A card stays until the user applies or dismisses it, however many messages come after, and
+// WaitingForYou lists every one still waiting above the message box, so none is lost up the
+// conversation.
+import { useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import type { TreeSection } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import type { ChatMessage, Proposal } from '../../shared/api/chat'
-import { describe } from './describe'
+import { cardId as idOf, describe } from './describe'
+import Collapsible from '../../library/Collapsible/Collapsible'
 import styles from './ProposalCards.module.css'
 
 function Card({
@@ -41,13 +47,11 @@ function Card({
     }
   }
 
-  return (
+  const reword = proposal.action === 'reword'
+  const written = proposal.action === 'add' && proposal.item_id === 0
+  const details: ReactNode = (reword || written || proposal.reason) && (
     <>
-      <p className={styles.title}>
-        <strong>{title}</strong>
-        {proposal.state !== 'pending' && <span className="tag">{proposal.state}</span>}
-      </p>
-      {proposal.action === 'reword' && (
+      {reword && (
         <dl className={styles.change}>
           <dt>Before</dt>
           <dd>{proposal.before}</dd>
@@ -55,13 +59,33 @@ function Card({
           <dd>{proposal.new_text}</dd>
         </dl>
       )}
-      {proposal.action === 'add' && proposal.item_id === 0 && (
+      {written && (
         <dl className={styles.change}>
-          <dt>New text</dt>
+          <dt>{proposal.target === 'skill' ? 'New skill' : 'New text'}</dt>
           <dd>{proposal.new_text}</dd>
         </dl>
       )}
       {proposal.reason && <p className="muted">{proposal.reason}</p>}
+    </>
+  )
+
+  return (
+    <>
+      <p className={styles.title}>
+        <strong>{title}</strong>
+        {proposal.state !== 'pending' && <span className="tag">{proposal.state}</span>}
+      </p>
+      {details && (proposal.state === 'pending' ? details : (
+          <Collapsible
+            title={
+              <>
+                Details<span className="visually-hidden"> of {title}</span>
+              </>
+            }
+          >
+            {details}
+          </Collapsible>
+        ))}
       {error && <p role="alert">{error.message}</p>}
       {!readOnly && proposal.state === 'pending' && (
         <div className="actions">
@@ -110,13 +134,12 @@ export default function ProposalCards({
   const focusLater = useFocusLater()
   const proposals = message.proposals ?? []
   if (proposals.length === 0) return null
-  const sectionTitle = (id: number) => sections.find((section) => section.section_id === id)?.title ?? 'a section'
-  const cardId = (proposal: Proposal) => `proposal-${message.message_id}-${proposal.id}`
+  const cardId = (proposal: Proposal) => idOf(message.message_id, proposal.id)
 
   return (
     <ul aria-label="Proposed changes" className={styles.cards}>
       {proposals.map((proposal) => {
-        const title = describe(proposal, sectionTitle)
+        const title = describe(proposal, sections)
         return (
           <li key={proposal.id} id={cardId(proposal)} tabIndex={-1} className={styles.card}>
             <Card
@@ -139,5 +162,34 @@ export default function ProposalCards({
         )
       })}
     </ul>
+  )
+}
+
+// Every card the user hasn't applied or dismissed, oldest first, each moving focus to its card
+// (which scrolls it into view). Nothing shows when none is waiting.
+export function WaitingForYou({ messages, sections }: { messages: ChatMessage[]; sections: TreeSection[] }) {
+  const focusLater = useFocusLater()
+  const headingId = useId()
+  const waiting = messages.flatMap((message) =>
+    (message.proposals ?? []).filter((proposal) => proposal.state === 'pending').map((proposal) => ({ message, proposal })),
+  )
+  if (waiting.length === 0) return null
+
+  return (
+    <section aria-labelledby={headingId} className={styles.waiting}>
+      <h4 id={headingId}>Waiting for you ({waiting.length})</h4>
+      <ul>
+        {waiting.map(({ message, proposal }) => {
+          const title = describe(proposal, sections)
+          return (
+            <li key={idOf(message.message_id, proposal.id)}>
+              <button type="button" aria-label={`Go to: ${title}`} onClick={() => focusLater(idOf(message.message_id, proposal.id))}>
+                {title}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

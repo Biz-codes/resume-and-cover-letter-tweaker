@@ -19,7 +19,7 @@ Run `scripts/check.sh` from the project root. It runs ruff, the backend tests, `
 
 - `git status --short` and `git ls-files --others --exclude-standard`: nothing under `db/seed_personal/`, no `.env` file other than `.env.example`, and no `*.dump` file may appear.
 - `git check-ignore db/seed_personal/` should confirm the folder is ignored.
-- `python3 scripts/check_demo_data.py`: the demo data (`db/seed_demo.sql`) must share nothing with `db/seed_personal/`. A match prints only the demo file's line and the kind of match (sentence, contact detail, name, or organization). Read that demo line and change it to something made up; never open the personal file to see what it matched.
+- `backend/.venv/bin/python scripts/check_demo_data.py` (the backend's Python, since a shell's `python3` may be macOS's older one): the demo data (`db/seed_demo.sql`) must share nothing with `db/seed_personal/`. A match prints only the demo file's line and the kind of match (sentence, contact detail, name, or organization). Read that demo line and change it to something made up; never open the personal file to see what it matched.
 - Never print the contents of `.env` files or personal seed files.
 
 ## 3. Leftovers from design changes

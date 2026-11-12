@@ -25,6 +25,8 @@ from app.models import (
     SUMMARY_SECTION_ID,
     BulletPoint,
     ChatMessage,
+    CoverLetter,
+    NarrativeContent,
     Resume,
     ResumeBulletPoint,
 )
@@ -302,10 +304,50 @@ def test_checks_each_kind_of_proposal(db: Session, account_id: int):
     assert why("add", "skill", EXPERIENCE_SECTION_ID, 1, **job) == (
         "a skill can't go under a experience")
     assert why("add", "experience", EXPERIENCE_SECTION_ID, 0, new_text="New role") == (
-        "only new narrative content or a new bullet can have item_id 0, with its text")
+        "only new narrative content, a new bullet, or a new skill can have item_id 0, with its "
+        "text")
+    assert why("add", "skill", EXPERIENCE_SECTION_ID, 0, **job) == (
+        "only new narrative content, a new bullet, or a new skill can have item_id 0, with its "
+        "text")
     assert why("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"], new_text="Shipped it",
                **job) == "the new wording is the same as the original"
     assert why("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"], **job) == (
         "a rewording needs its new wording")
     assert why("add", "category", SKILLS_SECTION_ID, front.category_id) == (
         "section 2 isn't in the document")
+
+
+def test_sends_the_postings_other_document_when_it_changed(client: TestClient, db: Session,
+                                                          account_id: int, claude: FakeChat):
+    """A posting's resume chat reads its cover letter (and the other way around), as plain
+    text, in a message only when it changed since Claude last saw it."""
+    doc, _ = setup_resume(db, account_id)
+    letter = add(db, CoverLetter(account_id=account_id, name="Letter",
+                                 job_posting_id=doc.job_posting_id))
+    sentence = add(db, NarrativeContent(account_id=account_id, content="I like your tools."))
+
+    def letter_says(*content_ids: int) -> None:
+        response = client.put(f"/api/cover-letters/{letter.letter_id}/tree", json={"sections": [
+            {"section_id": SUMMARY_SECTION_ID, "entries": [
+                {"kind": "narrative", "item_id": content_id, "skill_ids": [], "bullet_ids": []}
+                for content_id in content_ids]}]})
+        assert response.status_code == 200, response.json()
+
+    def others(call: dict[str, Any]) -> list[str]:
+        return [block["text"] for block in call["messages"][-1]["content"]
+                if block.get("text", "").startswith("<cover_letter_for_this_posting>")]
+
+    # An empty letter isn't sent.
+    claude.answer("Fine.")
+    send(client, doc)
+    assert others(claude.calls[0]) == []
+    assert "<cover_letter_for_this_posting>" in claude.calls[0]["system"][0]["text"]
+    letter_says(sentence.content_id)
+    claude.answer("Fine.")
+    claude.answer("Fine.")
+    send(client, doc)
+    send(client, doc)
+    assert others(claude.calls[1]) == [
+        "<cover_letter_for_this_posting>\nI like your tools.\n</cover_letter_for_this_posting>"]
+    # Unchanged, so not sent again.
+    assert others(claude.calls[2]) == []
