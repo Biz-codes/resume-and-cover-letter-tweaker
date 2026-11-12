@@ -1,0 +1,30 @@
+/* Claude's proposed changes under its reply in the chat. Colors come from index.css. */
+.cards {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.title {
+  margin: 0 0 4px;
+}
+
+.change {
+  margin: 0 0 4px;
+}
+
+.change dt {
+  font-weight: 600;
+}
+
+.change dd {
+  margin: 0 0 4px;
+}

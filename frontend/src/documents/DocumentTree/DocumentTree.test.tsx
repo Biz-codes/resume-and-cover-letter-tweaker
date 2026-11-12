@@ -545,6 +545,54 @@ describe('DocumentTree', () => {
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Add content to Summary' })).toHaveFocus())
   })
 
+  it('asks Claude about each row, named for it, with what the question is about', async () => {
+    stub()
+    const onAsk = vi.fn()
+    render(<DocumentTree kind="resume" doc={DOC} readOnly={false} onChange={vi.fn()} onReload={vi.fn()} onNotice={vi.fn()} onAsk={onAsk} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask Claude about Experience' }))
+    expect(onAsk).toHaveBeenLastCalledWith({ level: 'section', label: 'the Experience section', section_id: 3 }, 'ask-section-101')
+    await openExperience()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude about Role: Engineer, Acme in Experience' }))
+    expect(onAsk).toHaveBeenLastCalledWith(
+      { level: 'item', label: 'the role Engineer, Acme in Experience', section_id: 3, kind: 'experience', item_id: 7 },
+      'ask-experience-300',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude about "Led the redesign." under Engineer, Acme in Experience' }))
+    expect(onAsk).toHaveBeenLastCalledWith(
+      {
+        level: 'item',
+        label: 'the bullet "Led the redesign." under Engineer, Acme in Experience',
+        section_id: 3,
+        kind: 'bullet',
+        item_id: 8,
+        parent_kind: 'experience',
+        parent_id: 7,
+      },
+      'ask-bullet-experience-400',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude about React under Front End in Experience' }))
+    expect(onAsk).toHaveBeenLastCalledWith(
+      {
+        level: 'item',
+        label: 'the skill React under Front End in Experience',
+        section_id: 3,
+        kind: 'skill',
+        item_id: 1,
+        parent_kind: 'category',
+        parent_id: 2,
+      },
+      'ask-skill-category-401',
+    )
+  })
+
+  it('has no Ask Claude without a chat', async () => {
+    stub()
+    renderTree()
+    await screen.findByRole('button', { name: 'View and Edit Experience' })
+    expect(screen.queryByRole('button', { name: /^Ask Claude/ })).not.toBeInTheDocument()
+  })
+
   it('only shows the tree when read-only, without reading the library', async () => {
     const fetchMock = stubApi({})
     renderTree(DOC, true)

@@ -325,6 +325,95 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it('opens the chat beside the document, about the whole of it or one part, and closes it', async () => {
+    const library = ['sections', 'narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const tree = { sections: [{ row_id: 100, section_id: 3, title: 'Experience', entries: [] }] }
+    stub(22, resume(22, tree), {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      'GET /api/resumes/22/chat': [{ status: 200, body: [] }],
+    })
+    renderAt('/resumes/22')
+    const chatButton = await screen.findByRole('button', { name: 'Chat with Claude' })
+    fireEvent.click(chatButton)
+    const panel = await screen.findByRole('complementary', { name: 'Chat with Claude' })
+    expect(within(panel).getByText('About the whole resume')).toBeInTheDocument()
+    // There's nothing wider than the whole document.
+    expect(within(panel).queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(within(panel).getByLabelText('Message to Claude')).toHaveFocus())
+    await expectNoA11yViolations()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close chat' }))
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(chatButton).toHaveFocus())
+
+    // From a section's row, about that section, and wider from there.
+    fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
+    const ask = await screen.findByRole('button', { name: 'Ask Claude about Experience' })
+    fireEvent.click(ask)
+    const opened = await screen.findByRole('complementary', { name: 'Chat with Claude' })
+    expect(within(opened).getByText('About the Experience section')).toBeInTheDocument()
+    fireEvent.click(within(opened).getByRole('button', { name: 'Ask about the whole resume instead' }))
+    expect(within(opened).getByText('About the whole resume')).toBeInTheDocument()
+    fireEvent.click(within(opened).getByRole('button', { name: 'Close chat' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Ask Claude about Experience' })).toHaveFocus())
+  })
+
+  it("applies one of Claude's proposals as an ordinary change, which Undo takes back", async () => {
+    const library = ['sections', 'narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const entry = (itemId: number, content: string) => ({
+      kind: 'narrative',
+      row_id: itemId,
+      item_id: itemId,
+      position: 1,
+      values: { content },
+      skills: [],
+      bullets: [],
+    })
+    const before = resume(23, { sections: [{ row_id: 100, section_id: 1, title: 'Summary', entries: [entry(6, 'I build tools.')] }] })
+    const after = resume(23, { sections: [{ row_id: 101, section_id: 1, title: 'Summary', entries: [entry(9, 'I build fast tools.')] }] })
+    const proposal = {
+      id: 'toolu_1',
+      action: 'reword',
+      target: 'narrative',
+      section_id: 1,
+      item_id: 6,
+      parent_kind: '',
+      parent_id: 0,
+      new_text: 'I build fast tools.',
+      position: 0,
+      reason: 'The posting asks for speed.',
+      before: 'I build tools.',
+      state: 'pending',
+    }
+    const conversation = [
+      { message_id: 1, role: 'user', text: 'Tighten it.', about: { level: 'document', label: 'the whole resume' }, proposals: null, created_at: null },
+      { message_id: 2, role: 'assistant', text: 'Try this.', about: null, proposals: [proposal], created_at: null },
+    ]
+    const fetchMock = stub(23, before, {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      'GET /api/resumes/23/chat': [{ status: 200, body: conversation }],
+      'POST /api/resumes/23/chat/2/proposals/toolu_1/apply': [
+        { status: 200, body: { document: after, message: { ...conversation[1], proposals: [{ ...proposal, state: 'applied' }] } } },
+      ],
+      'PUT /api/resumes/23/tree': [{ status: 200, body: before }],
+    })
+    renderAt('/resumes/23')
+    fireEvent.click(await screen.findByRole('button', { name: 'Chat with Claude' }))
+    const panel = await screen.findByRole('complementary', { name: 'Chat with Claude' })
+    const apply = await within(panel).findByRole('button', { name: 'Apply: Reword the text "I build tools." in Summary' })
+    await expectNoA11yViolations()
+    fireEvent.click(apply)
+    await vi.waitFor(() => expect(within(panel).getByText('Applied: Reword the text "I build tools." in Summary.')).toHaveAttribute('aria-live', 'polite'))
+    expect(within(panel).getByText('applied')).toHaveClass('tag')
+    // The change is in the document, and Undo takes it back like any other.
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(undo).toHaveAttribute('aria-disabled', 'false')
+    fireEvent.click(undo)
+    await expectNotice('Undid a change. Nothing more to undo.')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/23/tree')).toEqual({
+      sections: [{ section_id: 1, entries: [{ kind: 'narrative', item_id: 6, skill_ids: [], bullet_ids: [] }] }],
+    })
+  })
+
   it('renames in a modal, keeping what was typed when it fails', async () => {
     const fetchMock = stub(6, resume(6), {
       'PUT /api/resumes/6': [
@@ -634,6 +723,7 @@ describe('DocumentPage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/^The purpose of this draft is just to accept or reject Claude's initial suggestions/)).toBeInTheDocument()
     // It's only reviewed, so there's no saving-as-you-edit note, and nothing to copy yet.
+    expect(screen.queryByRole('button', { name: 'Chat with Claude' })).not.toBeInTheDocument()
     expect(screen.queryByText('Edits to the resume below save instantly.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Copy to a new base resume' })).not.toBeInTheDocument()
     // The draft is what there is to do first, so it starts open.

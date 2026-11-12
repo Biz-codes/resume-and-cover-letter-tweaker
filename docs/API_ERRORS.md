@@ -45,6 +45,7 @@ Every error response has an HTTP status and this body:
 - **Framework errors** use the same shape: an unknown route → `NOT_FOUND`, any other 4xx (e.g. wrong HTTP method) → `VALIDATION_FAILED` with its own status.
 - **Logging:** log every `INTERNAL_ERROR` and `AI_UNAVAILABLE` with full details on the server. Only the safe `message` goes to the front end.
 - **Claude API:** the `anthropic` SDK retries rate limits, server errors, and connection errors twice on its own. If it still fails, or Claude declines the request, return `AI_UNAVAILABLE`.
+- **Streamed responses** (the chat's `POST .../chat`): checks that refuse the request run before the stream starts, so they're ordinary error responses. Once it starts, the status is 200, and a failure is the stream's last line, `{"type": "error", "error": {...}}`, in the same shape as above; nothing is saved, since the turn is committed only before the `done` line.
 
 ## Front end rules
 - **Keep the user's input.** An error never clears a form, an edit in progress, or a suggestion the user was reviewing.

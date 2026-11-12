@@ -1,5 +1,6 @@
 // One part of a library card (a list, "Used by") that opens and closes. It starts open when
-// it holds anything and closed when empty, and its heading shows how many items it holds.
+// it holds anything and closed when empty, and its heading shows how many items it holds. Without
+// a count (a part that isn't a list, such as asking Claude), it starts closed.
 import type { ReactNode } from 'react'
 import styles from './Collapsible.module.css'
 
@@ -9,13 +10,14 @@ export default function Collapsible({
   children,
 }: {
   title: string
-  count: number
+  count?: number
   children: ReactNode
 }) {
   return (
-    <details className={styles.sublist} open={count > 0}>
+    <details className={styles.sublist} open={count !== undefined && count > 0}>
       <summary>
-        {title} ({count})
+        {title}
+        {count !== undefined && ` (${count})`}
       </summary>
       {children}
     </details>

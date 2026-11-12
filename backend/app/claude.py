@@ -11,6 +11,7 @@ timeout, and the app waits for the whole reply.
 """
 
 import logging
+from collections.abc import Generator
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -82,3 +83,40 @@ def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str,
         raise AppError(ErrorCode.AI_UNAVAILABLE) from RuntimeError(
             f"{step} stopped with {response.stop_reason}")
     return response.parsed_output
+
+
+def converse(client: anthropic.Anthropic, *, step: str, system: list[dict[str, Any]],
+             messages: list[dict[str, Any]], tools: list[dict[str, Any]], effort: Effort,
+             max_tokens: int = MAX_TOKENS) -> Generator[str, None, Any]:
+    """One turn of a conversation, for the chat (app/chat.py): yields Claude's reply text as
+    it's written, and returns the whole message (its content blocks, with any tool calls).
+    Claude may end its turn calling tools; nothing here runs them. Failures are
+    AI_UNAVAILABLE, as in `ask`."""
+    try:
+        with client.beta.messages.stream(
+            model=MODEL,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+            tools=tools,
+            thinking={"type": "adaptive"},
+            output_config={"effort": effort},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        ) as stream:
+            for event in stream:
+                if event.type == "text":
+                    yield event.text
+            response = stream.get_final_message()
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as error:
+        raise AppError(ErrorCode.AI_UNAVAILABLE,
+                       "Claude didn't accept the API key. Check it in backend/.env, then "
+                       "restart the backend.") from error
+    except anthropic.APIError as error:
+        raise AppError(ErrorCode.AI_UNAVAILABLE) from error
+    logger.info("Claude %s: %s", step, response.usage)
+    # A reply cut short (max_tokens) or declined (refusal) is never kept.
+    if response.stop_reason not in ("end_turn", "tool_use"):
+        raise AppError(ErrorCode.AI_UNAVAILABLE) from RuntimeError(
+            f"{step} stopped with {response.stop_reason}")
+    return response

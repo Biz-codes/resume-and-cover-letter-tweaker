@@ -40,6 +40,7 @@ from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, ReadIn, read_document, save_items
 from app.models import Header, Resume, ToneSet
 from app.plain_text import Output, resume_output
+from app.routers.chat import add_chat_routes
 from app.routers.document_tree import add_tree_routes, fill_document, restore
 from app.routers.headers import find_or_add
 from app.schemas import RequiredText
@@ -262,3 +263,4 @@ def set_resume_hidden(resume_id: int, body: HiddenIn, db: DbSession,
 
 
 add_tree_routes(router, RESUME, detail)
+add_chat_routes(router, RESUME, detail)

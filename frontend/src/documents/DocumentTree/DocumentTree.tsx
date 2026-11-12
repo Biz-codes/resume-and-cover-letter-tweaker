@@ -8,8 +8,9 @@
 // (AddContent), from the library or written new; bullets and skills can be written in place too.
 // Each row's View and Edit opens its library item in the same dialog as the library's
 // (useItemDialogs), where an edit changes it in this document, and in the others in progress the
-// user checks (docs/FRONTEND_CHECKS.md, "Changing an item"). Each change is saved right away and
-// returns the document with its new output.
+// user checks (docs/FRONTEND_CHECKS.md, "Changing an item"), and its Ask Claude opens the chat
+// beside the document about that row (ChatPanel). Each change is saved right away and returns the
+// document with its new output.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -20,6 +21,7 @@ import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList, { type ListItem } from '../../shared/components/OrderedList/OrderedList'
 import { useItemDialogs } from '../../library/items/ItemDialogs'
+import type { ChatAbout } from '../../shared/api/chat'
 import type { ItemRef } from '../../library/items/itemHost'
 import {
   entryItem,
@@ -103,10 +105,13 @@ function Writer({
   )
 }
 
-// A row's View and Edit button: `row` makes its id unique on the page, `label` names the row and
-// where it is (an item can be in more than one section, a skill under more than one category),
-// and `ref` is its library item.
-type EditRow = (row: string, label: string, ref: ItemRef) => ReactNode
+// A row's View and Edit and Ask Claude buttons: `row` makes their ids unique on the page, `label`
+// names the row and where it is (an item can be in more than one section, a skill under more than
+// one category), `ref` is its library item, and `about` what a question about it is about.
+type EditRow = (row: string, label: string, ref: ItemRef, about: ChatAbout) => ReactNode
+
+// Opens the chat about a row; `returnTo` is the button to go back to when it closes.
+export type AskClaude = (about: ChatAbout, returnTo: string) => void
 
 // What opens under a role, project, or education entry (its fields, as the library has them),
 // and a category's or project's skills and a role's or project's bullets here.
@@ -120,6 +125,7 @@ function EntryChildren({
   onWriteSkill,
   editRow,
   sectionTitle,
+  sectionId,
 }: {
   entry: TreeEntry
   // Null when read-only: nothing to add from.
@@ -134,6 +140,7 @@ function EntryChildren({
   editRow: EditRow
   // The section it's placed in, which names its rows' buttons.
   sectionTitle: string
+  sectionId: number
 }) {
   const name = placedItem(entry).name.replace(/^[^:]*: /, '')
   const readOnly = library === null
@@ -191,6 +198,15 @@ function EntryChildren({
         `bullet-${parentKind}-${row.row_id}`,
         `${item.label ?? item.name} under ${name} in ${sectionTitle}`,
         { kind: 'bullet', id: row.item_id, title: shortBullet(row.text) },
+        {
+          level: 'item',
+          label: `the bullet ${item.label ?? item.name} under ${name} in ${sectionTitle}`,
+          section_id: sectionId,
+          kind: 'bullet',
+          item_id: row.item_id,
+          parent_kind: parentKind,
+          parent_id: entry.item_id,
+        },
       )
     )
   }
@@ -202,6 +218,15 @@ function EntryChildren({
         `skill-${parentKind}-${row.row_id}`,
         `${item.name} under ${name} in ${sectionTitle}`,
         { kind: 'skill', id: row.item_id, title: row.text },
+        {
+          level: 'item',
+          label: `the skill ${item.name} under ${name} in ${sectionTitle}`,
+          section_id: sectionId,
+          kind: 'skill',
+          item_id: row.item_id,
+          parent_kind: parentKind,
+          parent_id: entry.item_id,
+        },
       )
     )
   }
@@ -390,11 +415,19 @@ function SectionBody({
     const entry = entryOf(item)
     if (!entry) return null
     const name = itemName(entry.kind, entry.values)
-    return editRow(`${entry.kind}-${entry.row_id}`, `${item.label ?? item.name} in ${section.title}`, {
-      kind: entry.kind,
-      id: entry.item_id,
-      title: opens(entry.kind) ? name : shortBullet(name),
-    })
+    const shown = opens(entry.kind) ? name : `"${shortBullet(name)}"`
+    return editRow(
+      `${entry.kind}-${entry.row_id}`,
+      `${item.label ?? item.name} in ${section.title}`,
+      { kind: entry.kind, id: entry.item_id, title: opens(entry.kind) ? name : shortBullet(name) },
+      {
+        level: 'item',
+        label: `the ${KIND_NAMES[entry.kind].lower} ${shown} in ${section.title}`,
+        section_id: section.section_id,
+        kind: entry.kind,
+        item_id: entry.item_id,
+      },
+    )
   }
 
   return (
@@ -462,6 +495,7 @@ function SectionBody({
               }
               editRow={editRow}
               sectionTitle={section.title}
+              sectionId={section.section_id}
             />
           )
         }}
@@ -478,6 +512,8 @@ export default function DocumentTree({
   onChange,
   onReload,
   onNotice,
+  onAsk,
+  onChatSent,
 }: {
   kind: DocKind
   doc: DocDetail
@@ -489,6 +525,10 @@ export default function DocumentTree({
   // a delete), which isn't a change to undo here.
   onReload: (doc: DocDetail) => void
   onNotice: (notice: string | null) => void
+  // Without it, rows have no Ask Claude.
+  onAsk?: AskClaude
+  // A question asked in an item's dialog, so the chat panel reads the conversation again.
+  onChatSent?: () => void
 }) {
   const [library, setLibrary] = useState<Library | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
@@ -527,17 +567,32 @@ export default function DocumentTree({
     notify: onNotice,
   })
 
-  const editRow: EditRow = (row, label, ref) => {
+  const editRow: EditRow = (row, label, ref, about) => {
     const id = `edit-${row}`
+    const askId = `ask-${row}`
     return (
-      <button
-        type="button"
-        id={id}
-        aria-label={`View and Edit ${label}`}
-        onClick={() => open(ref, { doc: KINDS[kind].singular, where: { kind, id: doc.id }, returnTo: id })}
-      >
-        View and Edit
-      </button>
+      <>
+        <button
+          type="button"
+          id={id}
+          aria-label={`View and Edit ${label}`}
+            onClick={() =>
+            open(ref, {
+              doc: KINDS[kind].singular,
+              where: { kind, id: doc.id },
+              returnTo: id,
+              chat: onAsk && onChatSent ? { about, onSent: onChatSent } : undefined,
+            })
+          }
+        >
+          View and Edit
+        </button>
+        {onAsk && (
+          <button type="button" id={askId} aria-label={`Ask Claude about ${label}`} onClick={() => onAsk(about, askId)}>
+            Ask Claude
+          </button>
+        )}
+      </>
     )
   }
 
@@ -550,6 +605,7 @@ export default function DocumentTree({
         `section-${section.row_id}`,
         section.title,
         { kind: 'section', id: section.section_id, title: section.title },
+        { level: 'section', label: `the ${section.title} section`, section_id: section.section_id },
       )
     )
   }

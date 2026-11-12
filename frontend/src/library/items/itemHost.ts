@@ -2,6 +2,7 @@
 // them (useItemDialogs): show another item in its place, keep the page in step, and close with
 // a notice on the page. Kept apart from ItemDialogs.tsx, which imports every view.
 import { createContext, useContext } from 'react'
+import type { ChatAbout } from '../../shared/api/chat'
 
 export type ItemKind =
   | 'header'
@@ -25,6 +26,9 @@ export interface Placement {
   where: { kind: 'resume' | 'cover_letter'; id: number }
   // The row's View and Edit button, where focus goes when the dialog closes after a change.
   returnTo: string
+  // The document's chat with Claude, when it has one: what a question asked in the dialog is
+  // about (the row), and what to call once one is sent, so the chat panel shows it too.
+  chat?: { about: ChatAbout; onSent: () => void }
 }
 
 // An item to show, with the title its dialog is named by.
@@ -49,7 +53,7 @@ export interface ItemHost {
   close: () => void
   // Set only for the item opened from a tree row, not one shown from a name inside the dialog:
   // what it's placed in.
-  placed?: Pick<Placement, 'doc' | 'where'>
+  placed?: Pick<Placement, 'doc' | 'where' | 'chat'>
 }
 
 export const ItemHostContext = createContext<ItemHost | null>(null)

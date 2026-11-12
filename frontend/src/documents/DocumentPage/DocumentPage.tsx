@@ -32,6 +32,9 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
 import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
+import ChatPanel from '../ChatPanel/ChatPanel'
+import ProposalCards from '../ProposalCards/ProposalCards'
+import { chatApi, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
 import NameForm from '../../shared/components/NameForm/NameForm'
@@ -48,6 +51,7 @@ import Dialog from '../../shared/components/Dialog/Dialog'
 // The buttons that open each form, where focus returns when it closes.
 const BUTTON_IDS = { copy: 'doc-copy', delete: 'doc-delete', title: 'doc-title' }
 const TONE_ID = 'doc-tone'
+const CHAT_BUTTON_ID = 'doc-chat'
 
 type Mode = 'copy' | 'delete' | 'title'
 
@@ -103,6 +107,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [hiding, setHiding] = useState(false)
   const [hideError, setHideError] = useState<ApiError | null>(null)
+  // The chat beside the document, while it's open: what the next message is about, the button that
+  // opened it (focus goes back there when it closes), and a count that moves focus into it each
+  // time an Ask Claude button is pressed, even when it's already open.
+  const [chat, setChat] = useState<{ about: ChatAbout; returnTo: string; request: number } | null>(null)
+  // Counts questions asked in an item's dialog, so an open chat panel reads them in.
+  const [chatVersion, setChatVersion] = useState(0)
   const focusLater = useFocusLater()
   // A base version's title ends in "Base Resume", one for a posting's in "Resume".
   const titleKind = doc && !doc.job_posting ? `Base ${kindTitle}` : kindTitle
@@ -361,6 +371,36 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     }
   }
 
+  const openChat = (about: ChatAbout, returnTo: string) =>
+    setChat((current) => ({ about, returnTo, request: (current?.request ?? 0) + 1 }))
+  function closeChat() {
+    if (chat) focusLater(chat.returnTo)
+    setChat(null)
+  }
+  // Applying one of Claude's proposals is an ordinary change, kept for Undo and made in turn with
+  // the others; the cards announce it themselves.
+  async function applyProposal(messageId: number, proposalId: string): Promise<ChatMessage> {
+    let message: ChatMessage | undefined
+    await inTurn(async () => {
+      const applied = await chatApi(kind).apply(id, messageId, proposalId)
+      message = applied.message
+      return applied.document
+    }, '')
+    if (!message) throw new Error('The change was not applied.')
+    return message
+  }
+  const proposalState = (messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
+    chatApi(kind).setState(id, messageId, proposalId, state)
+
+  const wholeDocument: ChatAbout = { level: 'document', label: `the whole ${singular}` }
+  // What a question can be widened to: an item's section, then the whole document.
+  function wider(about: ChatAbout): ChatAbout[] {
+    if (about.level === 'document') return []
+    const section = doc?.sections.find((placed) => placed.section_id === about.section_id)
+    const sectionAbout: ChatAbout = { level: 'section', label: `the ${section?.title ?? ''} section`, section_id: about.section_id }
+    return about.level === 'item' ? [sectionAbout, wholeDocument] : [wholeDocument]
+  }
+
   const header = headers.find((item) => item.header_id === doc?.header_id)
   const toneSet = toneSets.find((item) => item.tone_set_id === doc?.tone_set_id)
   // Tones with the same name show when each was added.
@@ -391,7 +431,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
       {!doc && !loadError && <p>Loading…</p>}
 
       {doc && (
-        <>
+        <div className={chat ? styles.withChat : undefined}>
+        <div className={styles.mainColumn}>
           {(doc.locked || doc.hidden) && (
             <p>
               {doc.locked && <span className="tag">sent</span>}
@@ -435,6 +476,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
+              {/* The chat comes after Claude's first draft is approved. */}
+              {!doc.draft && (
+                <button type="button" id={CHAT_BUTTON_ID} onClick={() => openChat(wholeDocument, CHAT_BUTTON_ID)}>
+                  Chat with Claude
+                </button>
+              )}
               {/* Named for what it makes, since the page's other Copy buttons copy text. Claude's
                   draft isn't a version yet, so there's nothing to copy. */}
               {!doc.draft && (
@@ -560,6 +607,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                       setDoc(next)
                     }}
                     onNotice={setNotice}
+                    onAsk={readOnly ? undefined : openChat}
+                    onChatSent={() => setChatVersion((count) => count + 1)}
                   />
                 )}
               </Disclosure>
@@ -626,7 +675,32 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               </>
             )}
           </Disclosure>
-        </>
+        </div>
+        {chat && (
+          <ChatPanel
+            kind={kind}
+            docId={id}
+            locked={doc.locked}
+            about={chat.about}
+            wider={wider(chat.about)}
+            onAbout={(about) => setChat({ ...chat, about })}
+            onClose={closeChat}
+            focusRequest={chat.request}
+            version={chatVersion}
+            proposals={(message, { update, announce }) => (
+              <ProposalCards
+                message={message}
+                sections={doc.sections}
+                readOnly={doc.locked}
+                onApply={applyProposal}
+                onState={proposalState}
+                onUpdate={update}
+                announce={announce}
+              />
+            )}
+          />
+        )}
+        </div>
       )}
     </section>
   )

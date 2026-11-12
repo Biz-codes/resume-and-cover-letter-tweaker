@@ -6,6 +6,8 @@
   /* Colors the components' own CSS modules use, kept here so a11yChecks.ts checks them. */
   --border: #d8d5dd;
   --highlight: #ece9f0;
+  /* The page's own background, for a panel that covers the page (ChatPanel.module.css). */
+  --page: #fff;
   --outline: #5f5b66;
   /* What a modal dialog dims the page behind it with (Dialog.module.css). */
   --backdrop: #1f1d2480;

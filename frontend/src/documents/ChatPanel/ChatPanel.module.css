@@ -1,0 +1,71 @@
+/* The chat beside the document. On large screens it's a column beside the tree that stays in
+   view while the page scrolls; below them it covers the page (DocumentPage.module.css hides the
+   document while it's open), and "Close chat" goes back to it. Colors come from index.css. */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--page);
+}
+
+@media (min-width: 1024px) {
+  .panel {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.top h3 {
+  margin: 0;
+}
+
+.messages {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.messages li p {
+  margin: 0 0 6px;
+}
+
+.mine,
+.claude {
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.mine {
+  background: var(--highlight);
+}
+
+.claude {
+  border: 1px solid var(--border);
+}
+
+.who {
+  font-weight: 600;
+}
+
+.about {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.about p {
+  margin: 0;
+}

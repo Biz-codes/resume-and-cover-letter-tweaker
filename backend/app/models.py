@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
+    CheckConstraint,
     Date,
     Enum,
     ForeignKey,
@@ -68,6 +69,11 @@ def updated_at() -> Mapped[datetime | None]:
 class WritingRuleKind(enum.StrEnum):
     term = "term"
     pattern = "pattern"
+
+
+class ChatRole(enum.StrEnum):
+    user = "user"
+    assistant = "assistant"
 
 
 # Library tables
@@ -177,6 +183,28 @@ class CoverLetter(Base):
     signature_name: Mapped[str | None] = mapped_column(String(100))
     draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     hidden: Mapped[bool] = hidden()
+    created_at: Mapped[datetime | None] = created_at()
+    updated_at: Mapped[datetime | None] = updated_at()
+
+
+class ChatMessage(Base):
+    """One turn of a resume's or cover letter's chat with Claude (app/chat.py)."""
+
+    __tablename__ = "chat_message"
+    __table_args__ = (
+        CheckConstraint("(resume_id IS NULL) <> (letter_id IS NULL)", name="one_document"),
+    )
+
+    message_id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(fk("account.account_id"))
+    resume_id: Mapped[int | None] = mapped_column(fk("resume.resume_id"))
+    letter_id: Mapped[int | None] = mapped_column(fk("cover_letter.letter_id"))
+    role: Mapped[ChatRole] = mapped_column(Enum(ChatRole, name="chat_role"))
+    text: Mapped[str] = mapped_column(Text)
+    about: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # The turn's content blocks exactly as Claude saw or wrote them, replayed unchanged.
+    content: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    proposals: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

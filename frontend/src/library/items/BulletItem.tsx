@@ -13,6 +13,7 @@ import ApplyChoice from '../ApplyChoice'
 import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
+import DialogChat from './DialogChat'
 import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
@@ -25,6 +26,8 @@ export default function BulletItem({ id }: { id: number }) {
   const { data, error, load } = useItemData(() => bulletsApi.list())
   const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
+  // The text in the form, kept here so a question to Claude takes it, and Claude's wording can go in.
+  const [typed, setTyped] = useState<string | null>(null)
 
   const bullet = data?.find((item) => item.bullet_id === id)
   if (!data || !bullet) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
@@ -65,10 +68,13 @@ export default function BulletItem({ id }: { id: number }) {
         await Promise.all([load(), host.refresh()])
       }}
       form={
+        <>
         <NameForm
           label="Bullet text"
           field="content"
           initial={bullet.content}
+          value={typed ?? bullet.content}
+          onValueChange={setTyped}
           multiline
           lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(content) => save(bullet, content)}
@@ -77,6 +83,8 @@ export default function BulletItem({ id }: { id: number }) {
         >
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </NameForm>
+        <DialogChat field="content" value={typed ?? bullet.content} onUse={setTyped} />
+        </>
       }
       confirmDelete={(back) => (
         <ConfirmDelete

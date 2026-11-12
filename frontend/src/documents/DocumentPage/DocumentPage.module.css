@@ -52,3 +52,23 @@
 .title button {
   margin: 4px 0 8px;
 }
+
+/* With the chat open: beside the document on large screens; below them the chat covers the page,
+   and the document is hidden until "Close chat" (so focus can't move to what's behind it). */
+.with-chat {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .with-chat {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    align-items: start;
+  }
+}
+
+@media (max-width: 1023px) {
+  .with-chat > .main-column {
+    display: none;
+  }
+}

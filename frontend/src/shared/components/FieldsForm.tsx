@@ -23,6 +23,8 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   children,
   onSave,
   onCancel,
+  values: shown,
+  onValuesChange,
 }: {
   // Names the form, e.g. "Edit "Engineer, Acme"".
   label: string
@@ -38,8 +40,17 @@ export default function FieldsForm<T extends { [K in keyof T]: string | null }>(
   children?: ReactNode
   onSave: (values: T) => Promise<void>
   onCancel: () => void
+  // The values, kept by the caller instead (an item's dialog, where Claude's wording can be put in
+  // a field and the unsaved text goes with a question to Claude).
+  values?: T
+  onValuesChange?: (values: T) => void
 }) {
-  const [values, setValues] = useState(initial)
+  const [own, setOwn] = useState(initial)
+  const values = shown ?? own
+  const setValues = (next: T) => {
+    onValuesChange?.(next)
+    if (shown === undefined) setOwn(next)
+  }
   const [error, setError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
   const errorId = useId()

@@ -59,7 +59,7 @@ export function useItemDialogs({
     },
     say: setNotice,
     close: () => setStack([]),
-    placed: placement && stack.length === 1 ? { doc: placement.doc, where: placement.where } : undefined,
+    placed: placement && stack.length === 1 ? { doc: placement.doc, where: placement.where, chat: placement.chat } : undefined,
   }
 
   const top = stack.at(-1)

@@ -39,6 +39,7 @@ from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, Matcher, ReadIn, read_document, save_item, save_items
 from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
 from app.plain_text import Output, letter_output
+from app.routers.chat import add_chat_routes
 from app.routers.document_tree import add_tree_routes, fill_document, restore
 from app.routers.headers import find_or_add
 from app.routers.resumes import CopyIn
@@ -322,3 +323,4 @@ def set_letter_hidden(letter_id: int, body: HiddenIn, db: DbSession,
 
 
 add_tree_routes(router, COVER_LETTER, detail)
+add_chat_routes(router, COVER_LETTER, detail)

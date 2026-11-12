@@ -13,6 +13,7 @@ import FieldsForm from '../../shared/components/FieldsForm'
 import ApplyChoice from '../ApplyChoice'
 import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import UsedBy from '../UsedBy'
+import DialogChat from './DialogChat'
 import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
@@ -30,6 +31,8 @@ export default function NarrativeItem({ id }: { id: number }) {
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   // The sections checked in the form, starting with the ones that list it.
   const [chosen, setChosen] = useState<number[] | null>(null)
+  // The text in the form, kept here so a question to Claude takes it, and Claude's wording can go in.
+  const [typed, setTyped] = useState<string | null>(null)
 
   const excerpt = data?.[0].find((item) => item.content_id === id)
   if (!data || !excerpt) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
@@ -72,10 +75,13 @@ export default function NarrativeItem({ id }: { id: number }) {
         await Promise.all([load(), host.refresh()])
       }}
       form={
+        <>
         <FieldsForm
           label={`Edit ${label}`}
           fields={EXCERPT_FIELDS}
           initial={{ content: excerpt.content }}
+          values={{ content: typed ?? excerpt.content }}
+          onValuesChange={(next) => setTyped(next.content)}
           note={changeNote(here, others, host.placed?.doc, anyLocked(excerpt.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(fields) => update(excerpt, fields)}
           focusOnOpen={false}
@@ -91,6 +97,8 @@ export default function NarrativeItem({ id }: { id: number }) {
           />
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
+        <DialogChat field="content" value={typed ?? excerpt.content} onUse={setTyped} />
+        </>
       }
       confirmDelete={(back) => (
         <ConfirmDelete

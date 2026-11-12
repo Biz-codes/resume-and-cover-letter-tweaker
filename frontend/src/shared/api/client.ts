@@ -59,16 +59,18 @@ export async function apiRequest<T>(method: Method, path: string, body?: unknown
   }
 
   if (response.status === 204) return undefined as T
-  const data: unknown = await response.json().catch(() => null)
+  if (!response.ok) throw await errorOf(response)
+  return (await response.json().catch(() => null)) as T
+}
 
-  if (!response.ok) {
-    if (isErrorBody(data)) {
-      const { code, message, field } = data.error
-      throw new ApiError(code, message, field, response.status)
-    }
-    throw new ApiError('INTERNAL_ERROR', UNEXPECTED_MESSAGE, null, response.status)
+// The ApiError a failed response carries (or a general one, when its body isn't the usual shape).
+export async function errorOf(response: Response): Promise<ApiError> {
+  const data: unknown = await response.json().catch(() => null)
+  if (isErrorBody(data)) {
+    const { code, message, field } = data.error
+    return new ApiError(code, message, field, response.status)
   }
-  return data as T
+  return new ApiError('INTERNAL_ERROR', UNEXPECTED_MESSAGE, null, response.status)
 }
 
 export const api = {

@@ -1,0 +1,23 @@
+/* Asking Claude in an item's dialog. Colors come from index.css. */
+.messages {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.messages p {
+  margin: 0 0 4px;
+}
+
+.who {
+  font-weight: 600;
+}
+
+.wording {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}

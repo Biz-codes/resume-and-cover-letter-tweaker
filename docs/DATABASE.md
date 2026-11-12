@@ -186,6 +186,27 @@ Note: `signature_name` is the name printed under the sign-off. Empty means the h
 
 Note: `addressee` is everything after "Dear" in the greeting. It defaults to "[organization] Hiring Team", using the job posting's `organization` (or just "Hiring Team" when there's no posting). The user can replace it with anything, such as a hiring manager's name ("Ms. Rivera"). When a posting's letter is tailored by Claude and the posting (or its `contacts`) names who is hiring, Claude suggests that name in the draft, and approving the draft saves it here unless the user keeps the default. The app fills in the default, since a database default can't look up the organization.
 
+### chat_message
+| Column     | Type      | Constraints                                               | Description                                   |
+|------------|-----------|-----------------------------------------------------------|-----------------------------------------------|
+| message_id | SERIAL    | PRIMARY KEY                                               | unique chat message id                        |
+| account_id | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                          |
+| resume_id  | INTEGER   | REFERENCES resume(resume_id) ON DELETE CASCADE            | id of related resume                          |
+| letter_id  | INTEGER   | REFERENCES cover_letter(letter_id) ON DELETE CASCADE      | id of related cover letter                    |
+| role       | chat_role | NOT NULL                                                  | who wrote the message: the user or Claude     |
+| text       | TEXT      | NOT NULL                                                  | what the chat panel shows                     |
+| about      | JSONB     |                                                           | the part of the document the message is about |
+| content    | JSONB     | NOT NULL                                                  | content blocks as sent to or from Claude      |
+| proposals  | JSONB     |                                                           | changes Claude proposed in the message        |
+| created_at | TIMESTAMP | DEFAULT NOW()                                             | date/time chat message added to db            |
+| updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time chat message last updated           |
+
+Note: one row per turn of a resume's or cover letter's chat with Claude (see "Working with Claude at every level" in [APP_FLOW.md](APP_FLOW.md)), in the order added. Exactly one of `resume_id` and `letter_id` is set (a database check), so deleting the document deletes its chat. `role` uses a Postgres enum type, `chat_role`, with the values `user` and `assistant`.
+
+Note: the conversation only grows. `content` is each turn exactly as Claude saw it or wrote it (for the user, what the message was about, the document when it changed, and the results of Claude's last proposals; for Claude, its thinking, reply, and tool calls), so every request replays the history unchanged, which keeps it cached and keeps Claude's thinking valid. `text` is the part the panel shows. A user turn's `about` names the document, a section, or an item (with any unsaved text from the item's dialog). An assistant turn's `proposals` lists Claude's proposed changes, each with its tool call id and a `state` (`pending`, `applied`, or `dismissed`, or `left_out` with why, for one that failed the app's checks and was never shown); a change of state updates that row, and the next user turn tells Claude what happened to each. A copy of a document doesn't copy its chat, and a sent (locked) one's chat can be read but gets no new messages (`VERSION_LOCKED`). See "Chat with Claude" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+
+Note: app checks: a message's text is 1 to 4,000 characters, and what it's about must be in the document (`VALIDATION_FAILED`); Claude's proposals are checked against the library and the document like its suggestions, and those that fail aren't shown.
+
 ### section
 | Column     | Type         | Constraints                                      | Description                                       |
 |------------|--------------|--------------------------------------------------|---------------------------------------------------|

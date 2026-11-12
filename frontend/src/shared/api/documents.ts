@@ -229,9 +229,10 @@ export const treeShape = (sections: TreeSection[]) =>
     })),
   }))
 
-type Raw = Omit<Doc, 'id'> & { resume_id?: number; letter_id?: number }
+// A document as the backend sends it, named by resume_id or letter_id.
+export type Raw = Omit<Doc, 'id'> & { resume_id?: number; letter_id?: number }
 
-const withId = <T extends Doc>(kind: DocKind, raw: Raw) => ({ ...raw, id: raw[KINDS[kind].idKey] }) as T
+export const withId = <T extends Doc>(kind: DocKind, raw: Raw) => ({ ...raw, id: raw[KINDS[kind].idKey] }) as T
 
 export function docsApi(kind: DocKind) {
   const path = KINDS[kind].path

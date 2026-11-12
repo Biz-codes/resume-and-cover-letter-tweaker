@@ -28,6 +28,8 @@ export default function NameForm({
   children,
   onSave,
   onCancel,
+  value,
+  onValueChange,
 }: {
   label: string
   // The request field, so a VALIDATION_FAILED or DUPLICATE on it highlights the input.
@@ -48,8 +50,17 @@ export default function NameForm({
   children?: ReactNode
   onSave: (name: string) => Promise<void>
   onCancel?: () => void
+  // The field's value, kept by the caller instead (an item's dialog, where Claude's wording can be
+  // put in the field and the unsaved text goes with a question to Claude).
+  value?: string
+  onValueChange?: (value: string) => void
 }) {
-  const [name, setName] = useState(initial)
+  const [own, setOwn] = useState(initial)
+  const name = value ?? own
+  const setName = (next: string) => {
+    onValueChange?.(next)
+    if (value === undefined) setOwn(next)
+  }
   const [error, setError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
   const errorId = useId()
