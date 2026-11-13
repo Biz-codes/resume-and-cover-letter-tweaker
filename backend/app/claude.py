@@ -4,8 +4,9 @@ Every Claude call goes through here, so the model, error handling, and usage log
 same for each step. The API key stays on the server: only the backend reads it (from
 backend/.env), and the front end only ever talks to FastAPI.
 
-Each step is one request with a structured response: the reply's shape is a Pydantic model,
-which the SDK checks, so the app gets data it can use directly instead of text to pick apart.
+Each step is one request with a structured response (`ask`): the reply's shape is a Pydantic
+model, which the SDK checks, so the app gets data it can use directly instead of text to pick
+apart. The chat's turns are text and tool calls instead (`converse`).
 Every request streams, so a long one (a whole resume, at high effort) never hits an HTTP
 timeout, and the app waits for the whole reply.
 """

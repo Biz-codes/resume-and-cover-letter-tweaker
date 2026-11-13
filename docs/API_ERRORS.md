@@ -20,17 +20,17 @@ Every error response has an HTTP status and this body:
 - **`field`:** the input field that failed (e.g. `"title"`), so the front end can highlight it: for `VALIDATION_FAILED`, and for `DUPLICATE`, `NOT_FOUND`, or `CROSS_ACCOUNT_LINK` when it's about a name or id the request sent (e.g. `"item_id"`). Otherwise `null`.
 
 ## Error codes
-| Code                   | HTTP status | When                                                                                                                                               |
-|------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `BUILT_IN_PROTECTED`   | 409         | deleting, renaming, or hiding a built-in section or the built-in "Other" skill category                                                            |
-| `NOT_FOUND`            | 404         | the item doesn't exist, or belongs to another account                                                                                              |
-| `VALIDATION_FAILED`    | 422         | bad or missing input, or a link the app's rules don't allow (see FRONTEND_CHECKS.md)                                                               |
-| `DUPLICATE`            | 409         | a value that must be unique already exists (e.g. a section title, or the same item picked twice under one parent)                                  |
-| `CROSS_ACCOUNT_LINK`   | 422         | linking items that belong to different accounts                                                                                                    |
-| `VERSION_LOCKED`       | 409         | changing a sent version, or an applied posting's header, starting a version for an applied posting, or deleting a library item a sent version uses |
-| `POSTING_FETCH_FAILED` | 502         | the job posting page couldn't be fetched or no job description was found on it                                                                     |
-| `AI_UNAVAILABLE`       | 503         | the Claude API failed, timed out, or declined the request after the SDK's automatic retries                                                        |
-| `INTERNAL_ERROR`       | 500         | anything unexpected                                                                                                                                |
+| Code                   | HTTP status | When                                                                                                                                                                                                   |
+|------------------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BUILT_IN_PROTECTED`   | 409         | deleting, renaming, or hiding a built-in section or the built-in "Other" skill category                                                                                                                |
+| `NOT_FOUND`            | 404         | the item doesn't exist, or belongs to another account                                                                                                                                                  |
+| `VALIDATION_FAILED`    | 422         | bad or missing input, or a link the app's rules don't allow (see FRONTEND_CHECKS.md)                                                                                                                   |
+| `DUPLICATE`            | 409         | a value that must be unique already exists (e.g. a section title, or the same item picked twice under one parent)                                                                                      |
+| `CROSS_ACCOUNT_LINK`   | 422         | linking items that belong to different accounts                                                                                                                                                        |
+| `VERSION_LOCKED`       | 409         | changing or deleting a sent version, sending a chat message about one, changing an applied posting's header, starting a version for an applied posting, or deleting a library item a sent version uses |
+| `POSTING_FETCH_FAILED` | 502         | the job posting page couldn't be fetched or no job description was found on it                                                                                                                         |
+| `AI_UNAVAILABLE`       | 503         | the Claude API failed, timed out, or declined the request after the SDK's automatic retries                                                                                                            |
+| `INTERNAL_ERROR`       | 500         | anything unexpected                                                                                                                                                                                    |
 
 `NOT_FOUND` also covers items from another account, so the API never reveals whether another account's item exists.
 

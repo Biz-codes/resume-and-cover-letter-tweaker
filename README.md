@@ -20,7 +20,7 @@ The walkthrough uses made-up demo data (`db/seed_demo.sql`), never real applicat
 ## What stands out in how it's built
 - **Claude's output is checked before it's shown.** Every Claude request uses structured outputs, so replies come back as typed data, and the backend checks every id in a suggestion is the user's own and listed where Claude put it before the draft reaches the screen. The library and earlier documents are sent first with prompt caching, so later requests reuse them.
 - **The user approves every change.** Claude's draft shows each choice with its reason, badged as from the original, from the library, or Claude's wording, with the original a click away. Nothing reaches the document or the library until the user approves it.
-- **Every version is saved and reused.** Each role, project, bullet, and sentence is stored once in a 47-table PostgreSQL library, and each resume only records which items it uses, in what order. Versions sent to employers are locked, so the record of what went out never changes.
+- **Every version is saved and reused.** Each role, project, bullet, and sentence is stored once in a 48-table PostgreSQL library, and each resume only records which items it uses, in what order. Versions sent to employers are locked, so the record of what went out never changes.
 - **Accessibility is tested in every state.** The front end targets WCAG 2.2 AA: axe-core runs after every test, each component has tests that reach every state it renders, lint rules and a contrast check run before the tests, and every change is announced to screen readers.
 - **The docs are checked against the code.** Tests confirm the database doc matches the models, the models match the migrations, and the error codes doc matches the backend and front end. 700+ automated tests run in GitHub Actions on every push.
 
@@ -42,7 +42,7 @@ Status: in progress. The content library, building resumes and cover letters, an
 Input: URL of a job posting (or none, when working on a base resume)
 Output: plain text for a resume and cover letter tailored to that posting, ready to copy and paste
 
-The app fetches the posting and has Claude extract its organization, role title, and description. The user's content lives in a Postgres library: every role, project, skill, bullet, and sentence is stored once, and each resume or cover letter only records which items it uses, in what order. The app builds a resume and cover letter from that library section by section, suggests which saved content fits the job best, and suggests improvements or new content. The user approves every choice. Base resumes, which aren't tied to any posting, are kept as ongoing starting points.
+The app fetches the posting and has Claude extract its organization, role title, and description. The user's content lives in a Postgres library: every role, project, skill, bullet, and sentence is stored once, and each resume or cover letter only records which items it uses, in what order. Claude drafts a resume or cover letter from that library, picking the saved content that fits the job best and suggesting improvements or new content, and the chat works on any part of it afterward. The user approves every choice. Base resumes, which aren't tied to any posting, are kept as ongoing starting points.
 
 ## Tech stack
 - Python, FastAPI, PostgreSQL 18 (SQLAlchemy, Alembic)

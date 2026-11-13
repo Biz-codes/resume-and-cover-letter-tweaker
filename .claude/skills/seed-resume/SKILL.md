@@ -53,7 +53,7 @@ Only spacing is ignored. Any other difference, even one character, is a differen
 - **New item:** insert it.
 - **Versions of a role, project, or education entry:** when a resume shows a role with a different title, dates, or location than the library has, that's a separate `experience` row, a version of the role. Versions list the same bullets, so shared bullets are never stored twice.
   - **Sent resume:** add the new version without asking. It records what was sent.
-  - **Base resume:** ask whether to add a new version, or update the existing row (every resume showing it changes).
+  - **Base resume:** ask whether to add a new version, or update the existing row (every resume showing it changes). If a sent resume or cover letter (its posting has `applied_on`) shows the row, only a new version is possible: sent versions never change.
 - **Near matches** in names that look like the same thing written differently ("Acme Corp" / "Acme Corporation", "JS" / "JavaScript"): for a base resume, ask whether it's the same item. For a sent resume, copy it as written and point it out.
 - **Bullets or sentences that differ slightly** are separate rows (alternate wordings are what the library is for). Point them out.
 

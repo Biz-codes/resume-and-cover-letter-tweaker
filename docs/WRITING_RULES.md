@@ -25,13 +25,14 @@ Other signals that a word is a real term:
 - it's part of a skill name in the database
 
 ### Existing content
-The database will be seeded with the user's existing resume data, which may contain listed words.
+The database is seeded with the user's existing resumes and cover letters (and can take more, read from their files), which may contain listed words.
 - **No automatic changes:** the app doesn't rewrite seeded content on import or without asking.
 - **When it shows up in a suggestion:** if a suggested item contains a listed word, the app applies the test above.
   - **Filler:** it suggests a rewording. An accepted rewording is saved as a new bullet point or narrative content excerpt, and the original stays in the library (see [APP_FLOW.md](APP_FLOW.md)).
   - **Real term:** it leaves the word alone.
 
 ### How the app checks
+Being built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): the check exists, and the steps that run it on Claude's drafts, the chat, and the user's own text come next. Until then, the rules reach Claude in each request's instructions.
 - **Terms are found in code:** whole words, ignoring capitals, including a single word's usual endings ("leveraged", "spearheading") and a hyphen written as a space ("results driven"). Finding one only makes it a candidate.
 - **Claude judges the rest** in one quick check: whether each found term is filler or a real term (the test above), the patterns, and the document's tone.
 - **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. Whatever still breaks a rule is shown with the rule and why, and the user decides.

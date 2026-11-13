@@ -21,7 +21,7 @@ The schema lives in `docs/DATABASE.md`. It's the source of truth, so every schem
      - `updated_at`: `date/time X last updated`
 
 3. **Apply the conventions:**
-   - **Primary key:** `SERIAL PRIMARY KEY` named `<table>_id` (except `section.id`).
+   - **Primary key:** `SERIAL PRIMARY KEY` named `<table>_id`, or a shorter form of it where the table's name is long (`bullet_point.bullet_id`, `narrative_content.content_id`, `skill_category.category_id`, `cover_letter.letter_id`, `chat_message.message_id`); `section.id` is the one exception. Foreign keys use the same name as the key they point to.
    - **Ownership:** every top-level table has `account_id INTEGER NOT NULL REFERENCES account(account_id) ON DELETE CASCADE`. Join tables don't; they belong to an account through their resume or cover letter.
    - **Timestamps:** library tables get `created_at` and `updated_at` (`TIMESTAMP`, `DEFAULT NOW()`). Join tables get none.
    - **Library items stand alone:** no parent id columns. A parent lists its children in a library join table with a (parent, child) primary key, a `position INTEGER NOT NULL` for default order, and no timestamps.

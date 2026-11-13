@@ -3,10 +3,11 @@ posting's document"; docs/FRONTEND_CHECKS.md, "Claude's suggestions").
 
 Starting a posting's document with Claude (start_draft) stores Claude's suggestion in its
 `draft`, with each piece of Claude's text (a rewording or new narrative content or bullet) kept
-once in `texts` and pointed to by key from where it's placed. The user's first pass edits the
-draft's tree: removing, reordering, adding what the library lists there, and going back to an
-item's original wording. Each change is checked (check_sections) and saved in the draft, so
-nothing reaches the document or the library until the review is finished.
+once in `texts` and pointed to by key from where it's placed. The user's first pass only
+accepts or rejects Claude's suggestions: rejecting what Claude brought in or wrote, and going
+back to an item's original wording (or to Claude's again). Each change is checked
+(check_sections) and saved in the draft, so nothing reaches the document or the library until
+the review is finished.
 
 A cover letter's draft can also hold new sections Claude titled for its new paragraphs (each
 once in `new_sections`, pointed to by key) and the greeting Claude suggests, which the user keeps

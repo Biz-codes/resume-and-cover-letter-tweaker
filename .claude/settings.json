@@ -18,7 +18,10 @@
       "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/oxlint src/documents/ChatPanel/ChatPanel.tsx)",
       "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/shared/components/HeaderFields)",
       "Bash(xargs -I{} sed -n '{}p' docs/FRONTEND_CHECKS.md)",
-      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/documents/DraftTree)"
+      "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/documents/DraftTree)",
+      "Bash(backend/.venv/bin/python /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/names_check.py .)",
+      "Bash(backend/.venv/bin/python /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/section_refs.py .)",
+      "Bash(sed -i '' 's/    headings\\\\[doc.name\\\\] = {line.lstrip\\(\"#\"\\).strip\\(\\) for line in doc.read_text\\(\\).splitlines\\(\\)\\\\n                          if line.startswith\\(\"#\"\\)}//' /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/section_refs.py)"
     ]
   },
   "hooks": {
