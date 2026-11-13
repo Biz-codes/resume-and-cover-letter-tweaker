@@ -4,8 +4,10 @@
 // sets from the "Ask Claude" button that opened the panel, and which can be widened to the section
 // or the whole document.
 //
-// Claude's reply shows as it's written. Screen readers hear "Claude is replying" when it starts and
-// the whole reply once it's done, from the panel's own live region, not every piece. A reply that
+// Claude's reply shows as it's written. Screen readers hear "Claude is replying" when it starts,
+// that its changes are being checked against the writing rules once it's written (when it proposes
+// any with text), and the whole reply once it's done (with how many changes are flagged), from the
+// panel's own live region, not every piece. A reply that
 // fails saves nothing, and the message stays in the box, with Retry.
 //
 // A sent document's conversation can be read, not added to. Claude's proposals show under its
@@ -15,7 +17,7 @@ import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { KINDS, type DocKind } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { chatApi, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
+import { chatApi, uncheckedOf, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
 import styles from './ChatPanel.module.css'
 
 export const CHAT_INPUT_ID = 'chat-message'
@@ -34,7 +36,21 @@ function Paragraphs({ text }: { text: string }) {
   )
 }
 
-const pending = (count: number) => (count === 1 ? '1 proposed change' : `${count} proposed changes`)
+const CHECKING = 'Checking the proposed changes against your writing rules…'
+
+// After a reply: how many changes it proposes, how many of them break a writing rule, and whether
+// the check couldn't run.
+function proposalsNote(answer: ChatMessage) {
+  const proposals = answer.proposals ?? []
+  if (proposals.length === 0) return ''
+  const count = proposals.length === 1 ? '1 proposed change' : `${proposals.length} proposed changes`
+  const flagged = proposals.filter((proposal) => proposal.flags?.length).length
+  const unchecked = uncheckedOf(answer).length
+  let note = ` ${count} below.`
+  if (flagged) note += ` ${flagged === 1 ? '1 breaks' : `${flagged} break`} a writing rule, marked Flagged.`
+  if (unchecked) note += ` ${unchecked === 1 ? '1 could' : `${unchecked} could`}n't be checked against your writing rules.`
+  return note
+}
 
 export default function ChatPanel({
   kind,
@@ -75,6 +91,8 @@ export default function ChatPanel({
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [text, setText] = useState('')
   const [replying, setReplying] = useState<string | null>(null)
+  // The reply is written and its proposals are being checked against the writing rules.
+  const [checking, setChecking] = useState(false)
   const [sendError, setSendError] = useState<ApiError | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const focusLater = useFocusLater()
@@ -103,19 +121,29 @@ export default function ChatPanel({
     if (!message || replying !== null) return
     setSendError(null)
     setReplying('')
+    setChecking(false)
     setAnnouncement('Claude is replying…')
     try {
-      const saved = await api.send(docId, message, about, (piece) => setReplying((sofar) => (sofar ?? '') + piece))
+      const saved = await api.send(
+        docId,
+        message,
+        about,
+        (piece) => setReplying((sofar) => (sofar ?? '') + piece),
+        () => {
+          setChecking(true)
+          setAnnouncement(CHECKING)
+        },
+      )
       setMessages((current) => [...(current ?? []), ...saved])
       setText('')
       const answer = saved.at(-1)
-      const count = answer?.proposals?.length ?? 0
-      setAnnouncement(`Claude: ${answer?.text ?? ''}${count ? ` ${pending(count)} below.` : ''}`)
+      setAnnouncement(`Claude: ${answer?.text ?? ''}${answer ? proposalsNote(answer) : ''}`)
     } catch (error) {
       setSendError(toApiError(error))
       setAnnouncement('')
     } finally {
       setReplying(null)
+      setChecking(false)
     }
   }
 
@@ -151,6 +179,7 @@ export default function ChatPanel({
           <li className={styles.claude} aria-busy="true">
             <p className={styles.who}>Claude</p>
             {replying ? <Paragraphs text={replying} /> : <p className="muted">Replying…</p>}
+            {checking && <p className="muted">{CHECKING}</p>}
           </li>
         )}
       </ol>

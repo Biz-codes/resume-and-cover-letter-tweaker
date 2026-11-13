@@ -4,7 +4,8 @@ GET reads the conversation; POST sends a message and streams Claude's reply as J
 The checks that refuse a message (a sent document, a draft still to review, an empty or long
 message, or what it's about not in the document) run before the stream starts, so they come
 back as ordinary error responses. A proposal in Claude's reply is applied (an ordinary change
-to the tree, app/proposals.py) or dismissed, and dismissing can be taken back.
+to the tree, app/proposals.py) or dismissed, and dismissing can be taken back. A reply whose
+writing check failed can be checked again.
 """
 
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from app.chat import (
     check_open,
     history,
     message_out,
+    recheck,
     reply,
     start,
 )
@@ -29,7 +31,7 @@ from app.claude import Claude
 from app.db import DbSession, get_db
 from app.documents import Kind
 from app.errors import AppError, ErrorCode
-from app.models import ChatMessage
+from app.models import ChatMessage, ChatRole
 from app.proposals import apply, find_proposal, set_state
 
 # The session stays open until the stream ends ("request" scope), so the reply's two turns
@@ -87,6 +89,20 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         db.flush()
         db.refresh(doc)
         return {"document": detail(db, doc), "message": message_out(message)}
+
+    @router.post("/{doc_id}/chat/{message_id}/check")
+    def check_message(doc_id: int, message_id: int, db: DbSession, account_id: AccountId,
+                      client: Claude) -> ChatMessageOut:
+        """Check the reply's proposals against the writing rules again, after the check failed
+        (app/chat.py, recheck). Returns the message with what the check found."""
+        doc = get_owned(db, kind.doc, doc_id, account_id)
+        check_open(db, kind, doc)
+        message = own_message(db, doc_id, message_id)
+        if message.role != ChatRole.assistant:
+            raise AppError(ErrorCode.NOT_FOUND)
+        recheck(db, client, account_id, doc, message)
+        db.flush()
+        return message_out(message)
 
     @router.put("/{doc_id}/chat/{message_id}/proposals/{proposal_id}")
     def set_proposal_state(doc_id: int, message_id: int, proposal_id: str,

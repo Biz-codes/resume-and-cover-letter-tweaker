@@ -39,6 +39,8 @@ import {
 import Checklist from '../../shared/components/Checklist'
 import Dialog from '../../shared/components/Dialog/Dialog'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
+import Flags from '../../shared/components/WritingFlags/WritingFlags'
+import { flagCount } from '../../shared/components/WritingFlags/flagCount'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import { KIND_NAMES, keyOf, loadLibrary, savedItems, type Library } from '../treeItems'
 import styles from './DraftTree.module.css'
@@ -100,24 +102,6 @@ interface Words {
   useOriginal: string
   useClaude: string
 }
-
-// The writing rules the wording in use breaks (backend/app/writing_check.py): Claude's text still
-// breaking one after the check's fix, or a library item's own wording, which is never changed.
-function Flags({ flags, name }: { flags?: WritingFlag[]; name: string }) {
-  if (!flags?.length) return null
-  return (
-    <ul aria-label={`Writing rules ${name} breaks`} className={styles.flags}>
-      {flags.map((flag) => (
-        <li key={`${flag.kind}:${flag.rule}`}>
-          <strong>{flag.rule}</strong>: &ldquo;{flag.quote}&rdquo;. {flag.why}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-const flagCount = (flags?: WritingFlag[]) =>
-  flags?.length ? ` It breaks ${flags.length === 1 ? 'a writing rule' : `${flags.length} writing rules`}.` : ''
 
 // Claude's reason, then for a rewording, the wording not in use and a button to switch to it.
 // One button whose text changes, so it keeps focus.

@@ -38,7 +38,9 @@ const PROPOSAL = {
   reason: 'Shorter.',
   before: 'Shipped it',
   state: 'pending' as const,
+  checked: true,
 }
+const DRAMA = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
 
 // A streamed reply whose lines are sent one at a time, so a test can check what shows between them.
 function streamed() {
@@ -167,6 +169,53 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-disabled', 'true')
     expect(within(screen.getByRole('list', { name: 'Conversation' })).getAllByRole('listitem')).toHaveLength(2)
     await expectNoA11yViolations()
+  })
+
+  it('says when the changes are being checked against the writing rules, and how many are flagged', async () => {
+    const reply = streamed()
+    stubChat([], [reply.response])
+    renderPanel()
+    await screen.findByText('No messages yet.')
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Tighten it.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    reply.send({ type: 'text', text: 'Three changes.' })
+    expect(await screen.findByText('Three changes.')).toBeInTheDocument()
+    reply.send({ type: 'checking' })
+    const conversation = screen.getByRole('list', { name: 'Conversation' })
+    expect(await within(conversation).findByText('Checking the proposed changes against your writing rules…')).toBeInTheDocument()
+    expect(announced()).toBe('Checking the proposed changes against your writing rules…')
+    await expectNoA11yViolations()
+
+    reply.send({
+      type: 'done',
+      messages: [
+        asked(1, 'Tighten it.'),
+        answered(2, 'Three changes.', [
+          { ...PROPOSAL, flags: [DRAMA] },
+          { ...PROPOSAL, id: 'toolu_2', flags: [DRAMA] },
+          { ...PROPOSAL, id: 'toolu_3', checked: false },
+        ]),
+      ],
+    })
+    reply.end()
+    await vi.waitFor(() =>
+      expect(announced()).toBe(
+        "Claude: Three changes. 3 proposed changes below. 2 break a writing rule, marked Flagged. 1 couldn't be checked against your writing rules.",
+      ),
+    )
+    expect(within(screen.getByRole('list', { name: 'Conversation' })).queryByText(/^Checking/)).not.toBeInTheDocument()
+  })
+
+  it('says when the one flagged change breaks a rule', async () => {
+    const reply = streamed()
+    stubChat([], [reply.response])
+    renderPanel()
+    await screen.findByText('No messages yet.')
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Tighten it.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    reply.send({ type: 'done', messages: [asked(1, 'Tighten it.'), answered(2, 'One.', [{ ...PROPOSAL, flags: [DRAMA] }])] })
+    reply.end()
+    await vi.waitFor(() => expect(announced()).toBe('Claude: One. 1 proposed change below. 1 breaks a writing rule, marked Flagged.'))
   })
 
   it('keeps the message when the reply fails, offering Retry, and says nothing', async () => {

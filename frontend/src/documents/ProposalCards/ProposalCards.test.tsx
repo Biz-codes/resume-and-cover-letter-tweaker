@@ -34,7 +34,11 @@ const message = (...proposals: Proposal[]): ChatMessage => ({
   created_at: null,
 })
 
-function renderCards(shown: ChatMessage = message(base, NEW), readOnly = false) {
+function renderCards(
+  shown: ChatMessage = message(base, NEW),
+  readOnly = false,
+  onCheck: (messageId: number) => Promise<ChatMessage> = vi.fn(),
+) {
   const onApply = vi.fn((_m: number, id: string) =>
     Promise.resolve(message(...(shown.proposals ?? []).map((p) => (p.id === id ? { ...p, state: 'applied' as const } : p)))),
   )
@@ -50,12 +54,15 @@ function renderCards(shown: ChatMessage = message(base, NEW), readOnly = false) 
       readOnly={readOnly}
       onApply={onApply}
       onState={onState}
+      onCheck={onCheck}
       onUpdate={onUpdate}
       announce={announce}
     />,
   )
   return { onApply, onState, onUpdate, announce, view }
 }
+
+const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
 
 group('describe', () => {
   it('names each kind of change in a few words', () => {
@@ -125,6 +132,7 @@ group('ProposalCards', () => {
         readOnly={false}
         onApply={vi.fn()}
         onState={onState}
+        onCheck={vi.fn()}
         onUpdate={vi.fn()}
         announce={announce}
       />,
@@ -194,6 +202,77 @@ group('ProposalCards', () => {
   })
 })
 
+group('ProposalCards and the writing rules', () => {
+  const SAVED: Proposal = { ...base, id: 'toolu_3', action: 'add', item_id: 9, new_text: '', before: 'Led a team — of five', reason: '' }
+
+  it('badges a card whose text breaks a rule and lists each rule, for Claude’s text and a saved item', async () => {
+    renderCards(message({ ...base, flags: [drama], checked: true }, { ...SAVED, flags: [drama], checked: true }, { ...NEW, checked: true }))
+    // The cards themselves, not the lists of rules inside them.
+    const [reword, saved, added] = Array.from(screen.getByRole('list', { name: 'Proposed changes' }).children) as HTMLElement[]
+    expect(within(reword).getByText('Flagged')).toBeInTheDocument()
+    // Read apart from the title, not run into it.
+    expect(within(reword).getAllByRole('paragraph')[0]).toHaveTextContent('Reword the bullet "Shipped it" in Experience Flagged')
+    expect(within(reword).getByRole('list', { name: 'Writing rules Reword the bullet "Shipped it" in Experience breaks' })).toHaveTextContent(
+      'em dashes used for drama: “—”. It adds drama.',
+    )
+    expect(within(saved).getByText('Flagged')).toBeInTheDocument()
+    expect(within(saved).getByRole('list', { name: /^Writing rules .* breaks$/ })).toBeInTheDocument()
+    expect(within(added).queryByText('Flagged')).not.toBeInTheDocument()
+    // Every card was checked, so nothing offers to check again.
+    expect(screen.queryByRole('button', { name: 'Check writing rules again' })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('keeps the flags with the details once a card is applied', () => {
+    renderCards(message({ ...base, flags: [drama], checked: true, state: 'applied' }))
+    expect(screen.getByText('Flagged')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: /^Writing rules/ })).not.toBeVisible()
+  })
+
+  it('says when the check failed, and checks again, announcing what it found and moving focus to the first card', async () => {
+    const unchecked = message({ ...base, checked: false }, { ...base, id: 'toolu_4', action: 'remove', checked: true })
+    const checked = message({ ...base, checked: true, flags: [drama] }, { ...base, id: 'toolu_4', action: 'remove', checked: true })
+    const onCheck = vi.fn(() => Promise.resolve(checked))
+    const { onUpdate, announce } = renderCards(unchecked, false, onCheck)
+    expect(screen.getByText(/couldn't check this change against your writing rules, so nothing in it is flagged/)).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Check writing rules again' })
+    expect(button).toHaveAccessibleDescription(/couldn't check this change/)
+    await expectNoA11yViolations()
+    fireEvent.click(button)
+    expect(button).toHaveTextContent('Checking…')
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledWith('Checked against your writing rules. 1 change breaks a rule, marked Flagged.'))
+    expect(onCheck).toHaveBeenCalledWith(4)
+    expect(onUpdate).toHaveBeenCalledWith(checked)
+    await vi.waitFor(() => expect(document.getElementById('proposal-4-toolu_1')).toHaveFocus())
+  })
+
+  it('says when checking again finds nothing, and shows a failure with the button still there', async () => {
+    const two = message({ ...base, checked: false }, { ...NEW, checked: false })
+    const onCheck = vi
+      .fn<(messageId: number) => Promise<ChatMessage>>()
+      .mockRejectedValueOnce(new ApiError('AI_UNAVAILABLE', 'Claude is unavailable. Try again.', null, 503))
+      .mockResolvedValueOnce(message({ ...base, checked: true }, { ...NEW, checked: true }))
+    const { announce } = renderCards(two, false, onCheck)
+    expect(screen.getByText(/couldn't check these 2 changes against your writing rules, so nothing in them is flagged/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Check writing rules again' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Claude is unavailable. Try again.')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Check writing rules again' }))
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledWith('Checked against your writing rules. Nothing breaks a rule.'))
+  })
+
+  it('shows a sent document’s unchecked note without the button, and leaves out applied cards', () => {
+    renderCards(message({ ...base, checked: false }), true)
+    expect(screen.getByText(/couldn't check this change/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Check writing rules again' })).not.toBeInTheDocument()
+  })
+
+  it('has nothing to check again once the unchecked card is applied', () => {
+    renderCards(message({ ...base, checked: false, state: 'applied' }))
+    expect(screen.queryByText(/couldn't check/)).not.toBeInTheDocument()
+  })
+})
+
 group('WaitingForYou', () => {
   const later: ChatMessage = { ...message({ ...base, id: 'toolu_3', action: 'remove', target: 'skill', before: 'React' }), message_id: 6 }
 
@@ -209,6 +288,7 @@ group('WaitingForYou', () => {
             readOnly={false}
             onApply={vi.fn()}
             onState={vi.fn()}
+            onCheck={vi.fn()}
             onUpdate={vi.fn()}
             announce={vi.fn()}
           />

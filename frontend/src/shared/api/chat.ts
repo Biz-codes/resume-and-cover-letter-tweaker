@@ -1,9 +1,10 @@
 // The chat with Claude beside a resume or cover letter (backend/app/chat.py). Reading the
 // conversation is an ordinary request; sending a message streams Claude's reply as JSON lines:
-// "text" pieces as they're written, then "done" with the two saved turns, or "error" (in the
+// "text" pieces as they're written, "checking" while its proposals are checked against the writing
+// rules, then "done" with the two saved turns, or "error" (in the
 // shape in docs/API_ERRORS.md), after which nothing is saved.
 import { api, ApiError, errorOf, type ErrorBody } from './client'
-import { KINDS, withId, type DocDetail, type DocKind, type EntryKind, type Raw } from './documents'
+import { KINDS, withId, type DocDetail, type DocKind, type EntryKind, type Raw, type WritingFlag } from './documents'
 
 // What a message is about: the whole document, a section in it, or an item in it (an entry in a
 // section, or a skill or bullet under one), with how the panel names it.
@@ -38,7 +39,22 @@ export interface Proposal {
   // What it changes, as it read when Claude proposed it.
   before: string
   state: ProposalState
+  // For text it puts in the document (checksText): the writing rules it still breaks, whether
+  // `new_text` is the writing check's fixed wording, and whether the check ran.
+  flags?: WritingFlag[]
+  fixed?: boolean
+  checked?: boolean
 }
+
+// Whether the proposal puts narrative content or a bullet's text in the document (Claude's
+// wording, or a saved item as it is), so the writing check reads it.
+export const checksText = (proposal: Proposal) =>
+  (proposal.target === 'narrative' || proposal.target === 'bullet') && (proposal.action === 'reword' || proposal.action === 'add')
+
+// The reply's proposals the writing check couldn't read and that aren't applied yet, which
+// "Check writing rules again" checks.
+export const uncheckedOf = (message: ChatMessage) =>
+  (message.proposals ?? []).filter((proposal) => checksText(proposal) && !proposal.checked && proposal.state !== 'applied')
 
 export interface ChatMessage {
   message_id: number
@@ -51,6 +67,7 @@ export interface ChatMessage {
 
 type Line =
   | { type: 'text'; text: string }
+  | { type: 'checking' }
   | { type: 'done'; messages: ChatMessage[] }
   | ({ type: 'error' } & ErrorBody)
 
@@ -69,10 +86,19 @@ export function chatApi(kind: DocKind) {
     // Dismisses a proposal, or takes that back.
     setState: (id: number, messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
       api.put<ChatMessage>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}`, { state }),
-    // Sends a message, calling `onText` with each piece of Claude's reply as it's written, and
-    // returns the two saved turns. A refusal before the reply starts, or a failure during it,
-    // throws an ApiError, and nothing is saved.
-    async send(id: number, text: string, about: ChatAbout, onText: (piece: string) => void): Promise<ChatMessage[]> {
+    // Checks a reply's proposals against the writing rules again, after the check failed.
+    check: (id: number, messageId: number) => api.post<ChatMessage>(`${path}/${id}/chat/${messageId}/check`),
+    // Sends a message, calling `onText` with each piece of Claude's reply as it's written and
+    // `onChecking` once the reply is written and its proposals are being checked against the
+    // writing rules, and returns the two saved turns. A refusal before the reply starts, or a
+    // failure during it, throws an ApiError, and nothing is saved.
+    async send(
+      id: number,
+      text: string,
+      about: ChatAbout,
+      onText: (piece: string) => void,
+      onChecking: () => void = () => {},
+    ): Promise<ChatMessage[]> {
       let response: Response
       try {
         response = await fetch(`/api${path}/${id}/chat`, {
@@ -103,6 +129,7 @@ export function chatApi(kind: DocKind) {
           if (!raw.trim()) continue
           const line = JSON.parse(raw) as Line
           if (line.type === 'text') onText(line.text)
+          else if (line.type === 'checking') onChecking()
           else if (line.type === 'done') return line.messages
           else {
             const { code, message, field } = line.error

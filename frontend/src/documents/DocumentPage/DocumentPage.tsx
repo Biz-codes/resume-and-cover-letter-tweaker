@@ -719,6 +719,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 readOnly={doc.locked}
                 onApply={applyProposal}
                 onState={proposalState}
+                onCheck={(messageId) => chatApi(kind).check(id, messageId)}
                 onUpdate={update}
                 announce={announce}
               />

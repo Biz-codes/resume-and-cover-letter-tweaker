@@ -12,7 +12,7 @@ import httpx
 import pytest
 from anthropic.types.beta import BetaTextBlock, BetaThinkingBlock, BetaToolUseBlock
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.chat import PROPOSE_TOOL, Placed, ProposedChange, check_change
@@ -29,8 +29,11 @@ from app.models import (
     NarrativeContent,
     Resume,
     ResumeBulletPoint,
+    WritingRule,
+    WritingRuleKind,
 )
 from app.suggestions import load_library
+from app.writing_check import Issue, Review, Reviewed
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_sections_skills import add, category, error, resume
 
@@ -41,6 +44,8 @@ class FakeChat:
 
     def __init__(self) -> None:
         self.replies: list[Any] = []
+        # The writing check's replies (a Review, or an error), in order.
+        self.reviews: list[Any] = []
         self.calls: list[dict[str, Any]] = []
 
     def answer(self, *texts: str, tools: list[dict[str, Any]] = (),
@@ -52,6 +57,14 @@ class FakeChat:
     def stream(self, **request: Any) -> Iterator[SimpleNamespace]:
         # The history is a list the next turn appends to, so keep a copy of this one.
         self.calls.append(json.loads(json.dumps(request, default=str)))
+        if "output_format" in request:
+            review = self.reviews.pop(0)
+            if isinstance(review, Exception):
+                raise review
+            checked = SimpleNamespace(stop_reason="end_turn", parsed_output=review,
+                                      usage={"input_tokens": 1, "output_tokens": 1})
+            yield SimpleNamespace(get_final_message=lambda: checked, events=[])
+            return
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
@@ -360,3 +373,132 @@ def test_sends_the_postings_other_document_when_it_changed(client: TestClient, d
         "<cover_letter_for_this_posting>\nI like your tools.\n</cover_letter_for_this_posting>"]
     # Unchanged, so not sent again.
     assert others(claude.calls[2]) == []
+
+
+DRAMA = "em dashes used for drama"
+
+
+def drama(why: str, quote: str = "—") -> Issue:
+    return Issue(rule=DRAMA, quote=quote, why=why)
+
+
+def checked_texts(call: dict[str, Any]) -> list[tuple[int, str, str]]:
+    sent = json.loads(call["messages"][0]["content"].split("<texts>\n")[1]
+                      .split("\n</texts>")[0])
+    return [(text["key"], text["text"], text["written_by"]) for text in sent]
+
+
+def test_proposals_are_checked_against_the_writing_rules(client: TestClient, db: Session,
+                                                         account_id: int, claude: FakeChat):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    doc, ids = setup_resume(db, account_id)
+    db.get(BulletPoint, ids["Led a team"]).content = "Led a team — of five"
+    db.flush()
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    claude.answer("Three changes.", tools=[
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+               new_text="Shipped it — weekly.", **job),
+        change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="Mentored two — fast.",
+               **job),
+        change("add", "bullet", EXPERIENCE_SECTION_ID, ids["Led a team"], **job),
+        change("remove", "bullet", EXPERIENCE_SECTION_ID, ids["Tested it"], **job)])
+    claude.reviews.append(Review(texts=[
+        Reviewed(key=1, issues=[drama("Drama.")], fixed_text="Shipped it weekly."),
+        Reviewed(key=2, issues=[drama("Drama.")], fixed_text=""),
+        Reviewed(key=3, issues=[drama("Drama too.")], fixed_text="Ignored for your own text.")]))
+    streamed = lines(send(client, doc))
+    # The reply is written, then its changes are checked, then it's saved.
+    assert [line["type"] for line in streamed][-2:] == ["checking", "done"]
+
+    # One low-effort check after the reply, with Claude's text and the saved bullet's own.
+    reply, check_request = claude.calls
+    assert check_request["output_config"] == {"effort": "low"}
+    assert checked_texts(check_request) == [
+        (1, "Shipped it — weekly.", "assistant"), (2, "Mentored two — fast.", "assistant"),
+        (3, "Led a team — of five", "the person")]
+    reworded, new, saved, removed = streamed[-1]["messages"][1]["proposals"]
+    assert (reworded["new_text"], reworded["fixed"], reworded["flags"], reworded["checked"]) == (
+        "Shipped it weekly.", True, [], True)
+    assert (new["new_text"], new["fixed"], new["checked"]) == ("Mentored two — fast.", False, True)
+    assert new["flags"] == [{"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama."}]
+    # A saved item is only flagged, never changed.
+    assert (saved["new_text"], saved["flags"][0]["why"]) == ("", "Drama too.")
+    assert db.get(BulletPoint, ids["Led a team"]).content == "Led a team — of five"
+    # Nothing to check in a removal.
+    assert (removed["checked"], removed["flags"]) == (True, [])
+
+    # Applying uses the fixed wording.
+    message_id = streamed[-1]["messages"][1]["message_id"]
+    assert client.post(f"/api/resumes/{doc.resume_id}/chat/{message_id}/proposals/toolu_1/"
+                       "apply").status_code == 200
+    assert db.scalar(select(func.count()).select_from(BulletPoint).where(
+        BulletPoint.content == "Shipped it weekly.")) == 1
+
+    # Claude hears about the fix and what's still flagged in the next message.
+    claude.answer("Noted.")
+    send(client, doc, "Thanks.")
+    results = [block["content"] for block in claude.calls[-1]["messages"][-1]["content"]
+               if block["type"] == "tool_result"]
+    assert results[0] == ('The person applied it. Its wording was changed to follow the writing '
+                          'rules, to: "Shipped it weekly.".')
+    assert results[1] == (f"Shown to the person. They haven't applied or dismissed it. It still "
+                          f'breaks these writing rules: {DRAMA} ("—").')
+    assert results[3] == "Shown to the person. They haven't applied or dismissed it."
+
+
+def test_a_failed_check_keeps_the_reply_unchecked_until_checked_again(
+        client: TestClient, db: Session, account_id: int, claude: FakeChat):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    claude.answer("Two changes.", tools=[
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+               new_text="Shipped it — weekly.", **job),
+        change("move", "bullet", EXPERIENCE_SECTION_ID, ids["Tested it"], position=1, **job)])
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    failure = anthropic.APIConnectionError(request=request)
+    claude.reviews.append(failure)
+    done = lines(send(client, doc))[-1]
+    # The reply is kept, with the rewording unchecked.
+    assert done["type"] == "done"
+    answered = done["messages"][1]
+    reworded, moved = answered["proposals"]
+    assert (reworded["checked"], reworded["new_text"], moved["checked"]) == (
+        False, "Shipped it — weekly.", True)
+    url = f"/api/resumes/{doc.resume_id}/chat/{answered['message_id']}/check"
+
+    # Failing again changes nothing.
+    claude.reviews.append(failure)
+    assert error(client.post(url))[:2] == (503, "AI_UNAVAILABLE")
+    assert client.get(f"/api/resumes/{doc.resume_id}/chat").json()[1]["proposals"][0][
+        "checked"] is False
+
+    claude.reviews.append(Review(texts=[
+        Reviewed(key=1, issues=[drama("Drama.")], fixed_text="Shipped it weekly.")]))
+    response = client.post(url)
+    assert response.status_code == 200
+    # Only the writing check ran, on the rewording alone.
+    assert checked_texts(claude.calls[-1]) == [(1, "Shipped it — weekly.", "assistant")]
+    reworded, moved = response.json()["proposals"]
+    assert (reworded["checked"], reworded["fixed"], reworded["new_text"]) == (
+        True, True, "Shipped it weekly.")
+    assert moved["state"] == "pending"
+    assert client.get(f"/api/resumes/{doc.resume_id}/chat").json()[1] == response.json()
+
+    # A checked reply isn't checked again, and a user's message has nothing to check.
+    assert error(client.post(url))[:2] == (422, "VALIDATION_FAILED")
+    asked = done["messages"][0]["message_id"]
+    assert error(client.post(f"/api/resumes/{doc.resume_id}/chat/{asked}/check"))[:2] == (
+        404, "NOT_FOUND")
+
+
+def test_no_rules_means_no_check(client: TestClient, db: Session, account_id: int,
+                                 claude: FakeChat):
+    doc, ids = setup_resume(db, account_id)
+    claude.answer("Try this.", tools=[
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+               parent_kind="experience", parent_id=ids["job"], new_text="Shipped it weekly.")])
+    [proposal] = lines(send(client, doc))[-1]["messages"][1]["proposals"]
+    # Nothing to find, so Claude is asked only for the reply.
+    assert len(claude.calls) == 1
+    assert (proposal["checked"], proposal["flags"]) == (True, [])

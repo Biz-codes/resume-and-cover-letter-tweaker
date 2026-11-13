@@ -6,14 +6,43 @@
 //
 // Claude's reply streams in, and is announced in the dialog's notice once it's done. A rewording
 // Claude proposes for this item shows here with "Use this", which only puts it in the field, saved
-// with the dialog's Save; the rest of Claude's proposals wait as cards in the chat panel.
+// with the dialog's Save; the rest of Claude's proposals wait as cards in the chat panel. Its
+// wording is checked against the writing rules before it's shown, as the cards are: what it still
+// breaks is badged "Flagged" with each rule, and if the check failed, "Check writing rules again".
 import { useId, useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
-import { chatApi, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
+import { chatApi, type ChatAbout, type ChatMessage, type Proposal } from '../../shared/api/chat'
 import { toApiError, type ApiError } from '../../shared/api/client'
+import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
+import { flagCount } from '../../shared/components/WritingFlags/flagCount'
+import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import Collapsible from '../Collapsible/Collapsible'
 import { useItemHost } from './itemHost'
 import styles from './DialogChat.module.css'
+
+const CHECKING = "Checking Claude's wording against your writing rules…"
+
+// After the reply: whether Claude's wording breaks a writing rule, or couldn't be checked.
+function wordingNote(wordings: Proposal[]) {
+  const flags = wordings.flatMap((proposal) => proposal.flags ?? [])
+  if (wordings.some((proposal) => !proposal.checked)) return " It couldn't be checked against your writing rules."
+  return flags.length ? `${flagCount(flags)} It's marked Flagged.` : ''
+}
+
+// Claude's wording the writing check couldn't read, with "Check writing rules again". One button
+// whose text changes, so it keeps focus while it checks.
+function Unchecked({ busy, error, onCheck }: { busy: boolean; error: ApiError | null; onCheck: () => void }) {
+  const noteId = useId()
+  return (
+    <div className={styles.unchecked}>
+      <p id={noteId}>Claude couldn&apos;t check its wording against your writing rules, so nothing in it is flagged.</p>
+      {error && <p role="alert">{error.message}</p>}
+      <button type="button" aria-describedby={noteId} aria-disabled={busy} onClick={onCheck}>
+        {busy ? 'Checking…' : 'Check writing rules again'}
+      </button>
+    </div>
+  )
+}
 
 export default function DialogChat({
   field,
@@ -32,9 +61,15 @@ export default function DialogChat({
   const [exchange, setExchange] = useState<ChatMessage[]>([])
   const [text, setText] = useState('')
   const [replying, setReplying] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
+  // "Check writing rules again": the message being checked, and a failure, by message.
+  const [rechecking, setRechecking] = useState<number | null>(null)
+  const [checkError, setCheckError] = useState<{ messageId: number; error: ApiError } | null>(null)
   const boxId = useId()
   const errorId = useId()
+  const focusLater = useFocusLater()
+  const wordingButtonId = (messageId: number, proposalId: string) => `${boxId}-use-${messageId}-${proposalId}`
   if (!chat || !where) return null
   const about: ChatAbout = chat.about
 
@@ -43,6 +78,7 @@ export default function DialogChat({
     if (!message || replying !== null || !where || !chat) return
     setError(null)
     setReplying('')
+    setChecking(false)
     host.say('Claude is replying…')
     try {
       const saved = await chatApi(where.kind).send(
@@ -50,18 +86,43 @@ export default function DialogChat({
         message,
         { ...about, unsaved: { [field]: value } },
         (piece) => setReplying((sofar) => (sofar ?? '') + piece),
+        () => {
+          setChecking(true)
+          host.say(CHECKING)
+        },
       )
       setExchange((current) => [...current, ...saved])
       setText('')
       chat.onSent()
       const answer = saved.at(-1)
       const wordings = answer ? ownWordings(answer) : []
-      host.say(`Claude: ${answer?.text ?? ''}${wordings.length ? ' Its wording is below, with Use this.' : ''}`)
+      host.say(`Claude: ${answer?.text ?? ''}${wordings.length ? ` Its wording is below, with Use this.${wordingNote(wordings)}` : ''}`)
     } catch (caught) {
       setError(toApiError(caught))
       host.say('')
     } finally {
       setReplying(null)
+      setChecking(false)
+    }
+  }
+
+  async function checkAgain(message: ChatMessage) {
+    if (rechecking !== null || !where || !chat) return
+    setRechecking(message.message_id)
+    setCheckError(null)
+    try {
+      const checked = await chatApi(where.kind).check(where.id, message.message_id)
+      setExchange((current) => current.map((turn) => (turn.message_id === checked.message_id ? checked : turn)))
+      chat.onSent()
+      const flagged = ownWordings(checked).flatMap((proposal) => proposal.flags ?? [])
+      // The button is gone, so focus moves to Claude's wording's "Use this".
+      const first = ownWordings(checked)[0]
+      if (first) focusLater(wordingButtonId(checked.message_id, first.id))
+      host.say(`Checked Claude's wording against your writing rules.${flagged.length ? flagCount(flagged) : ' It breaks none.'}`)
+    } catch (caught) {
+      setCheckError({ messageId: message.message_id, error: toApiError(caught) })
+    } finally {
+      setRechecking(null)
     }
   }
 
@@ -85,28 +146,49 @@ export default function DialogChat({
               <p className={styles.who}>{message.role === 'user' ? 'You' : 'Claude'}</p>
               <p>{message.text}</p>
               {message.role === 'assistant' &&
-                ownWordings(message).map((proposal) => (
-                  <div key={proposal.id} className={styles.wording}>
-                    <p className={styles.who}>Claude&apos;s wording</p>
-                    <p>{proposal.new_text}</p>
-                    <button
-                      type="button"
-                      aria-label={`Use this wording: "${shortBullet(proposal.new_text)}"`}
-                      onClick={() => {
-                        onUse(proposal.new_text)
-                        host.say("Claude's wording is in the field. Save keeps it.")
-                      }}
-                    >
-                      Use this
-                    </button>
-                  </div>
-                ))}
+                ownWordings(message).map((proposal) => {
+                  const name = `"${shortBullet(proposal.new_text)}"`
+                  return (
+                    <div key={proposal.id} className={styles.wording}>
+                      <p className={styles.who}>
+                        Claude&apos;s wording
+                        {proposal.flags?.length ? (
+                          <>
+                            {' '}
+                            <span className="badge badge-flagged">Flagged</span>
+                          </>
+                        ) : null}
+                      </p>
+                      <p>{proposal.new_text}</p>
+                      <WritingFlags flags={proposal.flags} name={name} />
+                      <button
+                        type="button"
+                        id={wordingButtonId(message.message_id, proposal.id)}
+                        aria-label={`Use this wording: ${name}`}
+                        onClick={() => {
+                          onUse(proposal.new_text)
+                          host.say(`Claude's wording is in the field. Save keeps it.${flagCount(proposal.flags)}`)
+                        }}
+                      >
+                        Use this
+                      </button>
+                    </div>
+                  )
+                })}
+              {message.role === 'assistant' && ownWordings(message).some((proposal) => !proposal.checked) && (
+                <Unchecked
+                  busy={rechecking === message.message_id}
+                  error={checkError?.messageId === message.message_id ? checkError.error : null}
+                  onCheck={() => void checkAgain(message)}
+                />
+              )}
             </li>
           ))}
           {replying !== null && (
             <li aria-busy="true">
               <p className={styles.who}>Claude</p>
               <p>{replying || 'Replying…'}</p>
+              {checking && <p>{CHECKING}</p>}
             </li>
           )}
         </ol>

@@ -21,3 +21,8 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+
+/* Claude's wording the writing check couldn't read. */
+.unchecked {
+  margin-top: 4px;
+}

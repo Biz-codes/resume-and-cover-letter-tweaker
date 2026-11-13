@@ -7,6 +7,12 @@ streams to the page as it's written, then calls `propose_change` once for each c
 proposes. Nothing is changed by the chat: each proposal is shown as a card the user applies or
 dismisses (app/routers/chat.py), and the next message tells Claude what became of each.
 
+Before they're shown, the proposals' text is checked against the writing rules
+(check_proposals, through app/writing_check.py), as Claude's draft is: Claude's wording is fixed
+where it breaks one and flagged where it still does, and a saved item added as it is only
+flagged. The next message tells Claude about each fix and flag too. If the check fails, the
+reply is kept with those proposals unchecked, and recheck runs the check alone later.
+
 The history only grows. Each turn's content blocks are saved exactly as Claude saw or wrote
 them (the user's: the results of Claude's last proposals, what the message is about, the
 document, and the posting's other document (its resume or cover letter), each when it changed
@@ -42,6 +48,7 @@ from app.suggestions import (
     rules_text,
     tone_text,
 )
+from app.writing_check import CheckText, Flag, check
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +110,19 @@ class ProposedChange(BaseModel):
 
 class Proposal(ProposedChange):
     """A checked proposal as stored and shown: its tool call id, what it changes as it reads
-    now (for a rewording, the original), and what the user did with it."""
+    now (for a rewording, the original), and what the user did with it. A proposal with text
+    to check (checks_text) has the writing rules its text still breaks (`flags`), whether
+    `new_text` is the check's fixed wording (`fixed`), and whether the check ran (`checked`:
+    false when it failed, or for a proposal saved before the chat was checked)."""
 
     model_config = ConfigDict(extra="ignore")
 
     id: str
     before: str = ""
     state: Literal["pending", "applied", "dismissed"] = "pending"
+    flags: list[Flag] = []
+    fixed: bool = False
+    checked: bool = False
 
 
 PROPOSE_TOOL = {
@@ -396,6 +409,89 @@ def proposals_of(content: list[Any], library: Library,
     return shown, left_out
 
 
+def checks_text(change: ProposedChange) -> bool:
+    """Whether the proposal puts narrative content or a bullet's text in the document: Claude's
+    rewording or new text, or a saved item added as it is."""
+    return change.target in ("narrative", "bullet") and change.action in ("reword", "add")
+
+
+def _claude_wrote(change: ProposedChange) -> bool:
+    return change.action == "reword" or change.item_id == 0
+
+
+def check_proposals(db: Session, client: anthropic.Anthropic, account_id: int, doc: Any,
+                    proposals: list[Proposal], library: Library, *,
+                    keep_unchecked: bool) -> None:
+    """Check the proposals' text against the writing rules, in place, in one request
+    (app/writing_check.py): Claude's wording gets the check's fixed wording when there is one,
+    and the flags for what it still breaks; a saved item's own wording is only flagged. A
+    proposal with no text to check counts as checked. With `keep_unchecked`, a failed check
+    leaves the ones with text unchecked rather than failing, so Claude's reply isn't lost."""
+    to_check = [proposal for proposal in proposals if checks_text(proposal)]
+    for proposal in proposals:
+        if not checks_text(proposal):
+            proposal.checked = True
+    if not to_check:
+        return
+    texts = [CheckText(key=index, claude=_claude_wrote(proposal),
+                       text=(proposal.new_text if _claude_wrote(proposal)
+                             else library.text(proposal.target, proposal.item_id) or ""))
+             for index, proposal in enumerate(to_check, start=1)]
+    posting = db.get(JobPosting, doc.job_posting_id) if doc.job_posting_id else None
+    try:
+        checked = check(db, client, account_id, texts, step="the chat",
+                        posting=posting.description if posting else "",
+                        tone_set_id=doc.tone_set_id)
+    except AppError as error:
+        if error.code != ErrorCode.AI_UNAVAILABLE or not keep_unchecked:
+            raise
+        logger.warning("The chat's writing check failed, so its proposals are unchecked",
+                       exc_info=error)
+        return
+    for text, proposal in zip(texts, to_check, strict=True):
+        result = checked.get(text.key)
+        if result is not None:
+            proposal.flags = result.flags
+            if text.claude:
+                proposal.new_text, proposal.fixed = result.text, result.fixed
+        proposal.checked = True
+
+
+def recheck(db: Session, client: anthropic.Anthropic, account_id: int, doc: Any,
+            message: ChatMessage) -> None:
+    """"Check writing rules again" on a reply whose check failed: the check alone, on its
+    proposals with text that weren't checked and aren't applied (an applied one is already the
+    person's own text). VALIDATION_FAILED when there are none; failing again is AI_UNAVAILABLE,
+    and nothing changes."""
+    stored = [Proposal.model_validate(proposal) for proposal in message.proposals or []
+              if proposal.get("state") != "left_out"]
+    waiting = [proposal for proposal in stored if checks_text(proposal)
+               and not proposal.checked and proposal.state != "applied"]
+    if not waiting:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "These changes are already checked against your writing rules.")
+    check_proposals(db, client, account_id, doc, waiting, load_library(db, account_id),
+                    keep_unchecked=False)
+    by_id = {proposal.id: proposal.model_dump() for proposal in waiting}
+    # A new list, so the JSONB column sees the change.
+    message.proposals = [{**proposal, **by_id[proposal["id"]]} if proposal["id"] in by_id
+                         else dict(proposal) for proposal in message.proposals]
+
+
+def _check_note(proposal: dict[str, Any]) -> str:
+    """What the writing check did with a proposal's text, for Claude's next turn."""
+    note = ""
+    if proposal.get("fixed"):
+        note += (" Its wording was changed to follow the writing rules, to: "
+                 f"{json.dumps(proposal['new_text'], ensure_ascii=False)}.")
+    flags = proposal.get("flags") or []
+    if flags:
+        note += " It still breaks these writing rules: " + "; ".join(
+            f"{flag['rule']} ({json.dumps(flag['quote'], ensure_ascii=False)})"
+            for flag in flags) + "."
+    return note
+
+
 def tool_results(last: ChatMessage | None) -> list[dict[str, Any]]:
     """The results of Claude's tool calls in its last turn, which open the next user turn:
     what was left out and why, and what the user did with each one shown."""
@@ -413,7 +509,7 @@ def tool_results(last: ChatMessage | None) -> list[dict[str, Any]]:
                             "content": f"Not shown to the person: {why}."})
         else:
             results.append({"type": "tool_result", "tool_use_id": block["id"],
-                            "content": RESULTS[proposal["state"]]})
+                            "content": RESULTS[proposal["state"]] + _check_note(proposal)})
     return results
 
 
@@ -544,6 +640,10 @@ def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
         if left_out:
             logger.warning("Claude's chat proposals for %s %s: left out %s", one, doc_id,
                            left_out)
+        if any(checks_text(proposal) for proposal in shown):
+            # The reply is written; its changes are checked before they're shown.
+            yield _line("checking")
+        check_proposals(db, client, account_id, doc, shown, library, keep_unchecked=True)
         link = {"resume_id": doc_id} if kind.prefix == "resume" else {"letter_id": doc_id}
         asked = ChatMessage(account_id=account_id, role=ChatRole.user, text=text,
                             about=about.model_dump(exclude_none=True), content=new_turn, **link)

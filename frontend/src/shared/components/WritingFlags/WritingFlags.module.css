@@ -1,0 +1,7 @@
+/* The writing rules some text breaks, under it. */
+.flags {
+  margin: 4px 0 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--flag);
+  list-style: none;
+}

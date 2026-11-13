@@ -51,3 +51,12 @@
 .waiting button {
   text-align: left;
 }
+
+/* A reply whose writing check failed, under its cards. */
+.unchecked {
+  margin-top: 8px;
+}
+
+.unchecked p {
+  margin: 0 0 4px;
+}
