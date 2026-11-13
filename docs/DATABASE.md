@@ -377,21 +377,23 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 
 Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
 
-Note: a new tone set's name, or a new name for one, must be new in the account, ignoring capitals (the app checks and returns `DUPLICATE`). A set saved from an edit as a new row can keep its original's name, so two sets can share one; the app tells them apart by `created_at`.
+Note: a tone set's name is always unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`). Tones aren't printed, so when an edit saves a new set, the new one takes the name and the original (still used by the documents that keep it) is renamed to a name the user gives; the user can hide it.
 
-Note: a tone set is saved whole: its name and its rules, in order. Tones aren't printed, but a sent resume or cover letter keeps the tone it was written with, so editing one follows the same rules as every library item: resumes and cover letters in progress switch to the edited set only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new set with copies of the rules (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: a tone set is saved whole: its name and its rules, in order. Tones aren't printed, but a sent resume or cover letter keeps the tone it was written with, so editing one follows the same rules as every library item: resumes and cover letters in progress switch to the edited set only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new set listing the same rules, so no rule is copied, and the original is renamed (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ### tone_rule
-| Column       | Type         | Constraints                                                 | Description                                           |
-|--------------|--------------|-------------------------------------------------------------|-------------------------------------------------------|
-| tone_rule_id | SERIAL       | PRIMARY KEY                                                 | unique tone rule id                                   |
-| tone_set_id  | INTEGER      | NOT NULL REFERENCES tone_set(tone_set_id) ON DELETE CASCADE | id of related tone set                                |
-| rule_text    | TEXT         | NOT NULL                                                    | tone instruction (e.g. "Lead with tools and metrics") |
-| position     | INTEGER      | NOT NULL                                                    | order of rule in the tone set                         |
-| created_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule added to db                       |
-| updated_at   | TIMESTAMP    | DEFAULT NOW()                                               | date/time tone rule last updated                      |
+| Column       | Type      | Constraints                                               | Description                                           |
+|--------------|-----------|-----------------------------------------------------------|-------------------------------------------------------|
+| tone_rule_id | SERIAL    | PRIMARY KEY                                               | unique tone rule id                                   |
+| account_id   | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                  |
+| rule_text    | TEXT      | NOT NULL                                                  | tone instruction (e.g. "Lead with tools and metrics") |
+| hidden       | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the tone rule is hidden from new choices      |
+| created_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time tone rule added to db                       |
+| updated_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time tone rule last updated                      |
 
-Note: deleting a tone set deletes its rules. Saving a set sends its rules in order: each kept rule with its `tone_rule_id` at most once, and new ones without; rules left out are deleted. An id that isn't one of the set's rules, or one sent twice, returns `VALIDATION_FAILED` (see "Writing rules" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: a rule stands alone, and each tone lists its rules in `tone_set_tone_rule`, so one rule can be in many tones and the user combines them freely. The account holds each rule once: new text matching a saved rule (hidden ones too), ignoring spacing and capitals, reuses that rule, and editing a rule to match another returns `DUPLICATE`. Deleting a tone deletes only its list; its rules stay in the library. Deleting a rule takes it out of every tone that lists it.
+
+Note: a rule's uses are the resumes and cover letters whose tone lists it. Editing its text follows "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md): it's saved in place only when every resume and cover letter in progress that uses it is picked and no sent one does. Otherwise it's saved as a new rule, and each tone that lists the original is handled by its own uses: a tone that no document uses, or that only picked ones use, lists the new rule in the original's place; a tone that both picked and unpicked (or sent) ones use is saved as a new tone with its name, listing the new rule in the original's place, the original renamed to a name the user gives, and the picked ones switch to it; a tone that no picked one uses keeps the original. A rule a sent version's tone lists can't be deleted (`VERSION_LOCKED`); hide it instead.
 
 ### sign_off
 | Column      | Type         | Constraints                                               | Description                                        |
@@ -527,6 +529,19 @@ Note: every bullet that can go under this role. Versions of the same role (e.g. 
 Primary key: (project_id, bullet_id)
 
 Note: every bullet that can go under this project. The app suggests a subset of this list for each resume.
+
+### tone_set_tone_rule
+| Column       | Type    | Constraints                                                   | Description                    |
+|--------------|---------|---------------------------------------------------------------|--------------------------------|
+| tone_set_id  | INTEGER | NOT NULL REFERENCES tone_set(tone_set_id) ON DELETE CASCADE   | id of related tone set         |
+| tone_rule_id | INTEGER | NOT NULL REFERENCES tone_rule(tone_rule_id) ON DELETE CASCADE | id of related tone rule        |
+| position     | INTEGER | NOT NULL                                                      | order of tone rule in tone set |
+
+Primary key: (tone_set_id, tone_rule_id)
+
+Note: the rules in this tone, in order. Unlike the other library lists, which only drive suggestions, this list is the tone itself: a resume or cover letter follows every rule its tone lists. So it's saved whole with the tone's name, and changing it follows "Changing an item" like the name (see `tone_set`). A rule can be in many tones.
+
+Note: app checks: saving a tone sends its name and its rules in order, each one a saved rule's `tone_rule_id` or new text (saved as a new rule). An id that isn't the account's own returns `CROSS_ACCOUNT_LINK` (`NOT_FOUND` when there's no such rule), the same rule twice `DUPLICATE`, and a hidden rule the tone didn't already list `VALIDATION_FAILED` (see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 ## Join Tables
 A resume or cover letter is built as a tree of the user's selections: resume or cover letter → sections → items in each section → sub-items (skills in a category, skills in a project, bullets in an experience or project).

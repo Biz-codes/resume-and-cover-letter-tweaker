@@ -29,6 +29,7 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
+from app.tones import find_or_add_rule, set_rules
 from tests.test_experience_projects_bullets import listed
 from tests.test_sections_skills import add, error, resume
 
@@ -366,13 +367,14 @@ def test_writing_rule_errors(client: TestClient, db: Session, account_id: int):
     assert error(client.get(f"/api/writing-rules/{theirs.writing_rule_id}"))[1] == "NOT_FOUND"
 
 
-# Tone sets
+# Tones and tone rules
 
 
 def tone(db: Session, account_id: int, name: str, rules: list[str]) -> ToneSet:
+    """A tone listing these rules, each the account's saved rule with that text or a new one."""
     tone_set = add(db, ToneSet(account_id=account_id, name=name))
-    for position, text in enumerate(rules, start=1):
-        add(db, ToneRule(tone_set_id=tone_set.tone_set_id, rule_text=text, position=position))
+    set_rules(db, tone_set.tone_set_id,
+              [find_or_add_rule(db, account_id, text).tone_rule_id for text in rules])
     return tone_set
 
 
@@ -380,8 +382,18 @@ def rule_texts(body: dict) -> list[str]:
     return [rule["rule_text"] for rule in body["rules"]]
 
 
+def rule_id(db: Session, account_id: int, text: str) -> int:
+    return find_or_add_rule(db, account_id, text).tone_rule_id
+
+
+def uses(db: Session, tone_set: ToneSet, *docs) -> None:
+    for doc in docs:
+        doc.tone_set_id = tone_set.tone_set_id
+    db.flush()
+
+
 def test_a_tone_is_saved_whole_in_place_when_nothing_sent_uses_it(client: TestClient,
-                                                                  account_id: int):
+                                                                  db: Session, account_id: int):
     tone_set = client.post("/api/tone-sets", json={"name": "Tech"}).json()
     url = f"/api/tone-sets/{tone_set['tone_set_id']}"
     body = client.put(url, json={"name": "Tech", "rules": [
@@ -389,25 +401,63 @@ def test_a_tone_is_saved_whole_in_place_when_nothing_sent_uses_it(client: TestCl
     assert body["tone_set_id"] == tone_set["tone_set_id"]
     assert rule_texts(body) == ["Lead with tools.", "Use metrics."]
     first, second = (rule["tone_rule_id"] for rule in body["rules"])
-    # Reordered, one edited, one deleted, one added, and renamed, in one save.
+    # Reordered, one taken out, one added, and renamed, in one save.
     body = client.put(url, json={"name": "Engineering", "rules": [
-        {"tone_rule_id": second, "rule_text": "Use numbers."},
-        {"rule_text": "Keep it short."}]}).json()
+        {"tone_rule_id": second}, {"rule_text": "Keep it short."}]}).json()
     assert (body["tone_set_id"], body["name"]) == (tone_set["tone_set_id"], "Engineering")
-    assert rule_texts(body) == ["Use numbers.", "Keep it short."]
+    assert rule_texts(body) == ["Use metrics.", "Keep it short."]
     assert body["rules"][0]["tone_rule_id"] == second
+    # The rule taken out stays in the library.
+    assert client.get(f"/api/tone-rules/{first}").json()["tones"] == []
 
 
-def test_a_tone_rule_must_be_its_own_once(client: TestClient, db: Session, account_id: int):
+def test_a_rule_with_the_same_text_is_reused(client: TestClient, db: Session, account_id: int):
+    tech = tone(db, account_id, "Tech", ["Lead with tools."])
+    saved = rule_id(db, account_id, "Lead with tools.")
+    db.get(ToneRule, saved).hidden = True
+    db.flush()
+    teaching = add(db, ToneSet(account_id=account_id, name="Teaching"))
+    # Written again in another tone, ignoring spacing and capitals: the same rule, hidden or not.
+    body = client.put(f"/api/tone-sets/{teaching.tone_set_id}", json={
+        "name": "Teaching", "rules": [{"rule_text": "  lead with   TOOLS. "}]}).json()
+    assert [rule["tone_rule_id"] for rule in body["rules"]] == [saved]
+    assert rule_texts(body) == ["Lead with tools."]
+    # And added on its own.
+    response = client.post("/api/tone-rules", json={"rule_text": "LEAD WITH TOOLS."})
+    assert response.json()["tone_rule_id"] == saved
+    tones = client.get(f"/api/tone-rules/{saved}").json()["tones"]
+    assert [one["tone_set_id"] for one in tones] == [teaching.tone_set_id, tech.tone_set_id]
+    new = client.post("/api/tone-rules", json={"rule_text": "Use metrics."}).json()
+    assert (new["rule_text"], new["tones"], new["hidden"]) == ("Use metrics.", [], False)
+
+
+def test_a_tones_rules_are_checked(client: TestClient, db: Session, account_id: int):
     mine = tone(db, account_id, "Tech", ["Lead with tools."])
-    other = tone(db, account_id, "Teaching", ["Students first."])
-    rule = client.get(f"/api/tone-sets/{mine.tone_set_id}").json()["rules"][0]["tone_rule_id"]
-    foreign = client.get(f"/api/tone-sets/{other.tone_set_id}").json()["rules"][0]["tone_rule_id"]
+    listed = rule_id(db, account_id, "Lead with tools.")
+    hidden = add(db, ToneRule(account_id=account_id, rule_text="Hidden.", hidden=True))
+    other_account = add(db, Account()).account_id
+    foreign = add(db, ToneRule(account_id=other_account, rule_text="Theirs."))
     url = f"/api/tone-sets/{mine.tone_set_id}"
-    for ids in ([rule, rule], [foreign]):
-        rules = [{"tone_rule_id": rule_id, "rule_text": "Mine now."} for rule_id in ids]
-        assert error(client.put(url, json={"name": "Tech", "rules": rules})) == \
-            (422, "VALIDATION_FAILED", "rules")
+
+    def save(*rules: dict):
+        return client.put(url, json={"name": "Tech", "rules": list(rules)})
+
+    assert error(save({"tone_rule_id": listed}, {"tone_rule_id": listed})) == (
+        409, "DUPLICATE", "rules")
+    # New text matching a rule already in the list is that rule too.
+    assert error(save({"tone_rule_id": listed}, {"rule_text": "lead with tools."})) == (
+        409, "DUPLICATE", "rules")
+    assert error(save({"tone_rule_id": foreign.tone_rule_id})) == (
+        422, "CROSS_ACCOUNT_LINK", "rules")
+    assert error(save({"tone_rule_id": 999999})) == (404, "NOT_FOUND", "rules")
+    assert error(save({"tone_rule_id": hidden.tone_rule_id})) == (
+        422, "VALIDATION_FAILED", "rules")
+    assert error(save({"tone_rule_id": listed, "rule_text": "Both."}))[:2] == (
+        422, "VALIDATION_FAILED")
+    # A hidden rule the tone already lists stays.
+    db.get(ToneRule, listed).hidden = True
+    db.flush()
+    assert save({"tone_rule_id": listed}).status_code == 200
 
 
 def test_editing_a_tone_a_sent_resume_uses_saves_a_new_one(client: TestClient, db: Session,
@@ -416,24 +466,31 @@ def test_editing_a_tone_a_sent_resume_uses_saves_a_new_one(client: TestClient, d
     sent = resume(db, account_id, "Sent", sent=True)
     draft = resume(db, account_id, "Draft", sent=False)
     other = resume(db, account_id, "Other draft", sent=False)
-    for doc in (sent, draft, other):
-        doc.tone_set_id = original.tone_set_id
-    db.flush()
-    saved = client.put(f"/api/tone-sets/{original.tone_set_id}", json={
-        "name": "Tech", "rules": [{"rule_text": "Lead with metrics."}],
-        "apply_to": [{"kind": "resume", "id": draft.resume_id}]}).json()
-    # The copy keeps the name; its date tells the two apart.
+    uses(db, original, sent, draft, other)
+    url = f"/api/tone-sets/{original.tone_set_id}"
+    change = {"name": "Tech", "rules": [{"rule_text": "Lead with metrics."}],
+              "apply_to": [{"kind": "resume", "id": draft.resume_id}]}
+    # The earlier version needs a new name, since tone names are unique.
+    assert error(client.put(url, json=change)) == (422, "VALIDATION_FAILED", "earlier_name")
+    assert error(client.put(url, json={**change, "earlier_name": "tech"})) == (
+        409, "DUPLICATE", "earlier_name")
+    add(db, ToneSet(account_id=account_id, name="Teaching"))
+    assert error(client.put(url, json={**change, "earlier_name": "Teaching"})) == (
+        409, "DUPLICATE", "earlier_name")
+
+    saved = client.put(url, json={**change, "earlier_name": "Tech (earlier)"}).json()
+    # The new one takes the name, and the original keeps its rules under the earlier name.
     assert (saved["name"], rule_texts(saved)) == ("Tech", ["Lead with metrics."])
     assert saved["tone_set_id"] != original.tone_set_id
     assert [use["name"] for use in saved["used_by"]] == ["Draft"]
-    assert rule_texts(client.get(f"/api/tone-sets/{original.tone_set_id}").json()) == \
-        ["Lead with tools."]
+    earlier = client.get(url).json()
+    assert (earlier["name"], rule_texts(earlier)) == ("Tech (earlier)", ["Lead with tools."])
     db.expire_all()
     assert db.get(Resume, sent.resume_id).tone_set_id == original.tone_set_id
     assert db.get(Resume, other.resume_id).tone_set_id == original.tone_set_id
     # Only one in progress that uses it can be picked.
-    response = client.put(f"/api/tone-sets/{original.tone_set_id}", json={
-        "name": "Tech", "rules": [], "apply_to": [{"kind": "resume", "id": sent.resume_id}]})
+    response = client.put(url, json={"name": "Tech (earlier)", "rules": [],
+                                     "apply_to": [{"kind": "resume", "id": sent.resume_id}]})
     assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
 
 
@@ -441,13 +498,13 @@ def test_editing_a_tone_unchecked_saves_a_new_one_nothing_uses(client: TestClien
                                                                account_id: int):
     original = tone(db, account_id, "Tech", ["Lead with tools."])
     draft = resume(db, account_id, "Draft", sent=False)
-    draft.tone_set_id = original.tone_set_id
-    db.flush()
+    uses(db, original, draft)
     saved = client.put(f"/api/tone-sets/{original.tone_set_id}",
-                       json={"name": "Tech", "rules": []}).json()
-    assert (saved["rules"], saved["used_by"]) == ([], [])
+                       json={"name": "Tech", "rules": [], "earlier_name": "Tech 2025"}).json()
+    assert (saved["name"], saved["rules"], saved["used_by"]) == ("Tech", [], [])
     db.expire_all()
     assert db.get(Resume, draft.resume_id).tone_set_id == original.tone_set_id
+    assert db.get(ToneSet, original.tone_set_id).name == "Tech 2025"
 
 
 def test_tone_names_are_unique_ignoring_capitals(client: TestClient, db: Session,
@@ -464,20 +521,102 @@ def test_tone_names_are_unique_ignoring_capitals(client: TestClient, db: Session
     assert response.json()["name"] == "TECH"
 
 
-def test_delete_tone_set_deletes_its_rules_and_keeps_resumes(client: TestClient, db: Session,
-                                                             account_id: int):
-    tone_set = add(db, ToneSet(account_id=account_id, name="Tech"))
-    rule_id = add(db, ToneRule(tone_set_id=tone_set.tone_set_id, rule_text="Lead with tools.",
-                               position=1)).tone_rule_id
+def test_deleting_a_tone_keeps_its_rules_and_resumes(client: TestClient, db: Session,
+                                                     account_id: int):
+    tone_set = tone(db, account_id, "Tech", ["Lead with tools."])
+    rule = rule_id(db, account_id, "Lead with tools.")
     doc = resume(db, account_id, "Draft", sent=False)
-    doc.tone_set_id = tone_set.tone_set_id
-    db.flush()
+    uses(db, tone_set, doc)
     used_by = client.get(f"/api/tone-sets/{tone_set.tone_set_id}").json()["used_by"]
     assert used_by == [{"kind": "resume", "id": doc.resume_id, "name": "Draft", "locked": False}]
     assert client.delete(f"/api/tone-sets/{tone_set.tone_set_id}").status_code == 204
     db.expire_all()
-    assert db.scalar(select(ToneRule).where(ToneRule.tone_rule_id == rule_id)) is None
+    assert db.get(ToneRule, rule) is not None
     assert db.get(Resume, doc.resume_id).tone_set_id is None
+
+
+def test_a_rule_is_edited_in_place_when_nothing_sent_uses_it(client: TestClient, db: Session,
+                                                             account_id: int):
+    tech = tone(db, account_id, "Tech", ["Lead with tools.", "Use metrics."])
+    draft = resume(db, account_id, "Draft", sent=False)
+    uses(db, tech, draft)
+    rule = rule_id(db, account_id, "Lead with tools.")
+    body = client.put(f"/api/tone-rules/{rule}", json={
+        "rule_text": "Lead with the tools.",
+        "apply_to": [{"kind": "resume", "id": draft.resume_id}]}).json()
+    assert body["tone_rule_id"] == rule
+    assert [(one["name"], [use["name"] for use in one["used_by"]]) for one in body["tones"]] == [
+        ("Tech", ["Draft"])]
+    assert [use["name"] for use in body["used_by"]] == ["Draft"]
+    assert rule_texts(client.get(f"/api/tone-sets/{tech.tone_set_id}").json()) == [
+        "Lead with the tools.", "Use metrics."]
+    # Matching another rule's text is refused.
+    response = client.put(f"/api/tone-rules/{rule}", json={"rule_text": "use METRICS."})
+    assert error(response) == (409, "DUPLICATE", "rule_text")
+
+
+def test_editing_a_rule_a_sent_resume_uses_reaches_each_tone_by_its_own_uses(
+        client: TestClient, db: Session, account_id: int):
+    rules = ["Lead with tools.", "Use metrics."]
+    shared = tone(db, account_id, "Tech", rules)       # used by a sent one and a picked one
+    unused = tone(db, account_id, "Spare", rules)      # used by nothing
+    picked_only = tone(db, account_id, "Short", rules)  # used only by a picked one
+    kept = tone(db, account_id, "Long", rules)         # used only by one not picked
+    sent = resume(db, account_id, "Sent", sent=True)
+    draft = resume(db, account_id, "Draft", sent=False)
+    short = resume(db, account_id, "Short draft", sent=False)
+    long = resume(db, account_id, "Long draft", sent=False)
+    uses(db, shared, sent, draft)
+    uses(db, picked_only, short)
+    uses(db, kept, long)
+    rule = rule_id(db, account_id, "Lead with tools.")
+    change = {"rule_text": "Lead with the tools.", "apply_to": [
+        {"kind": "resume", "id": draft.resume_id}, {"kind": "resume", "id": short.resume_id}]}
+    url = f"/api/tone-rules/{rule}"
+    # The shared tone is saved as a new one, so its original needs a new name.
+    assert error(client.put(url, json=change)) == (422, "VALIDATION_FAILED", "earlier_names")
+    body = client.put(url, json={**change,
+                                 "earlier_names": {str(shared.tone_set_id): "Tech (sent)"}}).json()
+    new_rule = body["tone_rule_id"]
+    assert new_rule != rule and body["rule_text"] == "Lead with the tools."
+
+    def tone_rules(tone_set_id: int) -> list[int]:
+        return [one["tone_rule_id"]
+                for one in client.get(f"/api/tone-sets/{tone_set_id}").json()["rules"]]
+
+    metrics = rule_id(db, account_id, "Use metrics.")
+    # In the original's place where nothing else uses the tone; the original where no picked one
+    # does.
+    assert tone_rules(unused.tone_set_id) == [new_rule, metrics]
+    assert tone_rules(picked_only.tone_set_id) == [new_rule, metrics]
+    assert tone_rules(kept.tone_set_id) == [rule, metrics]
+    # The shared tone keeps the original under its earlier name; the picked one gets a new tone.
+    db.expire_all()
+    assert db.get(ToneSet, shared.tone_set_id).name == "Tech (sent)"
+    assert tone_rules(shared.tone_set_id) == [rule, metrics]
+    assert db.get(Resume, sent.resume_id).tone_set_id == shared.tone_set_id
+    switched = db.get(Resume, draft.resume_id).tone_set_id
+    assert switched != shared.tone_set_id
+    assert db.get(ToneSet, switched).name == "Tech"
+    assert tone_rules(switched) == [new_rule, metrics]
+    assert db.get(Resume, short.resume_id).tone_set_id == picked_only.tone_set_id
+
+
+def test_deleting_a_rule_takes_it_out_of_every_tone(client: TestClient, db: Session,
+                                                    account_id: int):
+    tech = tone(db, account_id, "Tech", ["Lead with tools.", "Use metrics."])
+    rule = rule_id(db, account_id, "Lead with tools.")
+    sent = resume(db, account_id, "Sent", sent=True)
+    uses(db, tech, sent)
+    assert error(client.delete(f"/api/tone-rules/{rule}"))[:2] == (409, "VERSION_LOCKED")
+    hidden = client.put(f"/api/tone-rules/{rule}/hidden", json={"hidden": True}).json()
+    assert hidden["hidden"] is True
+    sent.tone_set_id = None
+    db.flush()
+    assert client.delete(f"/api/tone-rules/{rule}").status_code == 204
+    assert rule_texts(client.get(f"/api/tone-sets/{tech.tone_set_id}").json()) == ["Use metrics."]
+    other = add(db, ToneRule(account_id=add(db, Account()).account_id, rule_text="Theirs."))
+    assert error(client.get(f"/api/tone-rules/{other.tone_rule_id}"))[:2] == (404, "NOT_FOUND")
 
 
 # Sign-offs

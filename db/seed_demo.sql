@@ -39,16 +39,29 @@ INSERT INTO tone_set (account_id, name)
 VALUES ((SELECT account_id FROM account), 'Tech'),
        ((SELECT account_id FROM account), 'Public sector');
 
-INSERT INTO tone_rule (tone_set_id, rule_text, position)
-SELECT t.tone_set_id, r.rule_text, r.position
-FROM tone_set t
-JOIN (VALUES
+-- Each rule once; a tone lists its rules in order, and one rule can be in both tones.
+INSERT INTO tone_rule (account_id, rule_text)
+SELECT (SELECT account_id FROM account), rule_text
+FROM (VALUES
+    ('Lead with the tool or the result, then the context.'),
+    ('Use numbers when the library has them.'),
+    ('Keep bullets to one line where possible.'),
+    ('Name who benefited (patients, patrons, students) before the tools.'),
+    ('Use plain words, and spell out acronyms the first time.')
+) AS r(rule_text);
+
+INSERT INTO tone_set_tone_rule (tone_set_id, tone_rule_id, position)
+SELECT t.tone_set_id, r.tone_rule_id, l.position
+FROM (VALUES
     ('Tech', 'Lead with the tool or the result, then the context.', 1),
     ('Tech', 'Use numbers when the library has them.', 2),
     ('Tech', 'Keep bullets to one line where possible.', 3),
     ('Public sector', 'Name who benefited (patients, patrons, students) before the tools.', 1),
-    ('Public sector', 'Use plain words, and spell out acronyms the first time.', 2)
-) AS r(tone, rule_text, position) ON r.tone = t.name;
+    ('Public sector', 'Use plain words, and spell out acronyms the first time.', 2),
+    ('Public sector', 'Use numbers when the library has them.', 3)
+) AS l(tone, rule_text, position)
+JOIN tone_set t ON t.name = l.tone
+JOIN tone_rule r ON r.rule_text = l.rule_text;
 
 -- Job postings, each with the header chosen for it.
 INSERT INTO job_posting (account_id, url, organization, role_title, header_id, applied_on,

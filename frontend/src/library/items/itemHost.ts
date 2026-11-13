@@ -16,6 +16,7 @@ export type ItemKind =
   | 'education'
   | 'signOff'
   | 'tone'
+  | 'toneRule'
 
 // Where an item opened from a row of a resume's or cover letter's tree is placed.
 export interface Placement {

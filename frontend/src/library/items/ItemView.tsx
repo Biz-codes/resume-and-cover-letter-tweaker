@@ -10,6 +10,7 @@ import SectionItem from './SectionItem'
 import SignOffItem from './SignOffItem'
 import SkillItem from './SkillItem'
 import ToneItem from './ToneItem'
+import ToneRuleItem from './ToneRuleItem'
 import type { ItemKind } from './itemHost'
 
 export default function ItemView({ kind, id }: { kind: ItemKind; id: number }) {
@@ -36,5 +37,7 @@ export default function ItemView({ kind, id }: { kind: ItemKind; id: number }) {
       return <SignOffItem id={id} />
     case 'tone':
       return <ToneItem id={id} />
+    case 'toneRule':
+      return <ToneRuleItem id={id} />
   }
 }

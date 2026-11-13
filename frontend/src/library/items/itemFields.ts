@@ -32,9 +32,9 @@ export const PROJECT_FIELDS: Field<ProjectFields>[] = [
 // The full label of each project, telling versions apart (labels.ts).
 export const projectLabels = (projects: Project[]) => distinctLabels(projects, projectLabel, (item) => item.created_at)
 
-// Each tone's name, telling tones with the same name apart (labels.ts): a tone saved from an edit
-// keeps its original's name.
-export const toneLabels = (sets: ToneSet[]) => distinctLabels(sets, (item) => item.name, (item) => item.created_at)
+// Each tone's name. Tone names are unique in the account (a tone saved from an edit takes the name,
+// and its original is renamed), so the name alone tells them apart.
+export const toneLabels = (_sets: ToneSet[]) => (item: ToneSet) => item.name
 
 export const EDUCATION_FIELDS: Field<EducationFields>[] = [
   { name: 'degree', label: 'Degree and field of study (e.g. B.A. in English)', required: true },

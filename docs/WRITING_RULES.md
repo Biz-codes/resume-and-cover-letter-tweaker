@@ -1,5 +1,5 @@
 # Writing Rules
-Every suggestion the app makes must follow these rules. They're stored in the `writing_rule`, `tone_set`, and `tone_rule` tables (see [DATABASE.md](DATABASE.md)). The lists below are the starting rules each account is seeded with; the user can edit them in the app.
+Every suggestion the app makes must follow these rules. They're stored in the `writing_rule`, `tone_set`, `tone_rule`, and `tone_set_tone_rule` tables (see [DATABASE.md](DATABASE.md)). The lists below are the starting rules each account is seeded with; the user can edit them in the app.
 
 ## No filler or AI-speak
 The app never uses filler words or phrasing that sounds machine-written. A starting list, to be edited over time:
@@ -39,4 +39,4 @@ Being built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's dra
 - **The user's own text is only flagged,** never changed.
 
 ## Tone rules
-The user can add and adjust rules about tone and pick which set applies to a resume. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.
+The user can add and adjust rules about tone, combine them into tones (one rule can be in many tones), and pick which tone applies to a resume or cover letter. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.

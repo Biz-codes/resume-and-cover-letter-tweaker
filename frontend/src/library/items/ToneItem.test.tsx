@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { ToneRule } from '../../shared/api/toneRules'
 import type { ToneSet } from '../../shared/api/toneSets'
 import type { Use } from '../../shared/api/usage'
 import { expectNoA11yViolations } from '../../test/axe'
@@ -15,43 +16,54 @@ const TECH: ToneSet = {
   name: 'Tech',
   created_at: '2026-10-01T12:00:00',
   rules: [
-    { tone_rule_id: 30, rule_text: 'Lead with tools.' },
-    { tone_rule_id: 31, rule_text: 'Use metrics.' },
+    { tone_rule_id: 30, rule_text: 'Lead with tools.', hidden: false },
+    { tone_rule_id: 31, rule_text: 'Use metrics.', hidden: false },
   ],
   used_by: [],
 }
+const rule = (tone_rule_id: number, rule_text: string, hidden = false): ToneRule => ({
+  tone_rule_id,
+  rule_text,
+  hidden,
+  tones: [],
+  used_by: [],
+})
+// The library's rules: the tone's two, one more, and a hidden one.
+const RULES = [rule(30, 'Lead with tools.'), rule(31, 'Use metrics.'), rule(32, 'Keep it short.'), rule(33, 'Set aside.', true)]
 const CHOICE = 'Apply this change to which resumes and cover letters in progress?'
 
 function stub(sets: ToneSet[] = [TECH], extra: Record<string, { status: number; body?: unknown }[]> = {}) {
-  return stubApi({ 'GET /api/tone-sets': [{ status: 200, body: sets }], ...extra })
+  return stubApi({ 'GET /api/tone-sets': [{ status: 200, body: sets }], 'GET /api/tone-rules': [{ status: 200, body: RULES }], ...extra })
 }
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
 describe('ToneItem', () => {
-  it('edits, adds, and removes rules in the form, then saves the whole tone at once', async () => {
+  it('adds saved and new rules, removes one, and saves the whole tone at once', async () => {
     const fetchMock = stub([TECH], { 'PUT /api/tone-sets/3': [{ status: 200, body: TECH }] })
     const host = await renderItem(<ToneItem id={3} />)
-    // Nothing else uses it, so there's no note and no checklist.
+    // Nothing else uses it, so there's no note, no checklist, and no earlier name to give.
     expect(screen.getByLabelText('Tone name')).not.toHaveAccessibleDescription()
     expect(screen.queryByRole('group', { name: CHOICE })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Name for the earlier version')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit "Lead with tools."' }))
-    const field = screen.getByLabelText('Edit rule "Lead with tools."')
-    expect(field).toHaveFocus()
+    // The saved rules it doesn't list are offered, but not a hidden one.
+    const picker = screen.getByRole('combobox', { name: /Tech rules/ })
+    const options = within(picker).getAllByRole('option').map((option) => option.textContent)
+    expect(options).toContain('Keep it short.')
+    expect(options).not.toContain('Set aside.')
+    expect(options).not.toContain('Lead with tools.')
     await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Name the tools.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply edit to "Lead with tools."' }))
-    expect(host.say).toHaveBeenCalledWith('Changed the rule to "Name the tools.".')
-    expect(screen.getByRole('button', { name: 'Edit "Name the tools."' })).toHaveFocus()
+    fireEvent.change(picker, { target: { value: '32' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Tech rules' }))
+    expect(await screen.findByText(/Added "Keep it short\." to Tech rules/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove "Use metrics."' }))
     expect(await screen.findByText('Removed "Use metrics." from Tech rules.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit "Use metrics."' })).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('New rule for Tech'), { target: { value: 'Keep it short.' } })
+    fireEvent.change(screen.getByLabelText('New rule for Tech'), { target: { value: 'Name the stack.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
-    expect(host.say).toHaveBeenCalledWith('Added the rule "Keep it short.".')
+    expect(host.say).toHaveBeenCalledWith('Added the rule "Name the stack.".')
     expect(screen.getByLabelText('New rule for Tech')).toHaveValue('')
 
     // Nothing is saved until Save.
@@ -61,15 +73,30 @@ describe('ToneItem', () => {
     await vi.waitFor(() => expect(host.saved).toHaveBeenCalledWith('Saved.', { kind: 'tone', id: 3 }))
     expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toEqual({
       name: 'Engineering',
-      rules: [
-        { tone_rule_id: 30, rule_text: 'Name the tools.' },
-        { tone_rule_id: null, rule_text: 'Keep it short.' },
-      ],
+      rules: [{ tone_rule_id: 30 }, { tone_rule_id: 32 }, { rule_text: 'Name the stack.' }],
       apply_to: [],
+      earlier_name: null,
     })
   })
 
-  it('says to type a rule before adding or applying an empty one', async () => {
+  it('uses a saved rule with the same text, and says when the tone already has it', async () => {
+    const fetchMock = stub([TECH], { 'PUT /api/tone-sets/3': [{ status: 200, body: TECH }] })
+    const host = await renderItem(<ToneItem id={3} />)
+    const field = screen.getByLabelText('New rule for Tech')
+    fireEvent.change(field, { target: { value: '  keep IT   short. ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
+    expect(host.say).toHaveBeenCalledWith('Added your saved rule "Keep it short.".')
+    fireEvent.change(field, { target: { value: 'use metrics.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
+    expect(host.say).toHaveBeenLastCalledWith('This tone already has the rule "use metrics.".')
+    save()
+    await vi.waitFor(() => expect(host.saved).toHaveBeenCalled())
+    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toMatchObject({
+      rules: [{ tone_rule_id: 30 }, { tone_rule_id: 31 }, { tone_rule_id: 32 }],
+    })
+  })
+
+  it('says to type a rule before adding an empty one', async () => {
     stub()
     await renderItem(<ToneItem id={3} />)
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
@@ -81,45 +108,57 @@ describe('ToneItem', () => {
     expect(field).toHaveAttribute('aria-invalid', 'false')
   })
 
-  it('cancels a rule edit, going back to its Edit button', async () => {
-    stub()
-    await renderItem(<ToneItem id={3} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit "Use metrics."' }))
-    fireEvent.change(screen.getByLabelText('Edit rule "Use metrics."'), { target: { value: 'Changed.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing "Use metrics."' }))
-    expect(screen.queryByLabelText('Edit rule "Use metrics."')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit "Use metrics."' })).toHaveFocus()
-  })
-
-  it('asks which ones in progress get the change, and notes a sent version keeps the original', async () => {
-    const copy = { ...TECH, tone_set_id: 5, created_at: '2026-11-06T09:30:00', used_by: [DRAFT] }
+  it('asks which ones in progress get the change, and names the earlier version the rest keep', async () => {
+    const copy = { ...TECH, tone_set_id: 5, used_by: [DRAFT] }
     const fetchMock = stub([{ ...TECH, used_by: [DRAFT, SENT] }], { 'PUT /api/tone-sets/3': [{ status: 200, body: copy }] })
     const host = await renderItem(<ToneItem id={3} />)
     expect(screen.getByLabelText('Tone name')).toHaveAccessibleDescription(
       'A sent version uses this tone, so saving adds a new one. The sent version keeps this one. Saving changes it only in the ones you check below; the rest keep it as it is.',
     )
-    const choice = screen.getByRole('group', { name: CHOICE })
+    const earlier = screen.getByLabelText('Name for the earlier version')
+    expect(earlier).toHaveValue('Tech (earlier)')
+    expect(earlier).toHaveAccessibleDescription('Saving adds a new tone named “Tech”. The ones that keep this tone use it under this name.')
     await expectNoA11yViolations()
-    fireEvent.click(within(choice).getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    fireEvent.click(within(screen.getByRole('group', { name: CHOICE })).getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    fireEvent.change(earlier, { target: { value: 'Tech 2025' } })
     fireEvent.click(screen.getByRole('button', { name: 'Remove "Use metrics."' }))
     await screen.findByText('Removed "Use metrics." from Tech rules.')
     save()
-    // The copy keeps the name, so it's told apart by when it was added.
     await vi.waitFor(() =>
       expect(host.saved).toHaveBeenCalledWith(
-        expect.stringMatching(/^Saved as a new version, "Tech, added Nov 6, 2026, .*"\. The ones in progress you checked use it now; everything else keeps "Tech"\.$/),
+        'Saved as a new version, "Tech". The ones in progress you checked use it now; everything else keeps "Tech 2025".',
         { kind: 'tone', id: 5 },
       ),
     )
-    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toMatchObject({ apply_to: [{ kind: 'resume', id: 2 }] })
+    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toMatchObject({ apply_to: [{ kind: 'resume', id: 2 }], earlier_name: 'Tech 2025' })
   })
 
-  it('names tones that share a name by when each was added', async () => {
-    const copy = { ...TECH, tone_set_id: 5, created_at: '2026-11-06T09:30:00' }
-    stub([TECH, copy])
-    await renderItem(<ToneItem id={5} />)
-    expect(screen.getByRole('form', { name: /^Edit "Tech, added Nov 6, 2026/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Delete "Tech, added Nov 6, 2026/ })).toBeInTheDocument()
+  it('asks for no earlier name once every one in progress is checked', async () => {
+    stub([{ ...TECH, used_by: [DRAFT] }])
+    const host = await renderItem(<ToneItem id={3} />)
+    expect(screen.getByLabelText('Name for the earlier version')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    expect(screen.queryByLabelText('Name for the earlier version')).not.toBeInTheDocument()
+    // The field going away, and coming back, is said.
+    expect(host.say).toHaveBeenLastCalledWith('Saving changes this tone where it is, so no earlier name is needed.')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    expect(host.say).toHaveBeenLastCalledWith('Saving adds a new tone. Name the earlier version below.')
+  })
+
+  it('highlights the earlier name when it is taken', async () => {
+    stub([{ ...TECH, used_by: [SENT] }], {
+      'PUT /api/tone-sets/3': [{ status: 409, body: errorBody('DUPLICATE', 'There\'s already a tone named "Teaching".', 'earlier_name') }],
+    })
+    await renderItem(<ToneItem id={3} />)
+    fireEvent.change(screen.getByLabelText('Name for the earlier version'), { target: { value: 'Teaching' } })
+    save()
+    expect(await screen.findByRole('alert')).toHaveTextContent('already a tone named "Teaching"')
+    const field = screen.getByLabelText('Name for the earlier version')
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveAccessibleDescription(/already a tone named "Teaching"/)
+    expect(screen.getByLabelText('Tone name')).toHaveAttribute('aria-invalid', 'false')
+    await expectNoA11yViolations()
   })
 
   it('shows it is saving, keeping focus on Save', async () => {
@@ -161,12 +200,13 @@ describe('ToneItem', () => {
     expect(host.close).toHaveBeenCalled()
   })
 
-  it('deletes the tone and its rules', async () => {
-    stub([TECH], { 'DELETE /api/tone-sets/3': [{ status: 204 }] })
+  it('deletes the tone, keeping its rules in the library', async () => {
+    stub([{ ...TECH, used_by: [DRAFT] }], { 'DELETE /api/tone-sets/3': [{ status: 204 }] })
     const host = await renderItem(<ToneItem id={3} />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete "Tech"' }))
+    expect(screen.getByText(/Its rules stay in your library\./)).toBeInTheDocument()
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    await vi.waitFor(() => expect(host.deleted).toHaveBeenCalledWith('Deleted "Tech" and its rules.'))
+    await vi.waitFor(() => expect(host.deleted).toHaveBeenCalledWith('Deleted "Tech". Its rules stay in your library.'))
   })
 })

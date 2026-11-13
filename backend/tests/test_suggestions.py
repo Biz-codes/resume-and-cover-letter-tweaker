@@ -27,8 +27,6 @@ from app.models import (
     Section,
     SectionNarrativeContent,
     Skill,
-    ToneRule,
-    ToneSet,
     WritingRule,
     WritingRuleKind,
 )
@@ -41,6 +39,7 @@ from app.suggestions import (
     Suggestion,
 )
 from tests.test_documents import header, posting
+from tests.test_education_narrative_rules import tone as tone_with
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_posting_reader import FakeMessages
 from tests.test_sections_skills import add, category, error, resume, show_skills, skill_id
@@ -285,8 +284,7 @@ def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, 
                                (WritingRuleKind.term, "synergy", False),
                                (WritingRuleKind.pattern, "em dashes used for drama", True)):
         add(db, WritingRule(account_id=account_id, kind=kind, rule_text=text, active=active))
-    tone = add(db, ToneSet(account_id=account_id, name="Tech"))
-    add(db, ToneRule(tone_set_id=tone.tone_set_id, rule_text="Name the tools.", position=1))
+    tone = tone_with(db, account_id, "Tech", ["Name the tools."])
     assert tailor(client, db, account_id, tone_set_id=tone.tone_set_id).status_code == 201
     [request] = claude.calls
     instructions = request["system"][0]["text"]

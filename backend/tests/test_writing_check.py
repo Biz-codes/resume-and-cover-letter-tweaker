@@ -9,8 +9,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.errors import AppError, ErrorCode
-from app.models import Skill, ToneRule, ToneSet, WritingRule, WritingRuleKind
+from app.models import Skill, WritingRule, WritingRuleKind
 from app.writing_check import CheckText, Issue, Review, Reviewed, check, find_terms
+from tests.test_education_narrative_rules import tone as tone_with
 from tests.test_posting_reader import FakeMessages
 from tests.test_sections_skills import add
 
@@ -76,8 +77,7 @@ def test_nothing_to_find_asks_nothing(db: Session, account_id: int) -> None:
 
 def test_found_terms_and_rules_go_to_claude(db: Session, account_id: int) -> None:
     rules(db, account_id)
-    tone = add(db, ToneSet(account_id=account_id, name="Tech"))
-    add(db, ToneRule(tone_set_id=tone.tone_set_id, rule_text="Lead with tools", position=1))
+    tone = tone_with(db, account_id, "Tech", ["Lead with tools"])
     add(db, Skill(account_id=account_id, skill_name="Dynamic programming"))
     client, messages = claude(Review(texts=[]))
     check(db, client, account_id, [
@@ -148,8 +148,7 @@ def test_the_persons_text_is_only_flagged(db: Session, account_id: int) -> None:
 
 def test_unknown_rules_and_terms_not_found_are_left_out(db: Session, account_id: int) -> None:
     rules(db, account_id)
-    tone = add(db, ToneSet(account_id=account_id, name="Tech"))
-    add(db, ToneRule(tone_set_id=tone.tone_set_id, rule_text="Lead with tools", position=1))
+    tone = tone_with(db, account_id, "Tech", ["Lead with tools"])
     client, _ = claude(Review(texts=[Reviewed(key=1, issues=[
         Issue(rule="synergy", quote="x", why="Not a rule."),
         # "dynamic" is a rule, but code didn't find it in this text.

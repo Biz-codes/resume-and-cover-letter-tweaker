@@ -52,11 +52,11 @@ from app.models import (
     Skill,
     SkillCategory,
     SkillCategorySkill,
-    ToneRule,
     WritingRule,
     WritingRuleKind,
 )
 from app.plain_text import letter_output, resume_output
+from app.tones import rule_texts
 
 logger = logging.getLogger(__name__)
 
@@ -371,10 +371,7 @@ def rules_text(db: Session, account_id: int) -> str:
 
 
 def tone_text(db: Session, doc: Any) -> str:
-    if doc.tone_set_id is None:
-        return ""
-    rules = db.scalars(select(ToneRule.rule_text).where(ToneRule.tone_set_id == doc.tone_set_id)
-                       .order_by(ToneRule.position)).all()
+    rules = rule_texts(db, doc.tone_set_id)
     if not rules:
         return ""
     return "\n\nTone for this document:\n" + "\n".join(f"- {rule}" for rule in rules)

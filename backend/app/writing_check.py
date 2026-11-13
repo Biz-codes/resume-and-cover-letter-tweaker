@@ -28,7 +28,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.claude import ask
-from app.models import Skill, ToneRule, WritingRule, WritingRuleKind
+from app.models import Skill, WritingRule, WritingRuleKind
+from app.tones import rule_texts
 
 logger = logging.getLogger(__name__)
 
@@ -146,10 +147,7 @@ def _rules(db: Session, account_id: int) -> tuple[list[str], list[str]]:
 
 
 def _tone(db: Session, tone_set_id: int | None) -> list[str]:
-    if tone_set_id is None:
-        return []
-    return list(db.scalars(select(ToneRule.rule_text).where(ToneRule.tone_set_id == tone_set_id)
-                           .order_by(ToneRule.position)))
+    return rule_texts(db, tone_set_id)
 
 
 def check(db: Session, client: anthropic.Anthropic, account_id: int, texts: list[CheckText],

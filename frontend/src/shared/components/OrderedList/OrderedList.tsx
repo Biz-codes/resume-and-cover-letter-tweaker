@@ -83,8 +83,8 @@ export default function OrderedList<K extends ListKey = number>({
   // Items that can be added (the ones already listed are left out here).
   choices: ListItem<K>[]
   emptyText: string
-  // Whether each row has a Remove button. A list of items that belong only to their parent (a
-  // tone's rules) offers its own buttons instead, through `actions`.
+  // Whether each row has a Remove button. A list that takes items out its own way offers its own
+  // buttons instead, through `actions`.
   removable?: boolean
   // More buttons for each row, shown while nothing is moving.
   actions?: (item: ListItem<K>) => ReactNode

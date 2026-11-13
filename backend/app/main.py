@@ -26,6 +26,7 @@ from app.routers import (
     sign_offs,
     skill_categories,
     skills,
+    tone_rules,
     tone_sets,
     writing_rules,
 )
@@ -61,7 +62,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Resume and Cover Letter Tweaker", lifespan=lifespan)
 register_error_handlers(app)
 for module in (headers, sections, skill_categories, skills, experience, projects,
-               bullet_points, education, narrative_content, writing_rules, tone_sets, sign_offs,
+               bullet_points, education, narrative_content, writing_rules, tone_sets, tone_rules,
+               sign_offs,
                resumes, cover_letters, job_postings, interviews):
     app.include_router(module.router)
 

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { ToneRule } from '../shared/api/toneRules'
 import type { ToneSet } from '../shared/api/toneSets'
 import { expectNoA11yViolations } from '../test/axe'
 import { findCard, openItem } from '../test/openCard'
@@ -13,33 +14,54 @@ const TECH: ToneSet = {
   name: 'Tech',
   created_at: '2026-10-01T12:00:00',
   rules: [
-    { tone_rule_id: 30, rule_text: 'Lead with tools and metrics.' },
-    { tone_rule_id: 31, rule_text: 'Keep bullets short.' },
+    { tone_rule_id: 30, rule_text: 'Lead with tools and metrics.', hidden: false },
+    { tone_rule_id: 31, rule_text: 'Keep bullets short.', hidden: false },
   ],
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: false }],
 }
 const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', created_at: '2026-10-01T12:00:00', rules: [], used_by: [] }
+const rule = (tone_rule_id: number, rule_text: string, tones: string[] = [], hidden = false): ToneRule => ({
+  tone_rule_id,
+  rule_text,
+  hidden,
+  tones: tones.map((name, index) => ({ tone_set_id: index + 3, name, used_by: [] })),
+  used_by: [],
+})
+const RULES = [rule(30, 'Lead with tools and metrics.', ['Tech']), rule(31, 'Keep bullets short.', ['Tech']), rule(32, 'Name the students.')]
 
-function stub(extra: Record<string, Reply[]> = {}, sets = [TEACHING, TECH]) {
+function stub(extra: Record<string, Reply[]> = {}, sets = [TEACHING, TECH], rules = RULES) {
   return stubApi({
     'GET /api/tone-sets': [
       { status: 200, body: sets },
       { status: 200, body: sets },
     ],
+    'GET /api/tone-rules': [
+      { status: 200, body: rules },
+      { status: 200, body: rules },
+    ],
     ...extra,
   })
 }
 
-const techCard = () => openItem('Tech')
-
 describe('ToneSetsPage', () => {
-  it('shows each set with its rules in order, and what uses it', async () => {
+  it('shows tones and tone rules in their own groups', async () => {
     stub()
     render(<ToneSetsPage />)
     expect(document.title).toBe('Tones – Resume Tweaker')
     expect(within(await findCard('Tech')).getByText('2 rules')).toBeInTheDocument()
-    const card = await techCard()
-    expect(card).toHaveAccessibleName('Tech')
+    expect(within(await findCard('Teaching')).getByText('0 rules')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'All tones', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'All tone rules', level: 3 })).toBeInTheDocument()
+    // Each rule says which tones list it.
+    expect(within(await findCard('Keep bullets short.')).getByText('In Tech')).toBeInTheDocument()
+    expect(within(await findCard('Name the students.')).getByText('In no tone yet.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it("opens a tone's dialog, with its rules in order", async () => {
+    stub()
+    render(<ToneSetsPage />)
+    const card = await openItem('Tech')
     const rules = within(card).getByRole('group', { name: 'Tech rules' })
     expect(within(rules).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
       expect.stringContaining('Lead with tools and metrics.'),
@@ -47,101 +69,50 @@ describe('ToneSetsPage', () => {
     ])
     expect(within(card).getByText('Used by (1)')).toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.click(within(card).getByRole('button', { name: 'Close' }))
-    expect(within(await openItem('Teaching')).getByText('No rules yet.')).toBeInTheDocument()
   })
 
-  it('adds a set, then a rule, saved with the tone', async () => {
+  it("opens a rule's dialog", async () => {
+    stub()
+    render(<ToneSetsPage />)
+    fireEvent.click(within(await findCard('Keep bullets short.')).getByRole('button', { name: 'View and Edit "Keep bullets short."' }))
+    expect(await screen.findByRole('dialog', { name: 'Keep bullets short.' })).toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByLabelText('Rule')).toHaveValue('Keep bullets short.'))
+    await expectNoA11yViolations()
+  })
+
+  it('adds a tone and a rule', async () => {
     const fetchMock = stub({
       'POST /api/tone-sets': [{ status: 201, body: { ...TEACHING, tone_set_id: 5, name: 'Writing' } }],
-      'PUT /api/tone-sets/4': [{ status: 200, body: TEACHING }],
+      'POST /api/tone-rules': [
+        { status: 201, body: rule(33, 'Use plain words.') },
+        { status: 201, body: RULES[1] },
+      ],
     })
     render(<ToneSetsPage />)
     fireEvent.change(await screen.findByLabelText('New tone name'), { target: { value: 'Writing' } })
     fireEvent.click(screen.getByText('Add tone'))
     await expectNotice('Added "Writing".')
-    const teaching = await openItem('Teaching')
-    fireEvent.change(within(teaching).getByLabelText('New rule for Teaching'), { target: { value: 'Name the students.' } })
-    fireEvent.click(within(teaching).getByText('Add rule'))
-    await vi.waitFor(() => expect(within(teaching).getByRole('status')).toHaveTextContent('Added the rule "Name the students.".'))
-    fireEvent.click(within(teaching).getByRole('button', { name: 'Save' }))
-    await expectNotice('Saved.')
-    expect(sentBody(fetchMock, 'PUT /api/tone-sets/4')).toEqual({
-      name: 'Teaching',
-      rules: [{ tone_rule_id: null, rule_text: 'Name the students.' }],
-      apply_to: [],
-    })
+    fireEvent.change(screen.getByLabelText('New tone rule'), { target: { value: 'Use plain words.' } })
+    fireEvent.click(screen.getByText('Add rule'))
+    await expectNotice('Added "Use plain words.".')
+    expect(sentBody(fetchMock, 'POST /api/tone-rules')).toEqual({ rule_text: 'Use plain words.' })
   })
 
-  it('reorders and edits rules in the form, then saves them for the resumes checked', async () => {
-    const fetchMock = stub({ 'PUT /api/tone-sets/3': [{ status: 200, body: TECH }] })
+  it('says when a new rule is one already saved', async () => {
+    stub({ 'POST /api/tone-rules': [{ status: 201, body: RULES[1] }] })
     render(<ToneSetsPage />)
-    const card = await techCard()
-    const handle = within(card).getByRole('button', { name: 'Move "Lead with tools and metrics."' })
-    fireEvent.click(handle)
-    fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    fireEvent.click(handle)
-    fireEvent.click(within(card).getByRole('button', { name: 'Edit "Lead with tools and metrics."' }))
-    const field = within(card).getByLabelText('Edit rule "Lead with tools and metrics."')
-    expect(field).toHaveFocus()
+    fireEvent.change(await screen.findByLabelText('New tone rule'), { target: { value: 'keep bullets SHORT.' } })
+    fireEvent.click(screen.getByText('Add rule'))
+    await expectNotice('You already have the rule "Keep bullets short.".')
+  })
+
+  it('puts hidden tones and rules in Hidden', async () => {
+    stub({}, [TEACHING, { ...TECH, hidden: true }], [...RULES, rule(34, 'Set aside.', [], true)])
+    render(<ToneSetsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Hidden (2)' }))
+    expect(screen.getByRole('button', { name: 'Unhide "Tech"' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unhide "Set aside."' })).toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.change(field, { target: { value: 'Name the tools.' } })
-    fireEvent.click(within(card).getByRole('button', { name: 'Apply edit to "Lead with tools and metrics."' }))
-    await vi.waitFor(() => expect(within(card).getByRole('status')).toHaveTextContent('Changed the rule to "Name the tools.".'))
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Edit "Name the tools."' })).toHaveFocus())
-    // Nothing is saved until Save.
-    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toBe(false)
-    expect(within(card).getByLabelText('Tone name')).toHaveAccessibleDescription(
-      'Saving changes it only in the ones you check below; the rest keep it as it is.',
-    )
-    fireEvent.click(within(card).getByRole('checkbox', { name: 'Resume: Acme resume' }))
-    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
-    await expectNotice('Saved.')
-    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toEqual({
-      name: 'Tech',
-      rules: [
-        { tone_rule_id: 31, rule_text: 'Keep bullets short.' },
-        { tone_rule_id: 30, rule_text: 'Name the tools.' },
-      ],
-      apply_to: [{ kind: 'resume', id: 2 }],
-    })
-  })
-
-  it('removes a rule in the form', async () => {
-    stub()
-    render(<ToneSetsPage />)
-    const card = await techCard()
-    fireEvent.click(within(card).getByRole('button', { name: 'Remove "Keep bullets short."' }))
-    expect(await within(card).findByText('Removed "Keep bullets short." from Tech rules.')).toBeInTheDocument()
-    expect(within(card).getByText('Rules (1)')).toBeInTheDocument()
-    await expectNoA11yViolations()
-  })
-
-  it('tells tones with the same name apart by when each was added', async () => {
-    const copy = { ...TECH, tone_set_id: 6, created_at: '2026-11-06T09:30:00', used_by: [] }
-    stub({}, [TEACHING, TECH, copy])
-    render(<ToneSetsPage />)
-    expect(await screen.findByRole('heading', { name: /^Tech, added Oct 1, 2026/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^Tech, added Nov 6, 2026/ })).toBeInTheDocument()
-  })
-
-  it('lists what deleting a set affects, and shows a failed delete', async () => {
-    stub({
-      'DELETE /api/tone-sets/3': [
-        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong. Nothing was changed.') },
-        { status: 204 },
-      ],
-    })
-    render(<ToneSetsPage />)
-    fireEvent.click(within(await techCard()).getByRole('button', { name: 'Delete "Tech"' }))
-    const confirm = screen.getByRole('group', { name: 'Delete "Tech"?' })
-    expect(within(confirm).getByText('Cancel')).toHaveFocus()
-    expect(confirm).toHaveTextContent('Used by: Acme resume. They keep going with no tone.')
-    fireEvent.click(within(confirm).getByText('Delete'))
-    expect(await within(confirm).findByRole('alert')).toHaveTextContent('Nothing was changed.')
-    await expectNoA11yViolations()
-    fireEvent.click(within(confirm).getByText('Delete'))
-    await expectNotice('Deleted "Tech" and its rules.')
   })
 
   it('says it is loading', async () => {
@@ -151,7 +122,7 @@ describe('ToneSetsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('offers Retry when the list fails to load', async () => {
+  it('offers Retry when the lists fail to load', async () => {
     stub({
       'GET /api/tone-sets': [
         { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
@@ -165,9 +136,11 @@ describe('ToneSetsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Tech' })).toBeInTheDocument()
   })
 
-  it('says when there are no tones yet', async () => {
-    stub({}, [])
+  it('says when there are no tones or rules yet', async () => {
+    stub({}, [], [])
     render(<ToneSetsPage />)
     expect(await screen.findByText('No tones yet.')).toBeInTheDocument()
+    expect(screen.getByText('No tone rules yet.')).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 })

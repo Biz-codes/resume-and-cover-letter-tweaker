@@ -336,9 +336,9 @@ class ToneRule(Base):
     __tablename__ = "tone_rule"
 
     tone_rule_id: Mapped[int] = mapped_column(primary_key=True)
-    tone_set_id: Mapped[int] = mapped_column(fk("tone_set.tone_set_id"))
+    account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     rule_text: Mapped[str] = mapped_column(Text)
-    position: Mapped[int] = mapped_column(Integer)
+    hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -411,6 +411,14 @@ class SkillCategorySkill(Base):
 
     category_id: Mapped[int] = mapped_column(fk("skill_category.category_id"), primary_key=True)
     skill_id: Mapped[int] = mapped_column(fk("skill.skill_id"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer)
+
+
+class ToneSetToneRule(Base):
+    __tablename__ = "tone_set_tone_rule"
+
+    tone_set_id: Mapped[int] = mapped_column(fk("tone_set.tone_set_id"), primary_key=True)
+    tone_rule_id: Mapped[int] = mapped_column(fk("tone_rule.tone_rule_id"), primary_key=True)
     position: Mapped[int] = mapped_column(Integer)
 
 
