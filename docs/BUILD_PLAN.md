@@ -205,8 +205,9 @@ Goal: the full flow in APP_FLOW.md. Needs the Anthropic API key.
    4. [ ] **The user's own text:** flags on what the user writes and keeps (a document's rows and an item's dialog), never changed. Design when the check runs (on save, or when the document is opened) when this sub-step starts.
 
    Asked for by the user along the way (done): the chat's "Waiting for you (n)" list of cards still pending, above the message box, and a finished card's details folded under "Details"; cards naming where a change is by its immediate parent ("in Back End"); the chat and tailoring placing any of the account's skills under a skill category or project (and the chat a new skill), listed there in the library when kept; each of a posting's documents reading the other (`companion` in `backend/app/suggestions.py`); a header's "New [value]" modal starting from the current value; and `scripts/check.sh` finding Homebrew and nvm's Node on its own.
-4. **Final review** of the resume and cover letter together.
-5. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.
+4. **Keeping to the space on the page** (the basic version of question 27 in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)): code estimates how many lines each part of a document takes from average resume formatting (characters per line for a typical font, size, and margins, as constants in one place), and tells Claude in tailoring and the chat how many lines each part takes and how full its last line is. A change that would add a line (a skill that pushes a category's skills onto a new line, a bullet that wraps for one word) is offered only with something taken out to make room, or is marked as adding a line, and the user decides. Code checks what Claude proposes against the same estimate. Design the details (the constants, what counts as one part, and how a card or draft row shows the added line) when this step starts. Settings per document type, font, and template stay in question 27.
+5. **Final review** of the resume and cover letter together.
+6. **Cost check:** measure real API usage against the estimate in TECH_STACK.md.
 
 ## Phase 6: Release
 Goal: a public demo that potential employers can try online: a real login, plus a "Try the demo" button that opens a demo account full of made-up data. Styling doesn't need to be finished.
