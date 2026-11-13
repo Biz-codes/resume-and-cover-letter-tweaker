@@ -21,19 +21,23 @@ FOUND = Extracted(found=True, organization="Acme", role_title="Engineer",
 
 
 class FakeMessages:
-    """Answers like client.beta.messages.stream, with a reply, an error, or a stop reason."""
+    """Answers like client.beta.messages.stream, with a reply, an error, or a stop reason.
+    `replies` answers a request for one reply shape (its output_format) differently, for a step
+    that makes two requests (tailoring, then the writing check)."""
 
     def __init__(self, reply: Any = None) -> None:
         self.reply: Any = FOUND if reply is None else reply
+        self.replies: dict[Any, Any] = {}
         self.stop_reason = "end_turn"
         self.calls: list[dict[str, Any]] = []
 
     @contextmanager
     def stream(self, **request: Any) -> Iterator[SimpleNamespace]:
         self.calls.append(request)
-        if isinstance(self.reply, Exception):
-            raise self.reply
-        message = SimpleNamespace(stop_reason=self.stop_reason, parsed_output=self.reply,
+        reply = self.replies.get(request.get("output_format"), self.reply)
+        if isinstance(reply, Exception):
+            raise reply
+        message = SimpleNamespace(stop_reason=self.stop_reason, parsed_output=reply,
                                   usage={"input_tokens": 1, "output_tokens": 1})
         yield SimpleNamespace(get_final_message=lambda: message)
 

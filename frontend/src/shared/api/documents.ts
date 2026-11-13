@@ -111,12 +111,31 @@ export interface DraftSection {
   entries: DraftEntry[]
 }
 
-// A rewording (of `replaces`) or new text Claude wrote.
+// A writing rule some text breaks (backend/app/writing_check.py): the rule as written, the words
+// that break it, and why.
+export interface WritingFlag {
+  kind: 'term' | 'pattern' | 'tone'
+  rule: string
+  quote: string
+  why: string
+}
+
+// A rewording (of `replaces`) or new text Claude wrote, with the writing rules it still breaks
+// (`fixed`: the writing check reworded it).
 export interface ClaudeText {
   key: number
   kind: 'narrative' | 'bullet'
   text: string
   replaces: number | null
+  flags?: WritingFlag[]
+  fixed?: boolean
+}
+
+// The writing rules a library item in the draft breaks, in its own wording.
+export interface ItemFlags {
+  kind: 'narrative' | 'bullet'
+  item_id: number
+  flags: WritingFlag[]
 }
 
 // The greeting Claude suggests for a cover letter (everything after "Dear"), and whether the
@@ -135,6 +154,9 @@ export interface Draft {
   sections: DraftSection[]
   new_sections?: { key: number; title: string }[]
   greeting?: DraftGreeting | null
+  item_flags?: ItemFlags[]
+  // False when the writing rules couldn't be checked.
+  checked?: boolean
 }
 
 // The keys of Claude's texts the draft uses (not gone back to the original). The rest can be kept
@@ -266,6 +288,9 @@ export function docsApi(kind: DocKind) {
       one(api.put<Raw>(`${path}/${id}/draft`, { sections, use_default_greeting: useDefaultGreeting })),
     // Saves the reviewed draft: Claude's kept wordings become new library rows used here, and `keep`
     // (keys of Claude's texts the draft doesn't use) are kept in the library for later.
+    // Checks the draft against the writing rules again, after the check failed when it was made.
+    // Only the draft changes.
+    checkDraft: (id: number) => one(api.post<Raw>(`${path}/${id}/draft/check`, {})),
     finishReview: (id: number, keep: number[]) => one(api.post<Raw>(`${path}/${id}/draft/finish`, { keep })),
     // What Claude reads in the user's own file or pasted text, each item matched against the
     // library (shared/api/imports.ts). Saves nothing. A file it can't read, or one with no resume

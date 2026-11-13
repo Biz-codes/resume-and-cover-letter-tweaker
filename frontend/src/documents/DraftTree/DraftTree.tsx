@@ -7,7 +7,9 @@
 // came from: "Original" (in the document Claude started from), "Library" (Claude brought it in
 // from the library), or "Claude" (Claude's wording or new text). Under each, "Rationale" opens
 // Claude's reason and, for a rewording, the other wording with a button to switch to it. What
-// Claude brought in or wrote new can be rejected, which takes it out of the draft.
+// Claude brought in or wrote new can be rejected, which takes it out of the draft. A row whose
+// wording in use breaks a writing rule (checked when the draft was made) is badged "Flagged",
+// with each rule, the words, and why under its name.
 //
 // Each change saves the draft only (backend/app/drafts.py) and is announced here; Undo and Redo
 // on the page cover them. "Approve first draft" first asks which of Claude's texts the draft
@@ -32,6 +34,7 @@ import {
   type DraftGreeting as Greeting,
   type DraftSection,
   type TreeSection,
+  type WritingFlag,
 } from '../../shared/api/documents'
 import Checklist from '../../shared/components/Checklist'
 import Dialog from '../../shared/components/Dialog/Dialog'
@@ -98,6 +101,24 @@ interface Words {
   useClaude: string
 }
 
+// The writing rules the wording in use breaks (backend/app/writing_check.py): Claude's text still
+// breaking one after the check's fix, or a library item's own wording, which is never changed.
+function Flags({ flags, name }: { flags?: WritingFlag[]; name: string }) {
+  if (!flags?.length) return null
+  return (
+    <ul aria-label={`Writing rules ${name} breaks`} className={styles.flags}>
+      {flags.map((flag) => (
+        <li key={`${flag.kind}:${flag.rule}`}>
+          <strong>{flag.rule}</strong>: &ldquo;{flag.quote}&rdquo;. {flag.why}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const flagCount = (flags?: WritingFlag[]) =>
+  flags?.length ? ` It breaks ${flags.length === 1 ? 'a writing rule' : `${flags.length} writing rules`}.` : ''
+
 // Claude's reason, then for a rewording, the wording not in use and a button to switch to it.
 // One button whose text changes, so it keeps focus.
 function Rationale({
@@ -150,12 +171,13 @@ function Rationale({
   )
 }
 
-// One row: its name, badge, and Reject for what Claude brought in or wrote, then its rationale
-// and what's under it.
+// One row: its name, badge, and Reject for what Claude brought in or wrote, then the writing
+// rules it breaks, its rationale, and what's under it.
 function Row({
   name,
   label,
   source,
+  flags,
   onReject,
   children,
 }: {
@@ -164,6 +186,7 @@ function Row({
   label: string
   // Absent for what's neither Claude's nor the library's (a letter's usual greeting).
   source?: Source
+  flags?: WritingFlag[]
   // Absent for what was already in the starting document, and for a rewording, which goes back
   // to the original instead.
   onReject?: () => void
@@ -174,12 +197,14 @@ function Row({
       <div className={styles.row}>
         <span>{name}</span>
         {source && <Badge source={source} />}
+        {flags && flags.length > 0 && <span className="badge badge-flagged">Flagged</span>}
         {onReject && (
           <button type="button" aria-label={`Reject ${label}`} onClick={onReject}>
             Reject
           </button>
         )}
       </div>
+      <Flags flags={flags} name={label} />
       {children}
     </li>
   )
@@ -189,7 +214,9 @@ export default function DraftTree({
   kind,
   draft,
   ownSections,
+  toneName = null,
   onChange,
+  onCheck,
   onFinish,
 }: {
   kind: DocKind
@@ -197,8 +224,12 @@ export default function DraftTree({
   // The document's own tree: what Claude started from when it was read from the user's own file
   // (the draft names no other document then).
   ownSections: TreeSection[]
+  // The document's tone, which the writing check checks too.
+  toneName?: string | null
   // Saves the draft's new tree.
   onChange: (sections: DraftSection[]) => Promise<void>
+  // Checks the draft against the writing rules again (only offered when that failed).
+  onCheck: () => Promise<void>
   // `keep`: the keys of Claude's unused texts to keep in the library.
   onFinish: (keep: number[]) => Promise<void>
 }) {
@@ -212,6 +243,8 @@ export default function DraftTree({
   const [keep, setKeep] = useState<number[]>([])
   const [finishError, setFinishError] = useState<ApiError | null>(null)
   const [finishing, setFinishing] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<ApiError | null>(null)
   const focusLater = useFocusLater()
   const idBase = useId()
   const texts: Texts = new Map(draft.texts.map((text) => [text.key, text]))
@@ -263,6 +296,15 @@ export default function DraftTree({
   const savedName = (entryKind: DraftEntry['kind'], itemId: number | null) =>
     itemId === null ? '' : (savedItems(library, entryKind).find((item) => item.id === itemId)?.name ?? '')
   const bulletText = (id: number | null) => library.bullets.find((bullet) => bullet.bullet_id === id)?.content ?? ''
+  // The writing rules the wording in use breaks: Claude's, or the saved item's own.
+  const itemFlags = (itemKind: string, itemId: number | null) =>
+    draft.item_flags?.find((row) => row.kind === itemKind && row.item_id === itemId)?.flags
+  const flagsOf = (itemKind: string, row: { item_id?: number | null; text_key?: number | null; use_original?: boolean }, itemId: number | null) => {
+    const claude = claudeText(texts, row)
+    return claude && !row.use_original ? claude.flags : itemFlags(itemKind, itemId)
+  }
+  const switched = (useOriginal: boolean, flags?: WritingFlag[]) =>
+    (useOriginal ? 'Using the original wording.' : "Using Claude's wording.") + flagCount(flags)
   const unused = draft.texts.filter((text) => !textsInUse(draft.sections).has(text.key))
   const listId = (key: string) => `${idBase}-${key}`
 
@@ -349,6 +391,7 @@ export default function DraftTree({
               name={text}
               label={label}
               source={source}
+              flags={flagsOf('bullet', bullet, bullet.bullet_id)}
               onReject={
                 canReject
                   ? () => void change(withBullets(bullets.filter((row) => row !== bullet)), `Rejected "${shortBullet(text)}".`, after)
@@ -364,7 +407,7 @@ export default function DraftTree({
                 onSwitch={(useOriginal) =>
                   void change(
                     withBullets(bullets.map((row) => (row === bullet ? { ...row, use_original: useOriginal } : row))),
-                    useOriginal ? 'Using the original wording.' : "Using Claude's wording.",
+                    switched(useOriginal, flagsOf('bullet', { ...bullet, use_original: useOriginal }, bullet.bullet_id)),
                   )
                 }
               />
@@ -401,6 +444,7 @@ export default function DraftTree({
               }
               label={label}
               source={source}
+              flags={isText(entry.kind) ? flagsOf(entry.kind, entry, entry.item_id) : undefined}
               onReject={
                 canReject
                   ? () =>
@@ -424,7 +468,7 @@ export default function DraftTree({
                       ...section,
                       entries: section.entries.map((row) => (row === entry ? { ...entry, use_original: useOriginal } : row)),
                     }),
-                    useOriginal ? 'Using the original wording.' : "Using Claude's wording.",
+                    switched(useOriginal, flagsOf(entry.kind, { ...entry, use_original: useOriginal }, entry.item_id)),
                   )
                 }
               />
@@ -435,6 +479,21 @@ export default function DraftTree({
         })}
       </ul>
     )
+  }
+
+  // The button is gone once the check works, so focus goes to the sections.
+  async function check() {
+    if (checking) return
+    setChecking(true)
+    setCheckError(null)
+    try {
+      await onCheck()
+      focusLater(sectionsId)
+    } catch (error) {
+      setCheckError(toApiError(error))
+    } finally {
+      setChecking(false)
+    }
   }
 
   async function finish(kept: number[]) {
@@ -480,6 +539,21 @@ export default function DraftTree({
         )}
         {draft.starting_reason}
       </p>
+      {draft.checked === false && (
+        <div role="group" aria-labelledby={listId('unchecked')}>
+          <p id={listId('unchecked')}>Claude couldn&apos;t check this draft against your writing rules, so nothing in it is flagged.</p>
+          <p className="muted" id={listId('check-note')}>
+            Checks Claude&apos;s wording and your library text in this draft for the banned words and patterns in your{' '}
+            <Link to="/library/writing-rules">writing rules</Link>
+            {toneName ? ` and the "${toneName}" tone` : ''}. Claude may reword its own text to fix what it finds; yours is only flagged.
+          </p>
+          {checkError && <p role="alert">{checkError.message}</p>}
+          {/* aria-disabled, not disabled, so the button keeps focus while checking. */}
+          <button type="button" aria-describedby={listId('check-note')} aria-disabled={checking} onClick={() => void check()}>
+            {checking ? 'Checking…' : 'Check writing rules again'}
+          </button>
+        </div>
+      )}
       {draft.sections.length === 0 ? (
         <p className="muted">No sections in the draft.</p>
       ) : (
@@ -539,7 +613,11 @@ export default function DraftTree({
           >
             <Checklist
               legend="Keep in your library for later"
-              options={unused.map((text) => ({ id: text.key, name: text.text }))}
+              options={unused.map((text) => ({
+                id: text.key,
+                name: text.text,
+                description: text.flags?.length ? <Flags flags={text.flags} name={`"${shortBullet(text.text)}"`} /> : undefined,
+              }))}
               selected={keep}
               onChange={setKeep}
             />

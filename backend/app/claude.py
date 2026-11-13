@@ -100,15 +100,26 @@ def converse(client: anthropic.Anthropic, *, step: str, system: list[dict[str, A
             system=system,
             messages=messages,
             tools=tools,
-            thinking={"type": "adaptive"},
+            # Each thinking block is bound to the system prompt and tools it was written
+            # under. The chat's system prompt holds the library, posting, and tone, which
+            # change during a conversation (applying a proposal adds a library row), so the
+            # API drops the saved blocks that no longer match instead of refusing the request.
+            # Claude still reads every message; it thinks again where its old reasoning is gone.
+            thinking={"type": "adaptive",
+                      "block_binding": {"prefix_mismatch_behavior": "drop_block"}},
             output_config={"effort": effort},
-            betas=["server-side-fallback-2026-07-01"],
+            betas=["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01"],
             fallbacks="default",
         ) as stream:
             for event in stream:
                 if event.type == "text":
                     yield event.text
             response = stream.get_final_message()
+        dropped = [item for item in getattr(response, "input_transformations", None) or []
+                   if getattr(item, "type", None) == "thinking_dropped"]
+        if dropped:
+            logger.info("Claude %s: dropped %d earlier thinking blocks (%s)", step, len(dropped),
+                        ", ".join(sorted({str(getattr(item, "reason", "")) for item in dropped})))
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as error:
         raise AppError(ErrorCode.AI_UNAVAILABLE,
                        "Claude didn't accept the API key. Check it in backend/.env, then "

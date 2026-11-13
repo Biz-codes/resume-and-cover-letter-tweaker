@@ -214,6 +214,11 @@ def test_the_next_message_replays_the_history_and_says_what_became_of_each_propo
     send(client, doc, "And now?")
     assert claude.calls[3]["messages"][-1]["content"][0]["text"] == (
         "<about>the whole resume</about>")
+    # The library in the system prompt changes during a conversation, so saved thinking
+    # blocks that no longer match are dropped rather than refusing the message.
+    assert claude.calls[3]["thinking"] == {
+        "type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
+    assert "thinking-binding-controls-2026-08-01" in claude.calls[3]["betas"]
 
 
 def test_refuses_a_message_it_cant_send(client: TestClient, db: Session, account_id: int,
@@ -243,7 +248,8 @@ def test_refuses_a_message_it_cant_send(client: TestClient, db: Session, account
 
 @pytest.mark.parametrize("failure", ["error", "max_tokens"])
 def test_claude_failing_saves_nothing(client: TestClient, db: Session, account_id: int,
-                                      claude: FakeChat, failure: str):
+                                      claude: FakeChat, failure: str,
+                                      caplog: pytest.LogCaptureFixture):
     doc, _ = setup_resume(db, account_id)
     if failure == "error":
         claude.replies.append(anthropic.APIConnectionError(
@@ -255,6 +261,9 @@ def test_claude_failing_saves_nothing(client: TestClient, db: Session, account_i
     *_, last = lines(response)
     assert last == {"type": "error", "error": {
         "code": "AI_UNAVAILABLE", "message": last["error"]["message"], "field": None}}
+    # The cause is logged, since the stream only says Claude isn't available.
+    [record] = [record for record in caplog.records if "in the chat" in record.getMessage()]
+    assert record.levelname == "ERROR" and record.exc_info is not None
     db.expire_all()
     assert db.scalars(select(ChatMessage)).all() == []
 

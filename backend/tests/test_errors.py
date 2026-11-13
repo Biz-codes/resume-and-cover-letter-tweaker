@@ -139,3 +139,27 @@ def test_unexpected_error_hides_details(test_app: TestClient):
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_ERROR"
     assert "secret" not in response.text
+
+
+def test_the_running_app_logs_to_a_file(tmp_path) -> None:
+    """The served app writes its log to a file (app.main.log_to_file); errors also reach the
+    terminal."""
+    import logging
+
+    from app.main import log_to_file
+
+    logger = logging.getLogger("app")
+    before = list(logger.handlers)
+    log_to_file(str(tmp_path / "logs" / "app.log"))
+    try:
+        logging.getLogger("app.claude").info("Claude step: usage")
+        for handler in logger.handlers:
+            handler.flush()
+        assert "INFO app.claude: Claude step: usage" in (tmp_path / "logs" / "app.log").read_text()
+    finally:
+        for handler in set(logger.handlers) - set(before):
+            logger.removeHandler(handler)
+            handler.close()
+        logger.setLevel(logging.NOTSET)
+    log_to_file("")
+    assert logger.handlers == before

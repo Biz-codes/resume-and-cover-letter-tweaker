@@ -1,10 +1,13 @@
 """Reviewing Claude's draft of a posting's resume or cover letter (app/drafts.py;
 docs/FRONTEND_CHECKS.md, "Claude's suggestions"), with a stand-in for Claude."""
 
+import json
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
+import anthropic
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -25,8 +28,11 @@ from app.models import (
     Section,
     SectionNarrativeContent,
     SkillCategorySkill,
+    WritingRule,
+    WritingRuleKind,
 )
 from app.suggestions import Suggestion
+from app.writing_check import Issue, Review, Reviewed
 from tests.test_experience_projects_bullets import bullet, listed, role, show_job
 from tests.test_posting_reader import FakeMessages
 from tests.test_sections_skills import add, category, error, resume, skill_id
@@ -297,3 +303,104 @@ def test_finishing_lists_a_skill_under_the_category_claude_put_it_in(
     # Listed last under Back End, where Claude put it; Python stays where it was.
     assert listed(db, SkillCategorySkill, "category_id", back.category_id, "skill_id") == [
         python, alembic]
+
+
+# The writing check (app/writing_check.py) on the draft: Claude's texts are keyed 1 to 4 in
+# `started` ("I build React tools.", "I teach.", "Shipped it in React.", "Led a team."), and the
+# library's items after them (the summary, then "Shipped it" and "Tested it").
+DRAMA = "em dashes used for drama"
+
+
+def issue(why: str) -> Issue:
+    return Issue(rule=DRAMA, quote="—", why=why)
+
+
+def test_the_draft_is_checked_against_the_writing_rules(client: TestClient, db: Session,
+                                                        account_id: int, claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    claude.replies[Review] = Review(texts=[
+        Reviewed(key=2, issues=[issue("Drama.")], fixed_text="I teach classes."),
+        Reviewed(key=4, issues=[issue("Drama.")], fixed_text=""),
+        Reviewed(key=6, issues=[], fixed_text=""),
+        Reviewed(key=7, issues=[issue("Drama too.")], fixed_text="Ignored for your own text.")])
+    doc, ids, _ = started(client, db, account_id, claude)
+    draft = doc["draft"]
+    assert draft["checked"] is True
+    # One check after the tailoring, with Claude's texts and the library's.
+    check_request = claude.calls[-1]
+    assert check_request["output_format"] is Review
+    sent = json.loads(check_request["messages"][0]["content"].split("<texts>\n")[1]
+                      .split("\n</texts>")[0])
+    assert [(text["key"], text["text"], text["written_by"]) for text in sent] == [
+        (1, "I build React tools.", "assistant"), (2, "I teach.", "assistant"),
+        (3, "Shipped it in React.", "assistant"), (4, "Led a team.", "assistant"),
+        (5, "I build tools.", "the person"), (6, "Shipped it", "the person"),
+        (7, "Tested it", "the person")]
+    # Claude's text is fixed where it can be, and flagged where it can't.
+    texts = {text["key"]: text for text in draft["texts"]}
+    assert (texts[2]["text"], texts[2]["fixed"], texts[2]["flags"]) == (
+        "I teach classes.", True, [])
+    assert (texts[4]["text"], texts[4]["fixed"]) == ("Led a team.", False)
+    assert texts[4]["flags"] == [{"kind": "pattern", "rule": DRAMA, "quote": "—",
+                                  "why": "Drama."}]
+    # The library's own text is only flagged.
+    assert draft["item_flags"] == [{"kind": "bullet", "item_id": ids["tested"], "flags": [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama too."}]}]
+    assert db.get(BulletPoint, ids["tested"]).content == "Tested it"
+    # The fixed wording is what approving saves.
+    assert finish(client, doc).status_code == 200
+    assert db.scalar(select(func.count()).select_from(NarrativeContent).where(
+        NarrativeContent.content == "I teach classes.")) == 1
+
+
+def test_a_failed_check_keeps_the_draft_unchecked(client: TestClient, db: Session,
+                                                  account_id: int, claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    claude.replies[Review] = anthropic.APIConnectionError(request=request)
+    doc, _, keys = started(client, db, account_id, claude)
+    assert doc["draft"]["checked"] is False
+    assert doc["draft"]["item_flags"] == []
+    assert "I teach." in keys
+
+
+def test_no_rules_means_no_check(client: TestClient, db: Session, account_id: int,
+                                 claude: FakeMessages):
+    doc, _, _ = started(client, db, account_id, claude)
+    # Nothing to find, so Claude is asked only for the tailoring.
+    assert [call.get("output_format") for call in claude.calls] == [Suggestion]
+    assert doc["draft"]["checked"] is True
+
+
+def test_check_again_checks_only_the_writing(client: TestClient, db: Session, account_id: int,
+                                             claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    claude.replies[Review] = anthropic.APIConnectionError(request=request)
+    doc, ids, keys = started(client, db, account_id, claude)
+    # The user's review so far is kept: the summary went back to its original.
+    sections = doc["draft"]["sections"]
+    sections[0]["entries"][0]["use_original"] = True
+    assert put_draft(client, doc, sections).status_code == 200
+
+    # Failing again changes nothing.
+    assert error(client.post(f"{_url(doc)}/draft/check"))[:2] == (503, "AI_UNAVAILABLE")
+    assert client.get(_url(doc)).json()["draft"]["checked"] is False
+
+    calls = len(claude.calls)
+    claude.replies[Review] = Review(texts=[
+        Reviewed(key=4, issues=[issue("Drama.")], fixed_text=""),
+        Reviewed(key=5, issues=[issue("Drama too.")], fixed_text="")])
+    response = client.post(f"{_url(doc)}/draft/check")
+    assert response.status_code == 200
+    draft = response.json()["draft"]
+    # Only the writing check ran, not the tailoring.
+    assert [call["output_format"] for call in claude.calls[calls:]] == [Review]
+    assert draft["checked"] is True
+    assert draft["sections"][0]["entries"][0]["use_original"] is True
+    assert {text["key"]: len(text["flags"]) for text in draft["texts"]}[keys["Led a team."]] == 1
+    assert draft["item_flags"] == [{"kind": "narrative", "item_id": ids["intro"], "flags": [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama too."}]}]
+
+    # A checked draft isn't checked again.
+    assert error(client.post(f"{_url(doc)}/draft/check"))[:2] == (422, "VALIDATION_FAILED")

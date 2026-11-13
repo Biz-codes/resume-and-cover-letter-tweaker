@@ -21,7 +21,10 @@
       "Bash(PATH=/Users/biz_codes/.nvm/versions/node/v24.16.0/bin:__TRACKED_VAR__ node_modules/.bin/vitest run src/documents/DraftTree)",
       "Bash(backend/.venv/bin/python /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/names_check.py .)",
       "Bash(backend/.venv/bin/python /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/section_refs.py .)",
-      "Bash(sed -i '' 's/    headings\\\\[doc.name\\\\] = {line.lstrip\\(\"#\"\\).strip\\(\\) for line in doc.read_text\\(\\).splitlines\\(\\)\\\\n                          if line.startswith\\(\"#\"\\)}//' /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/section_refs.py)"
+      "Bash(sed -i '' 's/    headings\\\\[doc.name\\\\] = {line.lstrip\\(\"#\"\\).strip\\(\\) for line in doc.read_text\\(\\).splitlines\\(\\)\\\\n                          if line.startswith\\(\"#\"\\)}//' /private/tmp/claude-501/-Users-biz-codes-projects-resume-and-cover-letter-tweaker/532b079e-6771-479e-8659-970cfeac0ee8/scratchpad/section_refs.py)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(backend/.venv/bin/python scripts/check_demo_data.py)",
+      "Bash(backend/.venv/bin/pytest -q backend/tests/test_docs.py)"
     ]
   },
   "hooks": {

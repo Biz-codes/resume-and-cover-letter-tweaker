@@ -31,3 +31,11 @@
   margin-bottom: 0;
   font-weight: 600;
 }
+
+/* The writing rules a row's wording breaks, under its name. */
+.flags {
+  margin: 4px 0 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--flag);
+  list-style: none;
+}

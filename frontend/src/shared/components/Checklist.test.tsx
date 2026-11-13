@@ -26,6 +26,19 @@ describe('Checklist', () => {
     expect(onChange).toHaveBeenCalledWith([6])
   })
 
+  it("shows an option's description under it, read with its checkbox", () => {
+    render(
+      <Checklist
+        legend="Sections"
+        options={[{ id: 1, name: 'Summary', description: 'Breaks a rule.' }, ...OPTIONS.slice(1)]}
+        selected={[]}
+        onChange={() => {}}
+      />,
+    )
+    expect(screen.getByRole('checkbox', { name: 'Summary' })).toHaveAccessibleDescription('Breaks a rule.')
+    expect(screen.getByRole('checkbox', { name: 'Intro' })).not.toHaveAttribute('aria-describedby')
+  })
+
   it('says when there are no options', () => {
     render(<Checklist legend="Sections" options={[]} selected={[]} onChange={() => {}} />)
     expect(screen.getByText('None yet.')).toBeInTheDocument()

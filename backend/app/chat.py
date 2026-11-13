@@ -562,6 +562,11 @@ def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
                                       message_out(answered).model_dump(mode="json")])
     except AppError as error:
         db.rollback()
+        # Logged with its cause, as handle_app_error does for other requests: the stream's
+        # error line only says Claude isn't available.
+        if error.code in (ErrorCode.AI_UNAVAILABLE, ErrorCode.INTERNAL_ERROR):
+            logger.error("%s in the chat for %s %s: %s", error.code, one, doc_id, error.message,
+                         exc_info=error.__cause__ or error)
         yield _line("error", error={"code": error.code, "message": error.message,
                                     "field": error.field})
     except Exception:

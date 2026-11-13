@@ -6,6 +6,9 @@
 # Personal seed data (name, contact details, work history)
 db/seed_personal/
 
+# The backend's log, which can hold bits of personal text
+backend/logs/
+
 # Personal Claude Code overrides
 .claude/settings.local.json
 

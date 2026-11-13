@@ -101,12 +101,13 @@ def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: 
     body = response.json()
     # It starts empty, with the suggestion in its draft and Claude's text kept once by key.
     assert body["sections"] == []
+    # With no writing rules there's nothing to flag (tests/test_drafts.py checks the rules).
     assert body["draft"] == to_draft(reply, StartingDocument(
-        id=earlier.resume_id, name="Tech base")).model_dump()
+        id=earlier.resume_id, name="Tech base")).model_dump() | {"checked": True}
     assert body["draft"]["texts"] == [{
         "key": 1, "kind": "bullet", "text": "Tested it in React.", "replaces": tested,
         "section_id": EXPERIENCE_SECTION_ID, "section_key": None, "parent_kind": "experience",
-        "parent_id": job.experience_id}]
+        "parent_id": job.experience_id, "flags": [], "fixed": False}]
     db.expire_all()
     assert db.get(Resume, body["resume_id"]).draft == body["draft"]
 

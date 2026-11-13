@@ -312,6 +312,23 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const saveGreeting = (useDefault: boolean) =>
     inTurn((current) => docsApi(kind).saveDraft(id, current.draft?.sections ?? [], useDefault), '')
 
+  // Checking only adds flags (and fixes Claude's own text), so it's not a step to undo.
+  const checkDraft = () =>
+    inTurn(
+      () => docsApi(kind).checkDraft(id),
+      () => {
+        const draft = latest.current?.draft
+        const flagged = (draft?.texts.filter((text) => text.flags?.length).length ?? 0) + (draft?.item_flags?.length ?? 0)
+        return flagged
+          ? `Checked the draft against your writing rules. ${flagged === 1 ? '1 text breaks' : `${flagged} texts break`} a rule, marked Flagged.`
+          : 'Checked the draft against your writing rules. Nothing in it breaks them.'
+      },
+      (next) => {
+        latest.current = next
+        setDoc(next)
+      },
+    )
+
   // Finishing saves to the library, which Undo never takes back, so the history starts again.
   const finishReview = (keep: number[]) =>
     inTurn(
@@ -595,7 +612,15 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               {/* Claude's draft starts open, since it's what there is to do first. */}
               <Disclosure title={`Sections (${(doc.draft ?? doc).sections.length})`} initiallyOpen={Boolean(doc.draft)}>
                 {doc.draft && !readOnly ? (
-                  <DraftTree kind={kind} draft={doc.draft} ownSections={doc.sections} onChange={saveDraft} onFinish={finishReview} />
+                  <DraftTree
+                    kind={kind}
+                    draft={doc.draft}
+                    ownSections={doc.sections}
+                    toneName={toneSet ? toneLabel(toneSet) : null}
+                    onChange={saveDraft}
+                    onCheck={checkDraft}
+                    onFinish={finishReview}
+                  />
                 ) : (
                   <DocumentTree
                     kind={kind}

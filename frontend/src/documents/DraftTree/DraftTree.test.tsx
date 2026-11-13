@@ -130,20 +130,30 @@ function stubLibrary(start: { status: number; body: unknown } = { status: 200, b
   })
 }
 
-function renderDraft(draft: Draft = DRAFT, onFinish = vi.fn(() => Promise.resolve()), ownSections: TreeSection[] = []) {
+function renderDraft(
+  draft: Draft = DRAFT,
+  onFinish = vi.fn(() => Promise.resolve()),
+  ownSections: TreeSection[] = [],
+  onCheck = vi.fn(() => Promise.resolve()),
+  toneName: string | null = null,
+) {
   const onChange = vi.fn((_sections: DraftSection[]) => Promise.resolve())
-  const view = render(
+  const tree = (one: Draft) => (
     <MemoryRouter>
-      <DraftTree kind="resume" draft={draft} ownSections={ownSections} onChange={onChange} onFinish={onFinish} />
-    </MemoryRouter>,
+      <DraftTree
+        kind="resume"
+        draft={one}
+        ownSections={ownSections}
+        toneName={toneName}
+        onChange={onChange}
+        onCheck={onCheck}
+        onFinish={onFinish}
+      />
+    </MemoryRouter>
   )
-  const rerender = (next: Draft) =>
-    view.rerender(
-      <MemoryRouter>
-        <DraftTree kind="resume" draft={next} ownSections={ownSections} onChange={onChange} onFinish={onFinish} />
-      </MemoryRouter>,
-    )
-  return { onChange, onFinish, rerender }
+  const view = render(tree(draft))
+  const rerender = (next: Draft) => view.rerender(tree(next))
+  return { onChange, onFinish, onCheck, rerender }
 }
 
 // Each row of a list: its name, badge (with "Source:" for screen readers), and Reject, as one line
@@ -220,6 +230,89 @@ describe('DraftTree', () => {
     const back = screen.getByRole('button', { name: `Use Claude's wording of Text: "Builds accessible apps." in Summary` })
     expect(back).toHaveTextContent("Use Claude's wording")
     expect(back).toHaveFocus()
+    await expectNoA11yViolations()
+  })
+
+  it('flags the writing rules the wording in use breaks, and says so when switching', async () => {
+    stubLibrary()
+    const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
+    const filler = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'It means "used".' }
+    const draft: Draft = {
+      ...DRAFT,
+      checked: true,
+      texts: DRAFT.texts.map((text) => (text.key === 2 ? { ...text, flags: [drama] } : text)),
+      item_flags: [
+        { kind: 'narrative', item_id: 6, flags: [drama, filler] },
+        { kind: 'bullet', item_id: 9, flags: [filler] },
+      ],
+    }
+    const { rerender } = renderDraft(draft)
+    expect(await rows('Items in Summary')).toEqual([
+      'Text: Builds accessible React apps.Source: Claude',
+      'Text: Teaches web basics.Source: ClaudeFlaggedReject',
+    ])
+    const flags = screen.getByRole('list', { name: 'Writing rules Text: "Teaches web basics." in Summary breaks' })
+    expect(flags).toHaveTextContent('em dashes used for drama: “—”. It adds drama.')
+    expect(await rows('Bullets under Engineer, Acme in Experience')).toEqual([
+      'Led the React redesign.Source: Claude',
+      'Cut load time in half.Source: LibraryFlaggedReject',
+    ])
+    expect(screen.queryByText(/couldn.t be checked/)).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+
+    // The original of Claude's rewording breaks two rules, so going back to it says so.
+    const name = 'Text: "Builds accessible React apps." in Summary'
+    openRationale(name)
+    fireEvent.click(screen.getByRole('button', { name: `Use the original wording of ${name}` }))
+    await vi.waitFor(() => expect(announced()).toBe('Using the original wording. It breaks 2 writing rules.'))
+    const next = structuredClone(draft)
+    next.sections[0].entries[0].use_original = true
+    rerender(next)
+    expect(await rows('Items in Summary')).toEqual([
+      'Text: Builds accessible apps.Source: OriginalFlagged',
+      'Text: Teaches web basics.Source: ClaudeFlaggedReject',
+    ])
+    within(screen.getByRole('list', { name: 'Writing rules Text: "Builds accessible apps." in Summary breaks' })).getByText('leverage')
+    await expectNoA11yViolations()
+  })
+
+  it("says when the writing rules couldn't be checked, and checks again, saying what it checks", async () => {
+    stubLibrary()
+    const { onCheck, rerender } = renderDraft({ ...DRAFT, checked: false }, undefined, [], undefined, 'Tech')
+    const group = await screen.findByRole('group', {
+      name: "Claude couldn't check this draft against your writing rules, so nothing in it is flagged.",
+    })
+    expect(screen.queryByText('Flagged')).not.toBeInTheDocument()
+    expect(within(group).getByRole('link', { name: 'writing rules' })).toHaveAttribute('href', '/library/writing-rules')
+    const button = within(group).getByRole('button', { name: 'Check writing rules again' })
+    expect(button).toHaveAccessibleDescription(
+      'Checks Claude\'s wording and your library text in this draft for the banned words and patterns in your writing rules and the "Tech" tone. Claude may reword its own text to fix what it finds; yours is only flagged.',
+    )
+    await expectNoA11yViolations()
+    fireEvent.click(button)
+    expect(onCheck).toHaveBeenCalledOnce()
+    // Checked, the note and button are gone and focus goes to the sections.
+    rerender({ ...DRAFT, checked: true })
+    expect(screen.queryByRole('button', { name: 'Check writing rules again' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('list', { name: 'Sections' })).toHaveFocus())
+  })
+
+  it('shows a check that fails again, and while it runs, without a tone it has none to name', async () => {
+    stubLibrary()
+    let fail: (error: ApiError) => void = () => {}
+    const onCheck = vi.fn(() => new Promise<void>((_, reject) => (fail = reject)))
+    renderDraft({ ...DRAFT, checked: false }, undefined, [], onCheck)
+    const button = await screen.findByRole('button', { name: 'Check writing rules again' })
+    expect(button).toHaveAccessibleDescription(expect.stringContaining('in your writing rules. Claude may'))
+    button.focus()
+    fireEvent.click(button)
+    expect(button).toHaveTextContent('Checking…')
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    await expectNoA11yViolations()
+    fail(new ApiError('AI_UNAVAILABLE', "Claude isn't available right now.", null, 503))
+    expect(await screen.findByRole('alert')).toHaveTextContent("Claude isn't available right now.")
+    expect(button).toHaveTextContent('Check writing rules again')
+    expect(button).toHaveFocus()
     await expectNoA11yViolations()
   })
 
@@ -335,6 +428,21 @@ describe('DraftTree', () => {
     fireEvent.click(within(group).getByRole('checkbox', { name: 'Teaches web basics.' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Approve first draft' }))
     expect(onFinish).toHaveBeenCalledWith([2])
+  })
+
+  it('shows the writing rules an unused text breaks, read with its checkbox', async () => {
+    stubLibrary()
+    const draft = structuredClone(DRAFT)
+    draft.texts[1].flags = [{ kind: 'pattern', rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }]
+    draft.sections[0].entries = [draft.sections[0].entries[0]]
+    renderDraft(draft)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve first draft' }))
+    const dialog = screen.getByRole('dialog', { name: "Claude's text you didn't use" })
+    expect(within(dialog).getByRole('checkbox', { name: 'Teaches web basics.' })).toHaveAccessibleDescription(
+      'em dashes used for drama: “—”. It adds drama.',
+    )
+    expect(within(dialog).getByRole('list', { name: 'Writing rules "Teaches web basics." breaks' })).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('shows a refusal in the dialog, and cancels back to Approve first draft', async () => {

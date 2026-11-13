@@ -10,8 +10,8 @@ starts with its defaults (app/defaults.py).
 Undo and redo on the document's page send a whole earlier tree back (restore_tree).
 
 A posting's document started with Claude has Claude's suggestion in its draft (app/drafts.py):
-PUT .../draft saves the user's first pass over it, and POST .../draft/finish saves what they
-kept.
+PUT .../draft saves the user's first pass over it, POST .../draft/check runs the writing check
+again when it failed, and POST .../draft/finish saves what they kept.
 
 Like the library lists, a change to a list sends the whole list in its new order. Rows that stay
 keep their ids, so what's under them stays too; rows left out are removed with everything under
@@ -28,6 +28,7 @@ from sqlalchemy import ColumnElement, delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude
 from app.db import DbSession
 from app.defaults import (
     SECTION_LISTS,
@@ -46,7 +47,7 @@ from app.documents import (
     in_section,
     standalone_bullets,
 )
-from app.drafts import DraftSections, FinishIn, check_sections, current_draft, finish
+from app.drafts import DraftSections, FinishIn, check_sections, current_draft, finish, recheck
 from app.errors import AppError, ErrorCode
 from app.library import append, check_ids, check_unique_name
 from app.models import (
@@ -427,6 +428,14 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
             update={"use_default": body.use_default_greeting})
         doc.draft = draft.model_copy(update={"sections": body.sections,
                                              "greeting": greeting}).model_dump()
+        return changed(db, doc)
+
+    @router.post("/{doc_id}/draft/check")
+    def check_draft(doc_id: int, db: DbSession, account_id: AccountId, client: Claude):
+        """Check the draft's text against the writing rules again, after the check failed
+        when it was made (app/drafts.py, recheck). Only the draft changes."""
+        doc = editable(db, doc_id, account_id)
+        recheck(db, client, account_id, doc)
         return changed(db, doc)
 
     @router.post("/{doc_id}/draft/finish")

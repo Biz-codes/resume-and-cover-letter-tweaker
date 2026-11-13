@@ -30,6 +30,7 @@ const CONTRAST_PAIRS: [string, string, string][] = [
   [':root', '.badge-original', "an Original badge in Claude's draft"],
   [':root', '.badge-library', "a Library badge in Claude's draft"],
   [':root', '.badge-claude', "a Claude badge in Claude's draft"],
+  [':root', '.badge-flagged', "a Flagged badge in Claude's draft"],
   [':root', '--page', 'text in the chat panel (ChatPanel.module.css)'],
   [':root', '--highlight', 'text of an item being moved (OrderedList.module.css), of a title being hovered to rename (DocumentPage.module.css), and of your own messages in the chat (ChatPanel.module.css)'],
 ]

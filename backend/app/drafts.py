@@ -9,6 +9,11 @@ back to an item's original wording (or to Claude's again). Each change is checke
 (check_sections) and saved in the draft, so nothing reaches the document or the library until
 the review is finished.
 
+Before the draft is stored, its text is checked against the writing rules (check_writing, through
+app/writing_check.py): Claude's texts are fixed where they break one, and what's still flagged is
+kept with each text; the library's narrative content and bullets in the draft (and the originals
+of Claude's rewordings, which the user can go back to) are only flagged.
+
 A cover letter's draft can also hold new sections Claude titled for its new paragraphs (each
 once in `new_sections`, pointed to by key) and the greeting Claude suggests, which the user keeps
 or swaps for the letter's usual one.
@@ -23,6 +28,7 @@ new sections the draft still has are added to the library first (or the saved on
 title is used).
 """
 
+import logging
 from typing import Any, Literal
 
 import anthropic
@@ -36,6 +42,7 @@ from app.library import append
 from app.models import (
     BulletPoint,
     ExperienceBulletPoint,
+    JobPosting,
     NarrativeContent,
     ProjectBulletPoint,
     ProjectSkill,
@@ -50,6 +57,7 @@ from app.routers.narrative_content import NarrativeIn
 from app.suggestions import (
     LetterSection,
     LetterSuggestion,
+    Library,
     SuggestedBullet,
     SuggestedEntry,
     SuggestedSection,
@@ -59,6 +67,9 @@ from app.suggestions import (
     usable,
 )
 from app.versions import shown_name
+from app.writing_check import CheckText, Flag, check
+
+logger = logging.getLogger(__name__)
 
 # Claude's reason is empty for what the user added during the review.
 
@@ -105,6 +116,17 @@ class ClaudeText(BaseModel):
     section_key: int | None = None
     parent_kind: Literal["experience", "project"] | None = None
     parent_id: int | None = None
+    # The writing rules it still breaks, and whether `text` is the check's fixed wording.
+    flags: list[Flag] = []
+    fixed: bool = False
+
+
+class ItemFlags(BaseModel):
+    """The writing rules a library item in the draft breaks (its own wording, never changed)."""
+
+    kind: Literal["narrative", "bullet"]
+    item_id: int
+    flags: list[Flag]
 
 
 class ClaudeSection(BaseModel):
@@ -135,6 +157,10 @@ class Draft(BaseModel):
     sections: list[DraftSection]
     new_sections: list[ClaudeSection] = []
     greeting: DraftGreeting | None = None
+    # The library items in the draft that break a writing rule.
+    item_flags: list[ItemFlags] = []
+    # False when the writing check couldn't run (Claude failed), so nothing is flagged.
+    checked: bool = False
 
 
 class DraftSections(BaseModel):
@@ -208,8 +234,78 @@ def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id
         name = db.scalar(select(shown_name(kind.doc)).where(
             pk == suggestion.starting_document_id))
         starting = StartingDocument(id=suggestion.starting_document_id, name=name)
-    doc.draft = to_draft(suggestion, starting, getattr(doc, "addressee", None)).model_dump()
+    draft = to_draft(suggestion, starting, getattr(doc, "addressee", None))
+    _check_doc(db, client, account_id, doc, draft, keep_unchecked=True)
+    doc.draft = draft.model_dump()
     db.flush()
+
+
+def _check_doc(db: Session, client: anthropic.Anthropic, account_id: int, doc: Any,
+               draft: Draft, *, keep_unchecked: bool) -> None:
+    posting = db.get(JobPosting, doc.job_posting_id)
+    check_writing(db, client, account_id, draft, load_library(db, account_id),
+                  posting=posting.description if posting else "", tone_set_id=doc.tone_set_id,
+                  keep_unchecked=keep_unchecked)
+
+
+def recheck(db: Session, client: anthropic.Anthropic, account_id: int, doc: Any) -> None:
+    """"Check again" on a draft whose writing check failed: the check alone, not the
+    tailoring, on the draft as the user has it now. Failing again is AI_UNAVAILABLE, and the
+    draft stays as it was."""
+    draft = current_draft(doc)
+    if draft.checked:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       "The draft is already checked against your writing rules.")
+    _check_doc(db, client, account_id, doc, draft, keep_unchecked=False)
+    doc.draft = draft.model_dump()
+    db.flush()
+
+
+def library_items(draft: Draft) -> list[tuple[Literal["narrative", "bullet"], int]]:
+    """The library's narrative content and bullets in the draft, once each, in order: the ones
+    placed as they are and the originals of Claude's rewordings."""
+    items: dict[tuple[Literal["narrative", "bullet"], int], None] = {}
+    for section in draft.sections:
+        for entry in section.entries:
+            if entry.kind in ("narrative", "bullet") and entry.item_id is not None:
+                items[(entry.kind, entry.item_id)] = None
+            for bullet in entry.bullets:
+                if bullet.bullet_id is not None:
+                    items[("bullet", bullet.bullet_id)] = None
+    return list(items)
+
+
+def check_writing(db: Session, client: anthropic.Anthropic, account_id: int, draft: Draft,
+                  library: Library, *, posting: str, tone_set_id: int | None,
+                  keep_unchecked: bool) -> None:
+    """Check the draft's text against the writing rules, in place: each of Claude's texts gets
+    the check's fixed wording when there is one, and the flags for what it still breaks; the
+    library items are only flagged. With `keep_unchecked`, a failed check leaves the draft
+    unchecked rather than failing: the tailoring is the costly part, so it isn't lost."""
+    items = library_items(draft)
+    # Claude's texts keep their keys; the library's items come after them.
+    first = max((text.key for text in draft.texts), default=0) + 1
+    texts = [CheckText(key=text.key, text=text.text, claude=True) for text in draft.texts]
+    texts += [CheckText(key=first + index, text=library.text(kind, item_id) or "", claude=False)
+              for index, (kind, item_id) in enumerate(items)]
+    try:
+        checked = check(db, client, account_id, texts, step="the draft", posting=posting,
+                        tone_set_id=tone_set_id)
+    except AppError as error:
+        if error.code != ErrorCode.AI_UNAVAILABLE or not keep_unchecked:
+            raise
+        logger.warning("The draft's writing check failed, so the draft is unchecked",
+                       exc_info=error)
+        return
+    for text in draft.texts:
+        result = checked.get(text.key)
+        if result is not None:
+            text.text, text.fixed, text.flags = result.text, result.fixed, result.flags
+    draft.item_flags = [
+        ItemFlags(kind=kind, item_id=item_id, flags=checked[first + index].flags)
+        for index, (kind, item_id) in enumerate(items)
+        if first + index in checked and checked[first + index].flags]
+    draft.checked = True
 
 
 def current_draft(doc: Any) -> Draft:

@@ -764,6 +764,40 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it('checks an unchecked draft against the writing rules again, saying what it found', async () => {
+    const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
+    const flag = { kind: 'pattern', rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
+    const draft = (checked: boolean) => ({
+      starting_document: null,
+      starting_reason: 'There are no earlier resumes.',
+      texts: [{ key: 1, kind: 'narrative', text: 'Teaches web basics.', replaces: null, flags: checked ? [flag] : [] }],
+      sections: [{ section_id: 1, reason: 'A short summary.', entries: [{ kind: 'narrative', item_id: null, text_key: 1, reason: 'Mentions mentoring.' }] }],
+      item_flags: [],
+      checked,
+    })
+    const drafted = (checked: boolean) =>
+      resume(5, { name: 'Engineer at Acme', job_posting: posting, output: { parts: [], text: '' }, draft: draft(checked) })
+    const none = { skill_categories: [], experience: [], projects: [], bullets: [], education: [], used_by: [] }
+    stub(5, drafted(false), {
+      'GET /api/sections': [{ status: 200, body: [{ id: 1, title: 'Summary', built_in: true, ...none, narrative_content: [] }] }],
+      ...Object.fromEntries(
+        ['narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education'].map((path) => [
+          `GET /api/${path}`,
+          [{ status: 200, body: [] }],
+        ]),
+      ),
+      'POST /api/resumes/5/draft/check': [{ status: 200, body: drafted(true) }],
+    })
+    renderAt('/resumes/5')
+    fireEvent.click(await screen.findByRole('button', { name: 'Check writing rules again' }))
+    await expectNotice('Checked the draft against your writing rules. 1 text breaks a rule, marked Flagged.')
+    expect(screen.queryByRole('button', { name: 'Check writing rules again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Writing rules Text: "Teaches web basics." in Summary breaks' })).toBeInTheDocument()
+    // Checking isn't a step to undo.
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
+    await expectNoA11yViolations()
+  })
+
   it("reviews Claude's greeting in a letter's draft, saved with its tree, with Undo", async () => {
     const greeting = { addressee: 'Jordan Rivera', reason: 'The posting names the hiring manager.', use_default: false }
     const talks = { section_id: 12, reason: 'The posting mentions speaking.', entries: [] }

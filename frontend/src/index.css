@@ -9,6 +9,8 @@
   /* The page's own background, for a panel that covers the page (ChatPanel.module.css). */
   --page: #fff;
   --outline: #5f5b66;
+  /* The line beside the writing rules a draft's row breaks (DraftTree.module.css). */
+  --flag: #b3261e;
   /* What a modal dialog dims the page behind it with (Dialog.module.css). */
   --backdrop: #1f1d2480;
 }
@@ -205,6 +207,10 @@ h2[tabindex='-1']:focus {
 
 .badge-claude {
   background: #f8e6c4;
+}
+
+.badge-flagged {
+  background: #f9dedc;
 }
 
 .note,

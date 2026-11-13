@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     test_database_url: str | None = None
     # Not needed until phase 5 (job postings and AI).
     anthropic_api_key: str | None = None
+    # Where the running app writes its log, relative to backend/ (gitignored); "" for none.
+    log_file: str = "logs/app.log"
 
 
 @lru_cache
