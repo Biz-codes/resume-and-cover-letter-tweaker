@@ -34,6 +34,11 @@ EXPERIENCE_SECTION_ID = 3
 PROJECTS_SECTION_ID = 4
 EDUCATION_SECTION_ID = 5
 OTHER_CATEGORY_ID = 1
+# The built-in tones, shared by every account (docs/DATABASE.md, tone_set).
+PROFESSIONAL_TONE_ID = 1
+TECHNICAL_TONE_ID = 2
+FRIENDLY_TONE_ID = 3
+CASUAL_TONE_ID = 4
 
 
 class Base(DeclarativeBase):
@@ -325,7 +330,8 @@ class ToneSet(Base):
     __tablename__ = "tone_set"
 
     tone_set_id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(fk("account.account_id"))
+    # Empty for the built-in tones.
+    account_id: Mapped[int | None] = mapped_column(fk("account.account_id"))
     name: Mapped[str] = mapped_column(String(100))
     hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
@@ -336,7 +342,8 @@ class ToneRule(Base):
     __tablename__ = "tone_rule"
 
     tone_rule_id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(fk("account.account_id"))
+    # Empty for the built-in tones' rules.
+    account_id: Mapped[int | None] = mapped_column(fk("account.account_id"))
     rule_text: Mapped[str] = mapped_column(Text)
     hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()

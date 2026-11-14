@@ -89,6 +89,9 @@ def test_found_terms_and_rules_go_to_claude(db: Session, account_id: int) -> Non
     assert request["output_config"] == {"effort": "low"}
     assert "em dashes used for drama" in request["system"]
     assert "Lead with tools" in request["system"]
+    # "Leveraged RxJS" is technical language (docs/WRITING_RULES.md, "Exceptions").
+    assert '("leveraged RxJS"), is technical language' in request["system"]
+    assert '"dynamically populated form fields", is technical language too' in request["system"]
     assert sent(messages) == [
         {"key": 1, "text": "Leveraged Kafka.", "written_by": "assistant",
          "found_terms": ["leverage"]},

@@ -167,6 +167,7 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
     instructions, library, posting = request["system"]
     assert "propose_change" in instructions["text"] and "Never say a change is made" in \
         instructions["text"]
+    assert '("leveraged RxJS"), is technical language' in instructions["text"]
     assert library["cache_control"] == posting["cache_control"] == {"type": "ephemeral"}
     assert "<posting>\nOrganization: Acme" in posting["text"]
     [turn] = request["messages"]

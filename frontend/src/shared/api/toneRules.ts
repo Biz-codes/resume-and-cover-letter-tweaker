@@ -13,6 +13,8 @@ export interface ToneRule {
   tone_rule_id: number
   rule_text: string
   hidden: boolean
+  // A built-in tone's rule, shared by every account: any tone can list it, but it never changes.
+  built_in: boolean
   tones: ToneListing[]
   // Every resume and cover letter whose tone lists it.
   used_by: Use[]

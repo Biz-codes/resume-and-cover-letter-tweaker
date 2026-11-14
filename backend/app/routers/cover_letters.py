@@ -112,7 +112,8 @@ def detail(db: Session, letter: CoverLetter) -> LetterDetail:
 
 def check_links(db: Session, body: LetterIn, account_id: int) -> None:
     check_link(db, Header, Header.header_id, body.header_id, account_id, "header_id")
-    check_link(db, ToneSet, ToneSet.tone_set_id, body.tone_set_id, account_id, "tone_set_id")
+    check_link(db, ToneSet, ToneSet.tone_set_id, body.tone_set_id, account_id, "tone_set_id",
+               allow_built_in=True)
     check_link(db, SignOff, SignOff.sign_off_id, body.sign_off_id, account_id, "sign_off_id")
 
 

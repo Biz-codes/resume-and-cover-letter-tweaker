@@ -12,18 +12,20 @@ const TECH: ToneSet = {
   hidden: false,
   tone_set_id: 3,
   name: 'Tech',
+  built_in: false,
   created_at: '2026-10-01T12:00:00',
   rules: [
-    { tone_rule_id: 30, rule_text: 'Lead with tools and metrics.', hidden: false },
-    { tone_rule_id: 31, rule_text: 'Keep bullets short.', hidden: false },
+    { tone_rule_id: 30, rule_text: 'Lead with tools and metrics.', hidden: false, built_in: false },
+    { tone_rule_id: 31, rule_text: 'Keep bullets short.', hidden: false, built_in: false },
   ],
   used_by: [{ kind: 'resume', id: 2, name: 'Acme resume', locked: false }],
 }
-const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', created_at: '2026-10-01T12:00:00', rules: [], used_by: [] }
+const TEACHING: ToneSet = { hidden: false, tone_set_id: 4, name: 'Teaching', built_in: false, created_at: '2026-10-01T12:00:00', rules: [], used_by: [] }
 const rule = (tone_rule_id: number, rule_text: string, tones: string[] = [], hidden = false): ToneRule => ({
   tone_rule_id,
   rule_text,
   hidden,
+  built_in: false,
   tones: tones.map((name, index) => ({ tone_set_id: index + 3, name, used_by: [] })),
   used_by: [],
 })
@@ -56,6 +58,16 @@ describe('ToneSetsPage', () => {
     expect(within(await findCard('Keep bullets short.')).getByText('In Tech')).toBeInTheDocument()
     expect(within(await findCard('Name the students.')).getByText('In no tone yet.')).toBeInTheDocument()
     await expectNoA11yViolations()
+  })
+
+  it('tags the built-in tones and rules', async () => {
+    const professional: ToneSet = { ...TEACHING, tone_set_id: 1, name: 'Professional', built_in: true }
+    stub({}, [professional, TECH], [...RULES, { ...rule(5, 'Plain, direct sentences.'), built_in: true }])
+    render(<ToneSetsPage />)
+    // The tag is read with the title, in its heading.
+    expect(within(await findCard('Professional built in')).getByText('built in')).toBeInTheDocument()
+    expect(within(await findCard('Plain, direct sentences. built in')).getByText('built in')).toBeInTheDocument()
+    expect(within(await findCard('Tech')).queryByText('built in')).not.toBeInTheDocument()
   })
 
   it("opens a tone's dialog, with its rules in order", async () => {

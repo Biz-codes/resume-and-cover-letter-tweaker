@@ -366,16 +366,18 @@ Note: the banned filler and AI-speak list from [WRITING_RULES.md](WRITING_RULES.
 Note: each account is seeded with the starting list in WRITING_RULES.md. Setting `active` to false switches a rule off without deleting it.
 
 ### tone_set
-| Column      | Type         | Constraints                                               | Description                                      |
-|-------------|--------------|-----------------------------------------------------------|--------------------------------------------------|
-| tone_set_id | SERIAL       | PRIMARY KEY                                               | unique tone set id                               |
-| account_id  | INTEGER      | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                             |
-| name        | VARCHAR(100) | NOT NULL                                                  | label for the tone set (e.g. "Tech", "Teaching") |
-| hidden      | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the tone set is hidden from new choices  |
-| created_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set added to db                   |
-| updated_at  | TIMESTAMP    | DEFAULT NOW()                                             | date/time tone set last updated                  |
+| Column      | Type         | Constraints                                      | Description                                        |
+|-------------|--------------|--------------------------------------------------|----------------------------------------------------|
+| tone_set_id | SERIAL       | PRIMARY KEY                                      | unique tone set id                                 |
+| account_id  | INTEGER      | REFERENCES account(account_id) ON DELETE CASCADE | id of owning account; empty for built-in tones     |
+| name        | VARCHAR(100) | NOT NULL                                         | label for the tone set (e.g. "Tech", "Teaching")   |
+| hidden      | BOOLEAN      | NOT NULL DEFAULT FALSE                           | whether the tone set is hidden from new choices    |
+| created_at  | TIMESTAMP    | DEFAULT NOW()                                    | date/time tone set added to db                     |
+| updated_at  | TIMESTAMP    | DEFAULT NOW()                                    | date/time tone set last updated                    |
 
 Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
+
+Note: four built-in tones are created with the database, with fixed ids: "Professional" (1), "Technical" (2), "Friendly but formal" (3), and "Casual" (4), each listing built-in rules (see `tone_rule`). The backend refers to them by these ids (constants in `backend/app/models.py`), never by name. They have no `account_id`, so every account shares them and can use them on any resume or cover letter. They're generic, for any kind of job. They can't be renamed, edited, hidden, or deleted (`BUILT_IN_PROTECTED`), and a database trigger blocks it as a backstop; to vary one, the user makes a tone of their own from its rules. Names are unique counting the built-in ones, so an account's tone can't be named "Professional".
 
 Note: a tone set's name is always unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`). Tones aren't printed, so when an edit saves a new set, the new one takes the name and the original (still used by the documents that keep it) is renamed to a name the user gives; the user can hide it.
 
@@ -385,11 +387,13 @@ Note: a tone set is saved whole: its name and its rules, in order. Tones aren't 
 | Column       | Type      | Constraints                                               | Description                                           |
 |--------------|-----------|-----------------------------------------------------------|-------------------------------------------------------|
 | tone_rule_id | SERIAL    | PRIMARY KEY                                               | unique tone rule id                                   |
-| account_id   | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                  |
+| account_id   | INTEGER   | REFERENCES account(account_id) ON DELETE CASCADE          | id of owning account; empty for built-in tone rules   |
 | rule_text    | TEXT      | NOT NULL                                                  | tone instruction (e.g. "Lead with tools and metrics") |
 | hidden       | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the tone rule is hidden from new choices      |
 | created_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time tone rule added to db                       |
 | updated_at   | TIMESTAMP | DEFAULT NOW()                                             | date/time tone rule last updated                      |
+
+Note: the built-in tones' rules are built in too: no `account_id`, shared by every account, and like the built-in tones they can't be edited, hidden, or deleted (`BUILT_IN_PROTECTED`, with a database trigger as a backstop). Any account's tone can list them, and new text matching one reuses it.
 
 Note: a rule stands alone, and each tone lists its rules in `tone_set_tone_rule`, so one rule can be in many tones and the user combines them freely. The account holds each rule once: new text matching a saved rule (hidden ones too), ignoring spacing and capitals, reuses that rule, and editing a rule to match another returns `DUPLICATE`. Deleting a tone deletes only its list; its rules stay in the library. Deleting a rule takes it out of every tone that lists it.
 
@@ -541,7 +545,7 @@ Primary key: (tone_set_id, tone_rule_id)
 
 Note: the rules in this tone, in order. Unlike the other library lists, which only drive suggestions, this list is the tone itself: a resume or cover letter follows every rule its tone lists. So it's saved whole with the tone's name, and changing it follows "Changing an item" like the name (see `tone_set`). A rule can be in many tones.
 
-Note: app checks: saving a tone sends its name and its rules in order, each one a saved rule's `tone_rule_id` or new text (saved as a new rule). An id that isn't the account's own returns `CROSS_ACCOUNT_LINK` (`NOT_FOUND` when there's no such rule), the same rule twice `DUPLICATE`, and a hidden rule the tone didn't already list `VALIDATION_FAILED` (see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+Note: app checks: saving a tone sends its name and its rules in order, each one a saved rule's `tone_rule_id` or new text (saved as a new rule). A rule must be the account's own or a built-in one: another account's returns `CROSS_ACCOUNT_LINK` (`NOT_FOUND` when there's no such rule). The same rule twice returns `DUPLICATE`, and a hidden rule the tone didn't already list `VALIDATION_FAILED` (see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)). A built-in tone's list never changes (`BUILT_IN_PROTECTED`, with a database trigger as a backstop).
 
 ## Join Tables
 A resume or cover letter is built as a tree of the user's selections: resume or cover letter → sections → items in each section → sub-items (skills in a category, skills in a project, bullets in an experience or project).

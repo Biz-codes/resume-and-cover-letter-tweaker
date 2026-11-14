@@ -323,10 +323,11 @@ def list_docs(db: Session, kind: Kind, account_id: int) -> list[Any]:
 
 
 def check_link(db: Session, model, column, item_id: int | None, account_id: int,
-               field: str) -> None:
-    """The header, tone set, or sign-off picked must be the account's own."""
+               field: str, allow_built_in: bool = False) -> None:
+    """The header, tone set, or sign-off picked must be the account's own (or, with
+    allow_built_in, a built-in one: the built-in tones)."""
     if item_id is not None:
-        check_ids(db, model, column, [item_id], account_id, field)
+        check_ids(db, model, column, [item_id], account_id, field, allow_built_in=allow_built_in)
 
 
 def latest_header_id(db: Session, account_id: int) -> int | None:

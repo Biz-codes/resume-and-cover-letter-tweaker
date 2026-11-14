@@ -16,6 +16,8 @@ The app never uses filler words or phrasing that sounds machine-written. A start
 Some listed words have real technical or literal meanings. The app must judge each use in context and allow the word when it's one of these:
 - **A technical term:** "dynamic programming", "dynamic typing", "test harness", "robust regression", "financial leverage", "elevated privileges", "landscape orientation"
 - **A proper noun:** a product, framework, or company name, such as Realm, Apache Tapestry, or Pivotal Tracker
+- **"Leverage" with a named technology:** "leverage" in any form, when what's leveraged is a named tool, library, language, or framework ("leveraged RxJS"), is technical language and stays as written, even though "used" would fit
+- **"Dynamic" for content decided at runtime:** "dynamic" or "dynamically" for content that's filled in or shown depending on conditions in the code (if statements, a user's role or input, data from an API), such as "dynamically populated form fields" or "dynamic content based on account type", is technical language and stays as written
 - **The plain literal meaning,** especially outside tech: "foster care" on a social work resume, "landscape design" on a landscaping resume
 
 A quick test: replace the word with a plain one ("use", "strong", "lead", "show"). If the meaning stays the same, it was filler. If the meaning changes or becomes wrong, it's a real term and stays.

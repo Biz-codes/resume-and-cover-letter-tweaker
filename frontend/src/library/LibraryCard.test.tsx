@@ -24,7 +24,8 @@ describe('LibraryCard', () => {
     render(
       <LibraryCard title="Skills" heading={3} tags={<span className="tag">built in</span>} editId="s" editLabel='View and Edit "Skills"' onEdit={() => {}} />,
     )
-    expect(screen.getByRole('heading', { level: 3, name: /^Skills/ })).toContainElement(screen.getByText('built in'))
+    // Read apart from the title, not run into it.
+    expect(screen.getByRole('heading', { level: 3, name: 'Skills built in' })).toContainElement(screen.getByText('built in'))
     await expectNoA11yViolations()
   })
 })

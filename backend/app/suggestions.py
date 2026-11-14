@@ -57,6 +57,7 @@ from app.models import (
 )
 from app.plain_text import letter_output, resume_output
 from app.tones import rule_texts
+from app.writing_check import TECHNICAL_EXCEPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,8 @@ out is left out of the {doc}.
 Everything you write (new text and reasons) follows the person's writing rules:
 {rules}
 A listed word is fine when it's a technical term or a proper noun (\"dynamic programming\", \
-\"Pivotal Tracker\"): replace it with a plain word, and if the meaning changes, it's a real term."""
+\"Pivotal Tracker\"): replace it with a plain word, and if the meaning changes, it's a real term. \
+{exceptions}"""
 
 RESUME_NEW_TEXT = """\
 Write new text only when the posting needs something the library doesn't say but the rest of \
@@ -443,7 +445,7 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
                        "Claude pick.", field="start_from_id")
     letter = kind.prefix == "cover_letter"
     instructions = INSTRUCTIONS.format(
-        doc=one, docs=many, rules=rules_text(db, account_id),
+        doc=one, docs=many, rules=rules_text(db, account_id), exceptions=TECHNICAL_EXCEPTIONS,
         new_text=LETTER_NEW_TEXT if letter else RESUME_NEW_TEXT,
         kind_notes=LETTER_NOTES if letter else "", companion=companion_instructions(kind))
     data = (f"<library>\n{json.dumps(library_json(library), ensure_ascii=False)}\n</library>\n"

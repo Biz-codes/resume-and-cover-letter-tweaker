@@ -22,6 +22,8 @@ import { useItemData } from './useItemData'
 
 const SENT_NOTE = "A sent version's tone lists this rule, so saving adds a new rule. The sent version keeps this one."
 
+const BUILT_IN_RULE_NOTE = "A built-in tone's rule, so it doesn't change. Any of your tones can list it."
+
 export default function ToneRuleItem({ id }: { id: number }) {
   const host = useItemHost()
   const { data, error, load } = useItemData(() => toneRulesApi.list())
@@ -32,6 +34,25 @@ export default function ToneRuleItem({ id }: { id: number }) {
   const rule = data?.find((item) => item.tone_rule_id === id)
   if (!data || !rule) return <ItemLoading error={error} missing={Boolean(data)} onRetry={() => void load()} />
   const label = `"${shortBullet(rule.rule_text)}"`
+  const tones = <NameList title="Tones" refs={rule.tones.map((tone) => ({ kind: 'tone', id: tone.tone_set_id, title: tone.name }))} />
+
+  // A built-in tone's rule is only shown: no form, Hide, or Delete.
+  if (rule.built_in) {
+    return (
+      <ItemParts
+        name={label}
+        form={
+          <div className="card">
+            <p className="note">{BUILT_IN_RULE_NOTE}</p>
+            <p className="bullet-text">{rule.rule_text}</p>
+          </div>
+        }
+      >
+        {tones}
+        <UsedBy uses={rule.used_by} />
+      </ItemParts>
+    )
+  }
   const { here, others, elsewhere } = inProgressUses(rule.used_by, host.placed?.where)
   const picked = pickedFor(here, applyTo)
   const splits = splitTones(rule, picked)
@@ -108,7 +129,7 @@ export default function ToneRuleItem({ id }: { id: number }) {
         />
       )}
     >
-      <NameList title="Tones" refs={rule.tones.map((tone) => ({ kind: 'tone', id: tone.tone_set_id, title: tone.name }))} />
+      {tones}
       <UsedBy uses={rule.used_by} />
     </ItemParts>
   )

@@ -14,6 +14,7 @@ const RULE: ToneRule = {
   tone_rule_id: 30,
   rule_text: 'Lead with tools.',
   hidden: false,
+  built_in: false,
   tones: [{ tone_set_id: 3, name: 'Tech', used_by: [] }],
   used_by: [],
 }
@@ -124,6 +125,17 @@ describe('ToneRuleItem', () => {
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await vi.waitFor(() => expect(host.deleted).toHaveBeenCalledWith('Deleted "Lead with tools.".'))
+  })
+
+  it("shows a built-in tone's rule read-only, with its tones and no Hide or Delete", async () => {
+    stub({ ...RULE, built_in: true, tones: [{ tone_set_id: 1, name: 'Professional', used_by: [] }] })
+    await renderItem(<ToneRuleItem id={30} />)
+    expect(screen.getByText("A built-in tone's rule, so it doesn't change. Any of your tones can list it.")).toBeInTheDocument()
+    expect(screen.getByText('Lead with tools.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Rule')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^(Hide|Delete) / })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Professional' })).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('offers only Hide when a sent version uses it', async () => {

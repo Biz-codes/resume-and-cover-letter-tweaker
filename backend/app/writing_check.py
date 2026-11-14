@@ -33,6 +33,16 @@ from app.tones import rule_texts
 
 logger = logging.getLogger(__name__)
 
+# Real terms the quick test below would call filler (docs/WRITING_RULES.md, "Exceptions"). Every
+# request that writes or judges text with the writing rules says it.
+TECHNICAL_EXCEPTIONS = (
+    '"Leverage" in any form, when what\'s leveraged is a named tool, library, language, or '
+    'framework ("leveraged RxJS"), is technical language: it\'s a real term even though "use" '
+    "would fit, so keep it as written. \"Dynamic\" or \"dynamically\" for content that's filled "
+    "in or shown depending on conditions in the code (if statements, a user's role or input, data "
+    'from an API), as in "dynamically populated form fields", is technical language too: keep it '
+    "as written.")
+
 # Endings that make a single listed word the same word ("leverage" -> "leveraged"). A word
 # ending in "e" drops it first ("elevate" -> "elevating").
 ENDINGS = r"(?:s|es|ed|er|ers|ing|ly|ally|ness)?"
@@ -123,7 +133,8 @@ harness"), a proper noun (a product, framework, or company, like Realm or Pivota
 its plain literal meaning ("foster care" on a social work resume). A quick test: replace it \
 with a plain word ("use", "strong", "lead", "show"). If the meaning stays the same, it was \
 filler; if it changes or becomes wrong, it's a real term. The posting using it in the same \
-technical sense, or a skill name containing it, also means it's a real term.
+technical sense, or a skill name containing it, also means it's a real term. \
+{exceptions}
 - Patterns, which you check yourself:
 {patterns}
 - Tone:{tone}
@@ -169,6 +180,7 @@ def check(db: Session, client: anthropic.Anthropic, account_id: int, texts: list
     skills = sorted(set(db.scalars(select(Skill.skill_name).where(
         Skill.account_id == account_id))))
     instructions = INSTRUCTIONS.format(
+        exceptions=TECHNICAL_EXCEPTIONS,
         patterns="\n".join(f"  - {pattern}" for pattern in patterns) or "  (none)",
         tone="".join(f"\n  - {rule}" for rule in tone) or " (none)")
     data = [{"key": text.key, "text": text.text,

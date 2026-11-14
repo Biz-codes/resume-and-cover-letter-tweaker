@@ -288,6 +288,7 @@ def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, 
     assert tailor(client, db, account_id, tone_set_id=tone.tone_set_id).status_code == 201
     [request] = claude.calls
     instructions = request["system"][0]["text"]
+    assert '("leveraged RxJS"), is technical language' in instructions
     assert "Never use these words or phrases: leverage." in instructions
     assert "- em dashes used for drama" in instructions
     assert "synergy" not in instructions

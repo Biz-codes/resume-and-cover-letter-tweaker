@@ -35,7 +35,8 @@ export default function LibraryCard({
       <div className="card-header">
         <Heading className={titleClassName}>
           {title}
-          {tags}
+          {/* A space, so the tags are read apart from the title ("Other built in"). */}
+          {tags && <> {tags}</>}
         </Heading>
         <div className="actions">
           {actions}

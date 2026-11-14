@@ -25,6 +25,7 @@ import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 
 const SENT_NOTE = 'A sent version uses this tone, so saving adds a new one. The sent version keeps this one.'
+const BUILT_IN_TONE_NOTE = "Built in, so it doesn't change. To vary it, make a tone of your own and add its rules."
 
 // A rule in the form: a saved one by its id, or new text, which has a negative id until it's saved.
 interface Rule {
@@ -53,6 +54,31 @@ export default function ToneItem({ id }: { id: number }) {
     }
   }
 
+  // A built-in tone is only shown: no form, Hide, or Delete.
+  if (toneSet.built_in) {
+    return (
+      <ItemParts
+        name={`"${label}"`}
+        form={
+          <div className="card">
+            <p className="note">{BUILT_IN_TONE_NOTE}</p>
+            <OrderedList
+              label={`${label} rules`}
+              items={toneSet.rules.map((rule) => ({ id: rule.tone_rule_id, name: rule.rule_text, label: ruleLabel(rule.rule_text) }))}
+              choices={[]}
+              emptyText="No rules."
+              readOnly
+              onOpen={(item) => host.open({ kind: 'toneRule', id: item.id, title: shortBullet(item.name) })}
+              onChange={async () => {}}
+            />
+          </div>
+        }
+      >
+        <UsedBy uses={toneSet.used_by} />
+      </ItemParts>
+    )
+  }
+
   return (
     <ItemParts
       name={`"${label}"`}
@@ -62,7 +88,12 @@ export default function ToneItem({ id }: { id: number }) {
         await toneSetsApi.setHidden(toneSet.tone_set_id, next)
         await Promise.all([load(), host.refresh()])
       }}
-      form={<ToneForm toneSet={toneSet} saved={data[1].map((rule) => ({ id: rule.tone_rule_id, text: rule.rule_text, hidden: rule.hidden }))} />}
+      form={
+        <ToneForm
+          toneSet={toneSet}
+          saved={data[1].map((rule) => ({ id: rule.tone_rule_id, text: rule.rule_text, hidden: rule.hidden, builtIn: rule.built_in }))}
+        />
+      }
       confirmDelete={(back) => (
         <ConfirmDelete
           what={`"${label}"`}
@@ -81,7 +112,7 @@ export default function ToneItem({ id }: { id: number }) {
 
 // The tone's name and rules, saved together. Its buttons for rules don't submit it; only Save (or
 // Enter in a name) does.
-function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidden: boolean })[] }) {
+function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidden: boolean; builtIn: boolean })[] }) {
   const host = useItemHost()
   const [name, setName] = useState(toneSet.name)
   const [rules, setRules] = useState<Rule[]>(() => toneSet.rules.map((rule) => ({ id: rule.tone_rule_id, text: rule.rule_text })))
@@ -177,7 +208,12 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
           // Saved rules not hidden (a hidden one the tone lists stays), offered to add.
           choices={offered(saved)
             .filter((rule) => !listed.has(rule.id))
-            .map((rule) => ({ id: rule.id, name: rule.text, label: ruleLabel(rule.text) }))}
+            .map((rule) => ({
+              id: rule.id,
+              name: rule.text,
+              label: ruleLabel(rule.text),
+              group: rule.builtIn ? 'Built-in rules' : 'Your rules',
+            }))}
           emptyText="No rules yet."
           // Reordered, removed, or a saved rule added, in the form only.
           onChange={async (ids) => {

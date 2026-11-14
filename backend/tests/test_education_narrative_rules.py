@@ -8,8 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    CASUAL_TONE_ID,
     EDUCATION_SECTION_ID,
+    FRIENDLY_TONE_ID,
+    PROFESSIONAL_TONE_ID,
     SUMMARY_SECTION_ID,
+    TECHNICAL_TONE_ID,
     Account,
     CoverLetter,
     CoverLetterNarrativeContent,
@@ -617,6 +621,56 @@ def test_deleting_a_rule_takes_it_out_of_every_tone(client: TestClient, db: Sess
     assert rule_texts(client.get(f"/api/tone-sets/{tech.tone_set_id}").json()) == ["Use metrics."]
     other = add(db, ToneRule(account_id=add(db, Account()).account_id, rule_text="Theirs."))
     assert error(client.get(f"/api/tone-rules/{other.tone_rule_id}"))[:2] == (404, "NOT_FOUND")
+
+
+def test_the_built_in_tones_are_every_accounts_and_never_change(client: TestClient,
+                                                                db: Session, account_id: int):
+    tones = client.get("/api/tone-sets").json()
+    # Built in first, by their fixed ids, each with its rules.
+    assert [(tone["tone_set_id"], tone["name"], tone["built_in"]) for tone in tones[:4]] == [
+        (PROFESSIONAL_TONE_ID, "Professional", True), (TECHNICAL_TONE_ID, "Technical", True),
+        (FRIENDLY_TONE_ID, "Friendly but formal", True), (CASUAL_TONE_ID, "Casual", True)]
+    professional = tones[0]
+    assert rule_texts(professional)[0] == "Plain, direct sentences, one idea per sentence."
+    assert all(rule["built_in"] for rule in professional["rules"])
+    rule = professional["rules"][0]["tone_rule_id"]
+    url = f"/api/tone-sets/{PROFESSIONAL_TONE_ID}"
+    protected = (409, "BUILT_IN_PROTECTED")
+    assert error(client.put(url, json={"name": "Mine", "rules": []}))[:2] == protected
+    assert error(client.put(f"{url}/hidden", json={"hidden": True}))[:2] == protected
+    assert error(client.delete(url))[:2] == protected
+    assert error(client.put(f"/api/tone-rules/{rule}", json={"rule_text": "Mine."}))[:2] == \
+        protected
+    assert error(client.put(f"/api/tone-rules/{rule}/hidden", json={"hidden": True}))[:2] == \
+        protected
+    assert error(client.delete(f"/api/tone-rules/{rule}"))[:2] == protected
+    built_in = client.get(f"/api/tone-rules/{rule}").json()
+    assert (built_in["built_in"], [tone["name"] for tone in built_in["tones"]]) == (
+        True, ["Professional"])
+    # Names count the built-in ones.
+    assert error(client.post("/api/tone-sets", json={"name": "professional"})) == (
+        409, "DUPLICATE", "name")
+
+    # Any account can use one, and list its rules in a tone of its own.
+    doc = resume(db, account_id, "Draft", sent=False)
+    body = {"name": "Draft", "header_id": None, "tone_set_id": PROFESSIONAL_TONE_ID}
+    assert client.put(f"/api/resumes/{doc.resume_id}", json=body).status_code == 200
+    mine = client.post("/api/tone-sets", json={"name": "Mine"}).json()
+    saved = client.put(f"/api/tone-sets/{mine['tone_set_id']}", json={"name": "Mine", "rules": [
+        {"tone_rule_id": rule},
+        # The same text as a built-in rule is that rule.
+        {"rule_text": "no slang or EXCLAMATION points."}]}).json()
+    ids = [one["tone_rule_id"] for one in saved["rules"]]
+    assert ids[0] == rule
+    assert client.get(f"/api/tone-rules/{ids[1]}").json()["built_in"] is True
+    tones = client.get(f"/api/tone-rules/{rule}").json()["tones"]
+    assert [tone["name"] for tone in tones] == ["Mine", "Professional"]
+    # Another account's tones aren't listed with it.
+    other = add(db, Account()).account_id
+    theirs = tone(db, other, "Theirs", [])
+    set_rules(db, theirs.tone_set_id, [rule])
+    assert [tone["name"] for tone in client.get(f"/api/tone-rules/{rule}").json()["tones"]] == [
+        "Mine", "Professional"]
 
 
 # Sign-offs

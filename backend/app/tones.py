@@ -11,7 +11,7 @@ Tone names are unique in the account. When an edit saves a new tone (docs/FRONTE
 it still use, is renamed to a name the user gives (split_tone).
 """
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.errors import AppError, ErrorCode
@@ -43,12 +43,35 @@ def rule_texts(db: Session, tone_set_id: int | None) -> list[str]:
     return [rule.rule_text for rule in rules_of(db, tone_set_id)]
 
 
+def visible(model, account_id: int):
+    """The account's own rows and the built-in ones (no account)."""
+    return or_(model.account_id == account_id, model.account_id.is_(None))
+
+
+def get_tone_item[T](db: Session, model: type[T], item_id: int, account_id: int) -> T:
+    """The account's own tone or rule, or a built-in one; otherwise NOT_FOUND."""
+    item = db.get(model, item_id)
+    if item is None or item.account_id not in (None, account_id):
+        raise AppError(ErrorCode.NOT_FOUND)
+    return item
+
+
+def protect_built_in(item: ToneSet | ToneRule, action: str) -> None:
+    """BUILT_IN_PROTECTED for a built-in tone or rule (docs/DATABASE.md, tone_set)."""
+    if item.account_id is None:
+        what = f'"{item.name}" is a built-in tone' if isinstance(item, ToneSet) \
+            else "This is a built-in tone rule"
+        raise AppError(ErrorCode.BUILT_IN_PROTECTED, f"{what} and can't be {action}. Make a tone "
+                       "of your own from its rules instead.")
+
+
 def matching_rule(db: Session, account_id: int, text: str,
                   exclude: int | None = None) -> ToneRule | None:
-    """The account's saved rule with this text (hidden ones too), if there is one."""
+    """The saved rule with this text (the account's, hidden ones too, or a built-in one), if
+    there is one."""
     key = same_text(text)
-    for rule in db.scalars(select(ToneRule).where(ToneRule.account_id == account_id)
-                           .order_by(ToneRule.tone_rule_id)):
+    for rule in db.scalars(select(ToneRule).where(visible(ToneRule, account_id))
+                           .order_by(ToneRule.account_id.is_not(None), ToneRule.tone_rule_id)):
         if rule.tone_rule_id != exclude and same_text(rule.rule_text) == key:
             return rule
     return None

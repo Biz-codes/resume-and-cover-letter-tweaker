@@ -14,10 +14,11 @@ const TECH: ToneSet = {
   hidden: false,
   tone_set_id: 3,
   name: 'Tech',
+  built_in: false,
   created_at: '2026-10-01T12:00:00',
   rules: [
-    { tone_rule_id: 30, rule_text: 'Lead with tools.', hidden: false },
-    { tone_rule_id: 31, rule_text: 'Use metrics.', hidden: false },
+    { tone_rule_id: 30, rule_text: 'Lead with tools.', hidden: false, built_in: false },
+    { tone_rule_id: 31, rule_text: 'Use metrics.', hidden: false, built_in: false },
   ],
   used_by: [],
 }
@@ -25,6 +26,7 @@ const rule = (tone_rule_id: number, rule_text: string, hidden = false): ToneRule
   tone_rule_id,
   rule_text,
   hidden,
+  built_in: false,
   tones: [],
   used_by: [],
 })
@@ -198,6 +200,39 @@ describe('ToneItem', () => {
     const host = await renderItem(<ToneItem id={3} />)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(host.close).toHaveBeenCalled()
+  })
+
+  it('shows a built-in tone read-only, opening its rules, with no Hide or Delete', async () => {
+    const professional: ToneSet = {
+      ...TECH,
+      tone_set_id: 1,
+      name: 'Professional',
+      built_in: true,
+      rules: [{ tone_rule_id: 5, rule_text: 'Plain, direct sentences.', hidden: false, built_in: true }],
+      used_by: [DRAFT],
+    }
+    stub([professional])
+    const host = await renderItem(<ToneItem id={1} />)
+    expect(screen.getByText("Built in, so it doesn't change. To vary it, make a tone of your own and add its rules.")).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tone name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^(Hide|Delete) / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Used by (1)')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Plain, direct sentences.' }))
+    expect(host.open).toHaveBeenCalledWith({ kind: 'toneRule', id: 5, title: 'Plain, direct sentences.' })
+  })
+
+  it('offers built-in rules and your own, in groups', async () => {
+    stubApi({
+      'GET /api/tone-sets': [{ status: 200, body: [TECH] }],
+      'GET /api/tone-rules': [{ status: 200, body: [...RULES, { ...rule(5, 'Plain, direct sentences.'), built_in: true }] }],
+    })
+    await renderItem(<ToneItem id={3} />)
+    const picker = screen.getByRole('combobox', { name: /Tech rules/ })
+    expect(within(picker).getByRole('group', { name: 'Built-in rules' })).toHaveTextContent('Plain, direct sentences.')
+    expect(within(picker).getByRole('group', { name: 'Your rules' })).toHaveTextContent('Keep it short.')
   })
 
   it('deletes the tone, keeping its rules in the library', async () => {

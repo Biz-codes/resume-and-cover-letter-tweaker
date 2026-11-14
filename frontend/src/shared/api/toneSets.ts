@@ -7,9 +7,11 @@ export interface ToneSet {
   hidden: boolean
   tone_set_id: number
   name: string
+  // One of the four built-in tones, shared by every account: never changed, hidden, or deleted.
+  built_in: boolean
   created_at: string
   // Its rules, in order. A rule can be in many tones (toneRules.ts).
-  rules: { tone_rule_id: number; rule_text: string; hidden: boolean }[]
+  rules: { tone_rule_id: number; rule_text: string; hidden: boolean; built_in: boolean }[]
   used_by: Use[]
 }
 

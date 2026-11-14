@@ -53,6 +53,7 @@ export default function ToneSetsPage() {
       <LibraryCard
         key={toneSet.tone_set_id}
         title={title}
+        tags={toneSet.built_in && <span className="tag">built in</span>}
         editId={editId('tone', toneSet.tone_set_id)}
         editLabel={`View and Edit "${title}"`}
         onEdit={() => dialogs.open({ kind: 'tone', id: toneSet.tone_set_id, title })}
@@ -77,6 +78,7 @@ export default function ToneSetsPage() {
         key={rule.tone_rule_id}
         title={rule.rule_text}
         titleClassName="bullet-text"
+        tags={rule.built_in && <span className="tag">built in</span>}
         editId={editId('toneRule', rule.tone_rule_id)}
         editLabel={`View and Edit "${title}"`}
         onEdit={() => dialogs.open({ kind: 'toneRule', id: rule.tone_rule_id, title })}

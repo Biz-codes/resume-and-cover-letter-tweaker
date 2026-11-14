@@ -105,7 +105,8 @@ def detail(db: Session, resume: Resume) -> ResumeDetail:
 
 def check_links(db: Session, body: ResumeIn, account_id: int) -> None:
     check_link(db, Header, Header.header_id, body.header_id, account_id, "header_id")
-    check_link(db, ToneSet, ToneSet.tone_set_id, body.tone_set_id, account_id, "tone_set_id")
+    check_link(db, ToneSet, ToneSet.tone_set_id, body.tone_set_id, account_id, "tone_set_id",
+               allow_built_in=True)
 
 
 @router.get("")

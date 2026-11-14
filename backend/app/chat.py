@@ -48,7 +48,7 @@ from app.suggestions import (
     rules_text,
     tone_text,
 )
-from app.writing_check import CheckText, Flag, check
+from app.writing_check import TECHNICAL_EXCEPTIONS, CheckText, Flag, check
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,8 @@ current.
 Everything you write follows the person's writing rules:
 {rules}
 A listed word is fine when it's a technical term or a proper noun (\"dynamic programming\", \
-\"Pivotal Tracker\"): replace it with a plain word, and if the meaning changes, it's a real term."""
+\"Pivotal Tracker\"): replace it with a plain word, and if the meaning changes, it's a real term. \
+{exceptions}"""
 
 LETTER_NOTE = """
 - In a cover letter, each paragraph is its own section, usually narrative content, one \
@@ -528,6 +529,7 @@ def _system(db: Session, kind: Kind, account_id: int, doc: Any,
             library: Library) -> list[dict[str, Any]]:
     one, _ = _words(kind)
     instructions = INSTRUCTIONS.format(doc=one, rules=rules_text(db, account_id),
+                                       exceptions=TECHNICAL_EXCEPTIONS,
                                        letter=LETTER_NOTE if kind.prefix == "cover_letter" else "",
                                        companion=companion_instructions(kind))
     posting = db.get(JobPosting, doc.job_posting_id) if doc.job_posting_id else None
