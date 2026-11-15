@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.account import AccountId
 from app.db import DbSession
+from app.documents import latest_tone_id
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, check_unique_name
@@ -132,6 +133,17 @@ def list_sets(db: DbSession, account_id: AccountId) -> list[ToneSetOut]:
                                 case((ToneSet.account_id.is_(None), ToneSet.tone_set_id)),
                                 func.lower(ToneSet.name), ToneSet.tone_set_id)).all()
     return to_out(db, list(sets))
+
+
+class DefaultTone(BaseModel):
+    tone_set_id: int
+
+
+@router.get("/default")
+def default_tone(db: DbSession, account_id: AccountId) -> DefaultTone:
+    """The tone a new resume or cover letter starts with when none is given (app/documents.py,
+    latest_tone_id), so a form can start on it."""
+    return DefaultTone(tone_set_id=latest_tone_id(db, account_id))
 
 
 @router.get("/{tone_set_id}")

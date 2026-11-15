@@ -21,6 +21,8 @@ export type RuleChoice = { tone_rule_id: number } | { rule_text: string }
 
 export const toneSetsApi = {
   list: () => api.get<ToneSet[]>('/tone-sets'),
+  // The tone a new resume or cover letter starts with: the most recently used one, or Professional.
+  default: () => api.get<{ tone_set_id: number }>('/tone-sets/default').then((found) => found.tone_set_id),
   create: (name: string) => api.post<ToneSet>('/tone-sets', { name }),
   // The whole tone: its name and every rule it lists, in order. Saved as a new tone unless every one
   // in progress is picked in applyTo and nothing sent uses it (FRONTEND_CHECKS.md, "Changing an

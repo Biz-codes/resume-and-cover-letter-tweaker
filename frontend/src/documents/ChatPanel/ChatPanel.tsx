@@ -13,11 +13,19 @@
 // A sent document's conversation can be read, not added to. Claude's proposals show under its
 // reply through `proposals` (ProposalCards), and the ones still waiting are listed above the
 // message box through `waiting` (WaitingForYou), except in a sent one.
+//
+// A card's Reply (through `proposals`' `reply`) puts "Replying to:" with the card above the
+// message box, read with the box, with Cancel reply; the message is sent with it, and shows it in
+// the conversation. Reply on another card replaces it, and a failed send keeps it. The two ends
+// link to each other: the card's title in "Replying to:" moves focus to the card, and the card
+// lists the messages that replied to it (`proposals`' `repliesTo`), each moving focus to one.
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { KINDS, type DocKind } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { chatApi, uncheckedOf, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
+import { sendOnEnter } from '../../shared/hooks/sendOnEnter'
+import { chatApi, uncheckedOf, type ChatAbout, type ChatMessage, type ReplyTo } from '../../shared/api/chat'
+import { cardId, messageId } from '../ProposalCards/describe'
 import styles from './ChatPanel.module.css'
 
 export const CHAT_INPUT_ID = 'chat-message'
@@ -33,6 +41,22 @@ function Paragraphs({ text }: { text: string }) {
           <p key={index}>{line}</p>
         ))}
     </>
+  )
+}
+
+// The proposal a message replies to: the card's title, which moves focus to the card, then its new
+// text, if it has any, quoted.
+function Replying({ replyTo, id, onGoTo }: { replyTo: ReplyTo; id?: string; onGoTo: () => void }) {
+  return (
+    <div id={id} className={styles.replyTo}>
+      <p>
+        <span className={styles.replyLabel}>Replying to:</span>{' '}
+        <button type="button" className={styles.goTo} aria-label={`Go to: ${replyTo.label}`} onClick={onGoTo}>
+          {replyTo.label}
+        </button>
+      </p>
+      {replyTo.text && <blockquote>{replyTo.text}</blockquote>}
+    </div>
   )
 }
 
@@ -80,8 +104,17 @@ export default function ChatPanel({
   // Changes when a question was asked from an item's dialog, so the conversation is read again.
   version?: number
   // Claude's proposals under a reply (ProposalCards), given a way to show the message's new
-  // state and to say something in the panel's live region.
-  proposals?: (message: ChatMessage, helpers: { update: (next: ChatMessage) => void; announce: (text: string) => void }) => ReactNode
+  // state, to say something in the panel's live region, and to reply to one of them.
+  proposals?: (
+    message: ChatMessage,
+    helpers: {
+      update: (next: ChatMessage) => void
+      announce: (text: string) => void
+      reply: (to: ReplyTo) => void
+      // The user's messages that replied to one of this message's proposals, by id, oldest first.
+      repliesTo: (proposalId: string) => number[]
+    },
+  ) => ReactNode
   // The proposals still waiting for the user, from the whole conversation (WaitingForYou).
   waiting?: (messages: ChatMessage[]) => ReactNode
 }) {
@@ -94,10 +127,13 @@ export default function ChatPanel({
   // The reply is written and its proposals are being checked against the writing rules.
   const [checking, setChecking] = useState(false)
   const [sendError, setSendError] = useState<ApiError | null>(null)
+  // The proposal the next message replies to.
+  const [replyTo, setReplyTo] = useState<ReplyTo | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const focusLater = useFocusLater()
   const headingId = useId()
   const errorId = useId()
+  const replyId = useId()
 
   const load = useCallback(async () => {
     try {
@@ -133,9 +169,11 @@ export default function ChatPanel({
           setChecking(true)
           setAnnouncement(CHECKING)
         },
+        replyTo,
       )
       setMessages((current) => [...(current ?? []), ...saved])
       setText('')
+      setReplyTo(null)
       const answer = saved.at(-1)
       setAnnouncement(`Claude: ${answer?.text ?? ''}${answer ? proposalsNote(answer) : ''}`)
     } catch (error) {
@@ -149,6 +187,27 @@ export default function ChatPanel({
 
   const update = (next: ChatMessage) =>
     setMessages((current) => current?.map((message) => (message.message_id === next.message_id ? next : message)) ?? null)
+
+  // A card's Reply: the message box takes focus, with what it replies to read with it.
+  const reply = (to: ReplyTo) => {
+    setReplyTo(to)
+    setAnnouncement(`Replying to: ${to.label}.`)
+    focusLater(CHAT_INPUT_ID)
+  }
+
+  const cancelReply = () => {
+    if (replyTo) setAnnouncement(`No longer replying to: ${replyTo.label}.`)
+    setReplyTo(null)
+    focusLater(CHAT_INPUT_ID)
+  }
+
+  const repliesTo = (message: ChatMessage) => (proposalId: string) =>
+    (messages ?? [])
+      .filter((turn) => turn.reply_to?.message_id === message.message_id && turn.reply_to.proposal_id === proposalId)
+      .map((turn) => turn.message_id)
+  const goToCard = (to: ReplyTo) => focusLater(cardId(to.message_id, to.proposal_id))
+
+  const describedBy = [replyTo && replyId, sendError && errorId].filter(Boolean).join(' ') || undefined
 
   let conversation: ReactNode
   if (loadError) {
@@ -168,11 +227,19 @@ export default function ChatPanel({
     conversation = (
       <ol aria-label="Conversation" className={styles.messages}>
         {messages.map((message) => (
-          <li key={message.message_id} className={message.role === 'user' ? styles.mine : styles.claude}>
+          // The user's messages take focus from a card they replied to (scrolling them into view).
+          <li
+            key={message.message_id}
+            id={message.role === 'user' ? messageId(message.message_id) : undefined}
+            tabIndex={message.role === 'user' ? -1 : undefined}
+            className={message.role === 'user' ? styles.mine : styles.claude}
+          >
             <p className={styles.who}>{message.role === 'user' ? 'You' : 'Claude'}</p>
             {message.role === 'user' && message.about?.label && <p className="muted">About {message.about.label}</p>}
+            {message.role === 'user' && message.reply_to && <Replying replyTo={message.reply_to} onGoTo={() => goToCard(message.reply_to!)} />}
             <Paragraphs text={message.text} />
-            {message.role === 'assistant' && proposals?.(message, { update, announce: setAnnouncement })}
+            {message.role === 'assistant' &&
+              proposals?.(message, { update, announce: setAnnouncement, reply, repliesTo: repliesTo(message) })}
           </li>
         ))}
         {replying !== null && (
@@ -218,6 +285,14 @@ export default function ChatPanel({
               </button>
             ))}
           </div>
+          {replyTo && (
+            <div className={styles.replying}>
+              <Replying replyTo={replyTo} id={replyId} onGoTo={() => goToCard(replyTo)} />
+              <button type="button" aria-label={`Cancel reply to: ${replyTo.label}`} onClick={cancelReply}>
+                Cancel reply
+              </button>
+            </div>
+          )}
           <label>
             Message to Claude
             <textarea
@@ -226,8 +301,9 @@ export default function ChatPanel({
               value={text}
               aria-required="true"
               aria-invalid={sendError?.field === 'text' || undefined}
-              aria-describedby={sendError ? errorId : undefined}
+              aria-describedby={describedBy}
               onChange={(event) => setText(event.target.value)}
+              onKeyDown={sendOnEnter(() => void send())}
             />
           </label>
           {sendError && (

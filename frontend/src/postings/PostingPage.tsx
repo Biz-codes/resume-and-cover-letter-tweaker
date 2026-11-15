@@ -56,6 +56,7 @@ export function PostingPage({ id }: { id: number }) {
   const [headers, setHeaders] = useState<Header[]>([])
   const [docs, setDocs] = useState<Record<DocKind, Doc[]>>({ resume: [], cover_letter: [] })
   const [toneSets, setToneSets] = useState<ToneSet[]>([])
+  const [defaultTone, setDefaultTone] = useState<number | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [mode, setMode] = useState<Mode | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
@@ -72,12 +73,14 @@ export function PostingPage({ id }: { id: number }) {
         docsApi('resume').list(),
         docsApi('cover_letter').list(),
         toneSetsApi.list(),
+        toneSetsApi.default(),
       ])
-        .then(([loaded, headerList, resumes, letters, toneSetList]) => {
+        .then(([loaded, headerList, resumes, letters, toneSetList, toneDefault]) => {
           setPosting(loaded)
           setHeaders(headerList)
           setDocs({ resume: resumes, cover_letter: letters })
           setToneSets(toneSetList)
+          setDefaultTone(toneDefault)
           setLoadError(null)
         })
         .catch((error: unknown) => setLoadError(toApiError(error))),
@@ -302,6 +305,7 @@ export function PostingPage({ id }: { id: number }) {
                     kind={kind}
                     docs={docs[kind]}
                     toneSets={toneSets}
+                    defaultTone={defaultTone}
                     onStart={(choice) => start(kind, posting, choice)}
                   />
                 )}

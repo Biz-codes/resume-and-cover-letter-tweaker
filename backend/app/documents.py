@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.errors import AppError, ErrorCode
 from app.library import check_ids
 from app.models import (
+    PROFESSIONAL_TONE_ID,
     BulletPoint,
     CoverLetter,
     CoverLetterBulletPoint,
@@ -47,6 +48,7 @@ from app.models import (
     Section,
     Skill,
     SkillCategory,
+    ToneSet,
 )
 from app.usage import Use
 from app.versions import is_locked, shown_name
@@ -328,6 +330,20 @@ def check_link(db: Session, model, column, item_id: int | None, account_id: int,
     allow_built_in, a built-in one: the built-in tones)."""
     if item_id is not None:
         check_ids(db, model, column, [item_id], account_id, field, allow_built_in=allow_built_in)
+
+
+def latest_tone_id(db: Session, account_id: int) -> int:
+    """A new resume's or cover letter's tone: the tone of the most recently updated resume or
+    cover letter that has one (the account's or a built-in one, never a hidden one), or else
+    Professional (docs/FRONTEND_CHECKS.md, "Defaults")."""
+    used = [select(model.tone_set_id, model.updated_at)
+            .join(ToneSet, ToneSet.tone_set_id == model.tone_set_id)
+            .where(model.account_id == account_id, ToneSet.hidden.is_(False))
+            for model in (Resume, CoverLetter)]
+    latest = union_all(*used).subquery()
+    tone_id = db.scalar(select(latest.c.tone_set_id)
+                        .order_by(latest.c.updated_at.desc()).limit(1))
+    return PROFESSIONAL_TONE_ID if tone_id is None else tone_id
 
 
 def latest_header_id(db: Session, account_id: int) -> int | None:

@@ -26,7 +26,7 @@ export default function BulletItem({ id }: { id: number }) {
   const { data, error, load } = useItemData(() => bulletsApi.list())
   const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
-  // The text in the form, kept here so a question to Claude takes it, and Claude's wording can go in.
+  // The text in the form, kept here so a question to Claude takes it.
   const [typed, setTyped] = useState<string | null>(null)
 
   const bullet = data?.find((item) => item.bullet_id === id)
@@ -83,7 +83,7 @@ export default function BulletItem({ id }: { id: number }) {
         >
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </NameForm>
-        <DialogChat field="content" value={typed ?? bullet.content} onUse={setTyped} />
+        <DialogChat field="content" value={typed ?? bullet.content} />
         </>
       }
       confirmDelete={(back) => (

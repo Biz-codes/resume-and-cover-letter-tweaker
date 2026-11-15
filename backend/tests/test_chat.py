@@ -168,6 +168,7 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
     assert "propose_change" in instructions["text"] and "Never say a change is made" in \
         instructions["text"]
     assert '("leveraged RxJS"), is technical language' in instructions["text"]
+    assert 'never by id ("bullet 79")' in instructions["text"]
     assert library["cache_control"] == posting["cache_control"] == {"type": "ephemeral"}
     assert "<posting>\nOrganization: Acme" in posting["text"]
     [turn] = request["messages"]
@@ -293,6 +294,53 @@ def test_an_item_dialogs_unsaved_text_goes_with_the_message(client: TestClient, 
     assert about == (f'<about>experience {ids["job"]} in section "Experience" (id 3)</about>\n'
                      '<unsaved>The person is editing it, with these values not saved yet: '
                      '{"role_title": "Senior Engineer"}</unsaved>')
+
+
+def test_a_message_can_reply_to_a_proposal(client: TestClient, db: Session, account_id: int,
+                                          claude: FakeChat):
+    doc, ids = setup_resume(db, account_id)
+    claude.answer("Try this.", tools=[
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+               parent_kind="experience", parent_id=ids["job"], new_text="Shipped it weekly."),
+        change("reword", "experience", EXPERIENCE_SECTION_ID, ids["job"], new_text="?")])
+    first = lines(send(client, doc))[-1]["messages"][1]
+    reply_to = {"message_id": first["message_id"], "proposal_id": "toolu_1",
+                "label": " Reword the bullet Shipped it in Engineer, Acme "}
+
+    claude.answer("Sure, monthly then.")
+    response = client.post(f"/api/resumes/{doc.resume_id}/chat",
+                           json={"text": "Why weekly?", "reply_to": reply_to})
+    asked, _ = lines(response)[-1]["messages"]
+    # Saved with the message, with the proposal's text as it read then.
+    assert asked["reply_to"] == {**reply_to, "label": "Reword the bullet Shipped it in "
+                                 "Engineer, Acme", "text": "Shipped it weekly."}
+    assert client.get(f"/api/resumes/{doc.resume_id}/chat").json()[2] == asked
+    *_, about, replying, text = claude.calls[1]["messages"][-1]["content"]
+    assert about["text"] == "<about>the whole resume</about>"
+    assert replying["text"].startswith(
+        "<replying_to>Their message replies to your proposed change toolu_1: ")
+    assert json.loads(replying["text"].split(": ", 1)[1].removesuffix("</replying_to>")) == {
+        "action": "reword", "target": "bullet", "section_id": EXPERIENCE_SECTION_ID,
+        "item_id": ids["Shipped it"], "parent_kind": "experience", "parent_id": ids["job"],
+        "new_text": "Shipped it weekly.", "position": 0, "reason": "Fits.", "state": "pending"}
+    assert text["text"] == "Why weekly?"
+    assert "<replying_to> tags" in claude.calls[1]["system"][0]["text"]
+    # A message with no reply has none.
+    assert first["reply_to"] is None
+
+    # Only a proposal shown in a reply of Claude's in this chat.
+    other, _ = setup_resume(db, account_id)
+    for bad in ({**reply_to, "proposal_id": "toolu_2"},  # left out, never shown
+                {**reply_to, "proposal_id": "toolu_9"},
+                {**reply_to, "message_id": asked["message_id"]},  # the user's own
+                {**reply_to, "message_id": 999999}):
+        response = client.post(f"/api/resumes/{doc.resume_id}/chat",
+                               json={"text": "Why?", "reply_to": bad})
+        assert error(response) == (422, "VALIDATION_FAILED", "reply_to")
+    response = client.post(f"/api/resumes/{other.resume_id}/chat",
+                           json={"text": "Why?", "reply_to": reply_to})
+    assert error(response) == (422, "VALIDATION_FAILED", "reply_to")
+    assert len(claude.calls) == 2
 
 
 def test_checks_each_kind_of_proposal(db: Session, account_id: int):

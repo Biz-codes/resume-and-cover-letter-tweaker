@@ -52,6 +52,8 @@ describe('StartVersion', () => {
     ])
     // Hidden tones aren't offered. It's named for the posting, and uses its header.
     expect(options('Tone')).toEqual(['None', 'Warm'])
+    // With no default given, it starts on None.
+    expect(screen.getByLabelText('Tone')).toHaveValue('')
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Header')).not.toBeInTheDocument()
     // Claude picks the starting point unless one is chosen.
@@ -184,5 +186,17 @@ describe('StartVersion', () => {
     const review = await screen.findByRole('form', { name: 'Check the resume Claude read' })
     fireEvent.click(within(review).getByRole('button', { name: 'Cancel' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Start a resume' })).toHaveFocus())
+  })
+
+  it('starts on the default tone, and still offers None', async () => {
+    const onStart = vi.fn(() => Promise.resolve())
+    render(<StartVersion kind="resume" docs={DOCS} toneSets={TONES} defaultTone={TONES[0].tone_set_id} onStart={onStart} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start a resume' }))
+    expect(screen.getByLabelText('Tone')).toHaveValue(String(TONES[0].tone_set_id))
+    await expectNoA11yViolations()
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Build from scratch (empty)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith({ how: 'scratch', toneSetId: null }))
   })
 })

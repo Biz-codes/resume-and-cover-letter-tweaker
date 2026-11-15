@@ -35,12 +35,16 @@ export default function StartVersion({
   kind,
   docs,
   toneSets,
+  defaultTone = null,
   onStart,
 }: {
   kind: DocKind
   // Every resume or cover letter, to start a copy of.
   docs: Doc[]
   toneSets: ToneSet[]
+  // The tone the form starts on: what a new one gets left alone (the most recently used, or
+  // Professional). "None" can still be picked.
+  defaultTone?: number | null
   onStart: (choice: StartChoice) => Promise<void>
 }) {
   const { singular, plural } = KINDS[kind]
@@ -48,7 +52,7 @@ export default function StartVersion({
   const [how, setHow] = useState<How>('claude')
   const [from, setFrom] = useState('')
   const [claudeFrom, setClaudeFrom] = useState('')
-  const [tone, setTone] = useState('')
+  const [tone, setTone] = useState(defaultTone === null ? '' : String(defaultTone))
   const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
   const [imported, setImported] = useState<Imported | null>(null)

@@ -75,8 +75,10 @@ def tailor(client: TestClient, db: Session, account_id: int, *, sent: bool = Fal
     job.header_id = header(db, account_id).header_id
     job.contacts = contacts
     db.flush()
+    # No tone unless a test gives one, so the writing check runs only where a test sets rules.
     return client.post(f"/api/{path}/tailored", json={
-        "name": "Engineer at Acme", "job_posting_id": job.job_posting_id, **body})
+        "name": "Engineer at Acme", "job_posting_id": job.job_posting_id, "tone_set_id": None,
+        **body})
 
 
 def test_suggests_from_the_library_and_stores_the_draft(client: TestClient, db: Session,

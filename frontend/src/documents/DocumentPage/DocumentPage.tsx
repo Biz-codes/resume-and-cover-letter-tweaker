@@ -34,7 +34,7 @@ import DocumentTree from '../DocumentTree/DocumentTree'
 import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
 import ChatPanel from '../ChatPanel/ChatPanel'
 import ProposalCards, { WaitingForYou } from '../ProposalCards/ProposalCards'
-import { chatApi, type ChatAbout, type ChatMessage } from '../../shared/api/chat'
+import { chatApi, type Applied, type ChatAbout } from '../../shared/api/chat'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
 import NameForm from '../../shared/components/NameForm/NameForm'
@@ -396,15 +396,15 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   }
   // Applying one of Claude's proposals is an ordinary change, kept for Undo and made in turn with
   // the others; the cards announce it themselves.
-  async function applyProposal(messageId: number, proposalId: string): Promise<ChatMessage> {
-    let message: ChatMessage | undefined
+  async function applyProposal(messageId: number, proposalId: string): Promise<Applied> {
+    let result: Applied | undefined
     await inTurn(async () => {
-      const applied = await chatApi(kind).apply(id, messageId, proposalId)
-      message = applied.message
-      return applied.document
+      const { document, ...applied } = await chatApi(kind).apply(id, messageId, proposalId)
+      result = applied
+      return document
     }, '')
-    if (!message) throw new Error('The change was not applied.')
-    return message
+    if (!result) throw new Error('The change was not applied.')
+    return result
   }
   const proposalState = (messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
     chatApi(kind).setState(id, messageId, proposalId, state)
@@ -634,6 +634,12 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                     onNotice={setNotice}
                     onAsk={readOnly ? undefined : openChat}
                     onChatSent={() => setChatVersion((count) => count + 1)}
+                    onChatApply={async (messageId, proposalId) => {
+                      const { stale } = await applyProposal(messageId, proposalId)
+                      // So the chat panel shows its card applied (and any it made stale).
+                      setChatVersion((count) => count + 1)
+                      return stale
+                    }}
                   />
                 )}
               </Disclosure>
@@ -712,7 +718,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             onClose={closeChat}
             focusRequest={chat.request}
             version={chatVersion}
-            proposals={(message, { update, announce }) => (
+            proposals={(message, { update, announce, reply, repliesTo }) => (
               <ProposalCards
                 message={message}
                 sections={doc.sections}
@@ -722,6 +728,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                 onCheck={(messageId) => chatApi(kind).check(id, messageId)}
                 onUpdate={update}
                 announce={announce}
+                onReply={reply}
+                repliesTo={repliesTo}
               />
             )}
             waiting={(messages) => <WaitingForYou messages={messages} sections={doc.sections} />}

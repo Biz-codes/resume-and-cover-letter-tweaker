@@ -31,7 +31,7 @@ export default function NarrativeItem({ id }: { id: number }) {
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
   // The sections checked in the form, starting with the ones that list it.
   const [chosen, setChosen] = useState<number[] | null>(null)
-  // The text in the form, kept here so a question to Claude takes it, and Claude's wording can go in.
+  // The text in the form, kept here so a question to Claude takes it.
   const [typed, setTyped] = useState<string | null>(null)
 
   const excerpt = data?.[0].find((item) => item.content_id === id)
@@ -97,7 +97,7 @@ export default function NarrativeItem({ id }: { id: number }) {
           />
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
-        <DialogChat field="content" value={typed ?? excerpt.content} onUse={setTyped} />
+        <DialogChat field="content" value={typed ?? excerpt.content} />
         </>
       }
       confirmDelete={(back) => (

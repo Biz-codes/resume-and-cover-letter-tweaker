@@ -66,7 +66,8 @@ def _grouped[T: BaseModel](db: Session, link, key: str, key_ids: list[int], mode
     query = (select(table.c[key], *columns)
              .join(model, target == link_column)
              .where(table.c[key].in_(key_ids))
-             .order_by(order_by if order_by is not None else table.c.position))
+             # Ties (two roles at one organization) go in the order they were added.
+             .order_by(order_by if order_by is not None else table.c.position, target))
     if account_id is not None:
         query = query.where(model.account_id == account_id)
     found: dict[int, list[T]] = {key_id: [] for key_id in key_ids}

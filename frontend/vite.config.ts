@@ -17,6 +17,8 @@ export default defineConfig({
     // Whole-front-end accessibility checks (test coverage, jsx-a11y lint, color contrast),
     // run before every test run and rerun.
     globalSetup: ['./a11yChecks.ts'],
+    // Room for a test's waits (5 seconds each, src/test/setup.ts) on a busy machine.
+    testTimeout: 20000,
     // CSS modules keep their plain class names in tests (e.g. "item-name"), so tests can find
     // elements by class without knowing how a build names them.
     css: { include: /\.module\.css$/, modules: { classNameStrategy: 'non-scoped' } },

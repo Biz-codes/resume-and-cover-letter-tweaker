@@ -514,6 +514,7 @@ export default function DocumentTree({
   onNotice,
   onAsk,
   onChatSent,
+  onChatApply,
 }: {
   kind: DocKind
   doc: DocDetail
@@ -529,6 +530,9 @@ export default function DocumentTree({
   onAsk?: AskClaude
   // A question asked in an item's dialog, so the chat panel reads the conversation again.
   onChatSent?: () => void
+  // Applies Claude's wording from an item's dialog, as the chat panel's cards do, giving how many
+  // earlier proposals for the same content went stale.
+  onChatApply?: (messageId: number, proposalId: string) => Promise<number>
 }) {
   const [library, setLibrary] = useState<Library | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
@@ -581,7 +585,7 @@ export default function DocumentTree({
               doc: KINDS[kind].singular,
               where: { kind, id: doc.id },
               returnTo: id,
-              chat: onAsk && onChatSent ? { about, onSent: onChatSent } : undefined,
+              chat: onAsk && onChatSent && onChatApply ? { about, onSent: onChatSent, apply: onChatApply } : undefined,
             })
           }
         >

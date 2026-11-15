@@ -1,5 +1,5 @@
 // Claude's proposed changes under its reply in the chat (ChatPanel), one card each: what it
-// changes, before and after, and Claude's reason, with Apply and Dismiss. A card whose text breaks
+// changes, before and after, and Claude's reason, with Apply, Dismiss, and Reply. A card whose text breaks
 // a writing rule (checked before the reply was shown: Claude's wording after the check's fix, or a
 // saved item's own) is badged "Flagged" and lists each rule, the words, and why; if the check
 // failed, the reply says so under its cards, with "Check writing rules again". Applying makes an
@@ -7,7 +7,10 @@
 // Claude's new or reworded text becomes a new library row used in this document only. A dismissed
 // card can be restored. Each change is announced in the panel's live region, and focus stays on
 // the card. Once a card is applied or dismissed, its before and after and reason fold away under
-// "Details" (closed), leaving its title, its state, and Restore.
+// "Details" (closed), leaving its title, its state, and Restore. Applying one also sets aside the
+// earlier ones still waiting for the same content (the backend's app/proposals.py), which then
+// show "stale", with Restore, and the announcement says how many. Reply, on every card in any
+// state, puts it above the chat panel's message box as what the next message replies to.
 //
 // A card stays until the user applies or dismisses it, however many messages come after, and
 // WaitingForYou lists every one still waiting above the message box, so none is lost up the
@@ -16,10 +19,11 @@ import { useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import type { TreeSection } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { uncheckedOf, type ChatMessage, type Proposal } from '../../shared/api/chat'
+import { staleNote, uncheckedOf, type Applied, type ChatMessage, type Proposal, type ReplyTo } from '../../shared/api/chat'
 import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
-import { cardId as idOf, describe } from './describe'
+import { cardId as idOf, describe, messageId } from './describe'
 import Collapsible from '../../library/Collapsible/Collapsible'
+import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import styles from './ProposalCards.module.css'
 
 function Card({
@@ -28,13 +32,19 @@ function Card({
   readOnly,
   onApply,
   onState,
+  onReply,
+  replies,
 }: {
   proposal: Proposal
   title: string
   readOnly: boolean
   onApply: () => Promise<void>
   onState: (state: 'pending' | 'dismissed') => Promise<void>
+  onReply: () => void
+  // The user's messages that replied to it, by id, oldest first.
+  replies: number[]
 }) {
+  const focusLater = useFocusLater()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
 
@@ -99,22 +109,40 @@ function Card({
           </Collapsible>
         ))}
       {error && <p role="alert">{error.message}</p>}
-      {!readOnly && proposal.state === 'pending' && (
+      {!readOnly && (
         <div className="actions">
           {/* aria-disabled, not disabled, so a focused button keeps focus while it saves. */}
-          <button type="button" aria-label={`Apply: ${title}`} aria-disabled={busy} onClick={() => void run(onApply)}>
-            Apply
-          </button>
-          <button type="button" aria-label={`Dismiss: ${title}`} aria-disabled={busy} onClick={() => void run(() => onState('dismissed'))}>
-            Dismiss
+          {proposal.state === 'pending' && (
+            <>
+              <button type="button" aria-label={`Apply: ${title}`} aria-disabled={busy} onClick={() => void run(onApply)}>
+                Apply
+              </button>
+              <button type="button" aria-label={`Dismiss: ${title}`} aria-disabled={busy} onClick={() => void run(() => onState('dismissed'))}>
+                Dismiss
+              </button>
+            </>
+          )}
+          {(proposal.state === 'dismissed' || proposal.state === 'stale') && (
+            <button type="button" aria-label={`Restore: ${title}`} aria-disabled={busy} onClick={() => void run(() => onState('pending'))}>
+              Restore
+            </button>
+          )}
+          <button type="button" aria-label={`Reply: ${title}`} onClick={onReply}>
+            Reply
           </button>
         </div>
       )}
-      {!readOnly && proposal.state === 'dismissed' && (
+      {/* Shown in a sent document's read-only chat too, since it only moves around it. */}
+      {replies.length > 0 && (
         <div className="actions">
-          <button type="button" aria-label={`Restore: ${title}`} aria-disabled={busy} onClick={() => void run(() => onState('pending'))}>
-            Restore
-          </button>
+          {replies.map((id, index) => {
+            const which = replies.length > 1 ? ` ${index + 1}` : ''
+            return (
+              <button key={id} type="button" aria-label={`Go to your reply${which} to: ${title}`} onClick={() => focusLater(messageId(id))}>
+                Go to your reply{which}
+              </button>
+            )
+          })}
         </div>
       )}
     </>
@@ -189,14 +217,16 @@ export default function ProposalCards({
   onCheck,
   onUpdate,
   announce,
+  onReply,
+  repliesTo = () => [],
 }: {
   message: ChatMessage
   // The document's sections, which name where each change is.
   sections: TreeSection[]
   // A sent document: the cards are only shown.
   readOnly: boolean
-  // Makes the change and returns the message with its new state.
-  onApply: (messageId: number, proposalId: string) => Promise<ChatMessage>
+  // Makes the change and returns the message with its new state, and the others it changed.
+  onApply: (messageId: number, proposalId: string) => Promise<Applied>
   onState: (messageId: number, proposalId: string, state: 'pending' | 'dismissed') => Promise<ChatMessage>
   // Checks the reply's cards against the writing rules again, and returns the message.
   onCheck: (messageId: number) => Promise<ChatMessage>
@@ -204,6 +234,10 @@ export default function ProposalCards({
   onUpdate: (message: ChatMessage) => void
   // Says something in the panel's live region.
   announce: (text: string) => void
+  // Makes the card what the next message replies to (ChatPanel).
+  onReply: (to: ReplyTo) => void
+  // The user's messages that replied to one of the cards, by id (ChatPanel).
+  repliesTo?: (proposalId: string) => number[]
 }) {
   const focusLater = useFocusLater()
   const proposals = message.proposals ?? []
@@ -223,8 +257,9 @@ export default function ProposalCards({
               title={title}
               readOnly={readOnly}
               onApply={async () => {
-                onUpdate(await onApply(message.message_id, proposal.id))
-                announce(`Applied: ${title}.`)
+                const applied = await onApply(message.message_id, proposal.id)
+                for (const changed of [applied.message, ...applied.updated]) onUpdate(changed)
+                announce(`Applied: ${title}.${staleNote(applied.stale)}`)
                 // Its buttons are gone, so focus stays on the card.
                 focusLater(cardId(proposal))
               }}
@@ -233,6 +268,10 @@ export default function ProposalCards({
                 announce(state === 'dismissed' ? `Dismissed: ${title}.` : `Restored: ${title}.`)
                 focusLater(cardId(proposal))
               }}
+              replies={repliesTo(proposal.id)}
+              onReply={() =>
+                onReply({ message_id: message.message_id, proposal_id: proposal.id, label: title, text: proposal.new_text })
+              }
             />
           </li>
         )
@@ -253,19 +292,38 @@ export default function ProposalCards({
   )
 }
 
-// Every card the user hasn't applied or dismissed, oldest first, each moving focus to its card
+// Whether "Waiting for you" is open, kept in this browser so it stays as the user left it (closed
+// to start) when the panel or the page opens again. Storage can be blocked, so it falls back to
+// closed, and a failed save is ignored.
+const WAITING_OPEN = 'chat-waiting-open'
+function waitingOpen() {
+  try {
+    return localStorage.getItem(WAITING_OPEN) === 'true'
+  } catch {
+    return false
+  }
+}
+function rememberWaitingOpen(open: boolean) {
+  try {
+    localStorage.setItem(WAITING_OPEN, String(open))
+  } catch {
+    // Not remembered; it still opens and closes.
+  }
+}
+
+// Every card the user hasn't applied or dismissed, oldest first, under a heading that opens and
+// closes the list (closed to start, then as the user last left it), each moving focus to its card
 // (which scrolls it into view). Nothing shows when none is waiting.
 export function WaitingForYou({ messages, sections }: { messages: ChatMessage[]; sections: TreeSection[] }) {
   const focusLater = useFocusLater()
-  const headingId = useId()
   const waiting = messages.flatMap((message) =>
     (message.proposals ?? []).filter((proposal) => proposal.state === 'pending').map((proposal) => ({ message, proposal })),
   )
   if (waiting.length === 0) return null
 
   return (
-    <section aria-labelledby={headingId} className={styles.waiting}>
-      <h4 id={headingId}>Waiting for you ({waiting.length})</h4>
+    <section aria-label={`Waiting for you (${waiting.length})`} className={styles.waiting}>
+      <Disclosure title={`Waiting for you (${waiting.length})`} heading={4} initiallyOpen={waitingOpen()} onToggle={rememberWaitingOpen}>
       <ul>
         {waiting.map(({ message, proposal }) => {
           const title = describe(proposal, sections)
@@ -278,6 +336,7 @@ export function WaitingForYou({ messages, sections }: { messages: ChatMessage[];
           )
         })}
       </ul>
+      </Disclosure>
     </section>
   )
 }

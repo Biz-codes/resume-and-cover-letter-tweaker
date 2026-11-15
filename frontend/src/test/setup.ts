@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup } from '@testing-library/react'
+import { act, cleanup, configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 import { expectNoA11yViolations } from './axe'
+
+// findBy and waitFor give up after 1 second by default, which a busy machine (every test file
+// running at once, with an axe check after each test) can pass. Waiting longer only slows a test
+// that would fail anyway.
+configure({ asyncUtilTimeout: 5000 })
 
 // Match index.html, so whole-page accessibility checks see the same document.
 document.documentElement.lang = 'en'
@@ -31,4 +36,6 @@ afterEach(async () => {
   }
   cleanup()
   vi.unstubAllGlobals()
+  // What a page remembers in the browser (an open list) starts fresh in each test.
+  localStorage.clear()
 })

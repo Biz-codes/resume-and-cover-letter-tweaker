@@ -1,7 +1,7 @@
 """Education, narrative content, writing rules, tone sets, and sign-offs (docs/FRONTEND_CHECKS.md:
 "Delete warnings", "Sent versions are locked", "Suggesting and adding items")."""
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -728,3 +728,53 @@ def test_delete_sign_off_leaves_letters_with_no_closing(client: TestClient, db: 
     assert error(client.post("/api/sign-offs", json={"text": ""})) == \
         (422, "VALIDATION_FAILED", "text")
     assert db.scalar(select(SignOff).where(SignOff.account_id == account_id)) is None
+
+
+def test_a_new_document_starts_with_the_latest_tone_or_professional(client: TestClient,
+                                                                    db: Session, account_id: int):
+    def made(path: str, **body) -> dict:
+        response = client.post(f"/api/{path}", json={"name": f"New {len(made.calls)}", **body})
+        assert response.status_code == 201, response.json()
+        made.calls.append(response.json())
+        return response.json()
+    made.calls = []
+
+    def default() -> int:
+        return client.get("/api/tone-sets/default").json()["tone_set_id"]
+
+    # Nothing has a tone yet: Professional.
+    assert default() == PROFESSIONAL_TONE_ID
+    first = made("resumes")
+    assert first["tone_set_id"] == PROFESSIONAL_TONE_ID
+    # Given, even as none, it's kept.
+    assert made("resumes", tone_set_id=None)["tone_set_id"] is None
+    assert made("resumes", tone_set_id=CASUAL_TONE_ID)["tone_set_id"] == CASUAL_TONE_ID
+
+    # The most recently updated resume or cover letter with a tone, of either kind. (Inserted
+    # with their times, since the trigger stamps an update with the current one.)
+    mine = tone(db, account_id, "Mine", ["Plain words."])
+    add(db, Resume(account_id=account_id, name="Casual", tone_set_id=CASUAL_TONE_ID,
+                   updated_at=datetime(2030, 1, 15)))
+    add(db, CoverLetter(account_id=account_id, name="Letter", tone_set_id=mine.tone_set_id,
+                        updated_at=datetime(2030, 2, 1)))
+    assert default() == mine.tone_set_id
+    assert made("resumes")["tone_set_id"] == mine.tone_set_id
+    assert made("cover-letters")["tone_set_id"] == mine.tone_set_id
+
+    # Never a hidden one: the latest visible one instead.
+    mine.hidden = True
+    db.flush()
+    assert default() == CASUAL_TONE_ID
+    assert made("cover-letters")["tone_set_id"] == CASUAL_TONE_ID
+
+
+def test_a_copy_keeps_its_originals_tone(client: TestClient, db: Session, account_id: int):
+    original = client.post("/api/resumes", json={"name": "Tech",
+                                                 "tone_set_id": TECHNICAL_TONE_ID}).json()
+    copy = client.post(f"/api/resumes/{original['resume_id']}/copies",
+                       json={"name": "Tech copy"}).json()
+    assert copy["tone_set_id"] == TECHNICAL_TONE_ID
+    none = client.post("/api/resumes", json={"name": "Plain", "tone_set_id": None}).json()
+    copy = client.post(f"/api/resumes/{none['resume_id']}/copies",
+                       json={"name": "Plain copy"}).json()
+    assert copy["tone_set_id"] is None

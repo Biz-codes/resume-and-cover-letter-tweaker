@@ -4,7 +4,8 @@ GET reads the conversation; POST sends a message and streams Claude's reply as J
 The checks that refuse a message (a sent document, a draft still to review, an empty or long
 message, or what it's about not in the document) run before the stream starts, so they come
 back as ordinary error responses. A proposal in Claude's reply is applied (an ordinary change
-to the tree, app/proposals.py) or dismissed, and dismissing can be taken back. A reply whose
+to the tree, app/proposals.py), which sets aside earlier ones for the same content (stale), or
+dismissed, and dismissing can be taken back. A reply whose
 writing check failed can be checked again.
 """
 
@@ -32,7 +33,7 @@ from app.db import DbSession, get_db
 from app.documents import Kind
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole
-from app.proposals import apply, find_proposal, set_state
+from app.proposals import apply, find_proposal, mark_stale, set_state
 
 # The session stays open until the stream ends ("request" scope), so the reply's two turns
 # are saved in the same transaction as the checks before it.
@@ -68,15 +69,17 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
     def send_message(doc_id: int, body: ChatIn, db: StreamSession, account_id: StreamAccountId,
                      client: Claude) -> Any:
         doc = get_owned(db, kind.doc, doc_id, account_id)
-        text, about = start(db, kind, account_id, doc, body)
-        return StreamingResponse(reply(db, client, kind, account_id, doc, text, about),
+        text, about, replying = start(db, kind, account_id, doc, body)
+        return StreamingResponse(reply(db, client, kind, account_id, doc, text, about, replying),
                                  media_type="application/x-ndjson")
 
     @router.post("/{doc_id}/chat/{message_id}/proposals/{proposal_id}/apply")
     def apply_proposal(doc_id: int, message_id: int, proposal_id: str, db: DbSession,
                        account_id: AccountId) -> dict[str, Any]:
-        """Make the proposed change to the document, and mark it applied. Returns the
-        document's detail and the message with the proposal's new state."""
+        """Make the proposed change to the document, and mark it applied, setting aside the
+        earlier ones still pending for the same content (stale, app/proposals.py). Returns the
+        document's detail, the message with the proposal's new state, the other messages that
+        changed (`updated`), and how many proposals went stale (`stale`)."""
         doc = get_owned(db, kind.doc, doc_id, account_id)
         check_open(db, kind, doc)
         message = own_message(db, doc_id, message_id)
@@ -86,9 +89,11 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                            f"{proposal.state}.")
         apply(db, kind, account_id, doc, proposal)
         set_state(message, index, "applied")
+        updated, stale = mark_stale(history(db, kind, doc_id), message, index)
         db.flush()
         db.refresh(doc)
-        return {"document": detail(db, doc), "message": message_out(message)}
+        return {"document": detail(db, doc), "message": message_out(message),
+                "updated": [message_out(turn) for turn in updated], "stale": stale}
 
     @router.post("/{doc_id}/chat/{message_id}/check")
     def check_message(doc_id: int, message_id: int, db: DbSession, account_id: AccountId,
@@ -109,13 +114,16 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                            body: ProposalStateIn, db: DbSession,
                            account_id: AccountId) -> ChatMessageOut:
         """Dismiss a proposal, or take that back (pending). An applied one stays applied: the
-        page's Undo takes back the change itself."""
+        page's Undo takes back the change itself. A stale one can be taken back (pending), not
+        dismissed."""
         doc = get_owned(db, kind.doc, doc_id, account_id)
         check_open(db, kind, doc)
         message = own_message(db, doc_id, message_id)
         index, proposal = find_proposal(message, proposal_id)
-        if proposal.state == "applied":
-            raise AppError(ErrorCode.VALIDATION_FAILED, "That change was already applied.")
+        if proposal.state == "applied" or (proposal.state == "stale"
+                                           and body.state == "dismissed"):
+            raise AppError(ErrorCode.VALIDATION_FAILED,
+                           f"That change was already {proposal.state}.")
         set_state(message, index, body.state)
         db.flush()
         return message_out(message)

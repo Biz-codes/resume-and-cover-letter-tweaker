@@ -47,5 +47,9 @@ export function describe(proposal: Proposal, sections: TreeSection[]) {
   }
 }
 
-// A card's id on the page, so focus can be moved to it (after Apply, or from "Waiting for you").
+// A card's id on the page, so focus can be moved to it (after Apply, from "Waiting for you", or
+// from a message that replied to it).
 export const cardId = (messageId: number, proposalId: string) => `proposal-${messageId}-${proposalId}`
+
+// One of the user's messages in the chat panel, so a card it replied to can move focus to it.
+export const messageId = (id: number) => `chat-message-${id}`

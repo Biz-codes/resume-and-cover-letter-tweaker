@@ -392,7 +392,7 @@ describe('DocumentPage', () => {
       ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
       'GET /api/resumes/23/chat': [{ status: 200, body: conversation }],
       'POST /api/resumes/23/chat/2/proposals/toolu_1/apply': [
-        { status: 200, body: { document: after, message: { ...conversation[1], proposals: [{ ...proposal, state: 'applied' }] } } },
+        { status: 200, body: { document: after, message: { ...conversation[1], proposals: [{ ...proposal, state: 'applied' }] }, updated: [], stale: 0 } },
       ],
       'PUT /api/resumes/23/tree': [{ status: 200, body: before }],
     })
@@ -412,6 +412,61 @@ describe('DocumentPage', () => {
     expect(sentBody(fetchMock, 'PUT /api/resumes/23/tree')).toEqual({
       sections: [{ section_id: 1, entries: [{ kind: 'narrative', item_id: 6, skill_ids: [], bullet_ids: [] }] }],
     })
+  })
+
+  it("applies Claude's wording from an item's dialog right away, closing it, and Undo takes it back", async () => {
+    const library = ['sections', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const entry = (itemId: number, content: string) => ({
+      kind: 'narrative', row_id: itemId, item_id: itemId, position: 1, values: { content }, skills: [], bullets: [],
+    })
+    const before = resume(24, { sections: [{ row_id: 100, section_id: 1, title: 'Summary', entries: [entry(6, 'I build tools.')] }] })
+    const after = resume(24, { sections: [{ row_id: 101, section_id: 1, title: 'Summary', entries: [entry(9, 'I build fast tools.')] }] })
+    const narrative = { hidden: false, content_id: 6, content: 'I build tools.', sections: [], used_by: [] }
+    const about = { level: 'item', label: 'x', section_id: 1, kind: 'narrative', item_id: 6 }
+    const proposal = {
+      id: 'toolu_1', action: 'reword', target: 'narrative', section_id: 1, item_id: 6, parent_kind: '', parent_id: 0,
+      new_text: 'I build fast tools.', position: 0, reason: 'Speed.', before: 'I build tools.', state: 'pending', checked: true,
+    }
+    const turns = [
+      { message_id: 1, role: 'user', text: 'Faster?', about, proposals: null, created_at: null },
+      { message_id: 2, role: 'assistant', text: 'Try this.', about: null, proposals: [proposal], created_at: null },
+    ]
+    const fetchMock = stub(24, before, {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      // Read again once the dialog closes, with the change in it.
+      'GET /api/resumes/24': [{ status: 200, body: before }, { status: 200, body: after }],
+      'GET /api/narrative-content': [{ status: 200, body: [narrative] }],
+      'POST /api/resumes/24/chat/2/proposals/toolu_1/apply': [
+        { status: 200, body: { document: after, message: { ...turns[1], proposals: [{ ...proposal, state: 'applied' }] }, updated: [], stale: 1 } },
+      ],
+      'PUT /api/resumes/24/tree': [{ status: 200, body: before }],
+    })
+    // The question streams its reply as JSON lines.
+    const answer = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/resumes/24/chat' && init?.method === 'POST'
+        ? Promise.resolve(new Response(`${JSON.stringify({ type: 'done', messages: turns })}\n`, { status: 200 }))
+        : answer(url, init),
+    )
+    renderAt('/resumes/24')
+    await screen.findByRole('heading', { level: 2, name: 'Tech Base Resume' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Summary' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^View and Edit .*I build tools/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(await within(dialog).findByText('Ask Claude'))
+    fireEvent.change(within(dialog).getByLabelText('Message to Claude'), { target: { value: 'Faster?' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Use this wording: "I build fast tools."' }))
+
+    await expectNotice('Applied Claude\'s wording: "I build fast tools.". 1 earlier change to the same content is now stale.')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url, init]) => url === '/api/resumes/24/chat/2/proposals/toolu_1/apply' && init?.method === 'POST')).toBe(true)
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(undo).toHaveAttribute('aria-disabled', 'false')
+    fireEvent.click(undo)
+    await expectNotice('Undid a change. Nothing more to undo.')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/24/tree').sections[0].entries[0].item_id).toBe(6)
   })
 
   it('renames in a modal, keeping what was typed when it fails', async () => {

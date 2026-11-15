@@ -159,6 +159,74 @@ def test_dismissing_and_taking_it_back(client: TestClient, db: Session, account_
         422, "VALIDATION_FAILED")
 
 
+def test_applying_sets_aside_earlier_proposals_for_the_same_content(
+        client: TestClient, db: Session, account_id: int):
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    shipped = ids["Shipped it"]
+
+    def reword(text: str):
+        return change("reword", "bullet", EXPERIENCE_SECTION_ID, shipped, new_text=text, **job)
+
+    first = proposed(db, account_id, doc,
+                     reword("Shipped weekly."),
+                     # Another bullet, and new text: not the same content.
+                     change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Tested it"],
+                            new_text="Tested well.", **job),
+                     change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="Led five.",
+                            **job),
+                     # Dismissed already: it stays dismissed.
+                     change("remove", "bullet", EXPERIENCE_SECTION_ID, shipped, **job))
+    client.put(url(doc, first, "toolu_4"), json={"state": "dismissed"})
+    later = proposed(db, account_id, doc,
+                     change("move", "bullet", EXPERIENCE_SECTION_ID, shipped, position=2, **job),
+                     reword("Shipped it every week."),
+                     change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="Led six.",
+                            **job),
+                     # After the one applied, in the same reply: not earlier, so it stays.
+                     reword("Shipped it often."))
+    db.expire_all()
+
+    response = apply(client, doc, later, "toolu_2")
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert [p["state"] for p in body["message"]["proposals"]] == [
+        "stale", "applied", "pending", "pending"]
+    [updated] = body["updated"]
+    assert updated["message_id"] == first.message_id
+    assert [p["state"] for p in updated["proposals"]] == [
+        "stale", "pending", "pending", "dismissed"]
+    assert body["stale"] == 2
+    # Saved, and Claude is told in the next message.
+    db.expire_all()
+    assert db.get(ChatMessage, first.message_id).proposals[0]["state"] == "stale"
+    # A stale one can't be applied or dismissed, but it can be restored, then applied.
+    assert error(apply(client, doc, first))[:2] == (422, "VALIDATION_FAILED")
+    assert error(client.put(url(doc, first), json={"state": "dismissed"}))[:2] == (
+        422, "VALIDATION_FAILED")
+    assert client.put(url(doc, first), json={"state": "pending"}).json()["proposals"][0][
+        "state"] == "pending"
+
+    # Applying an earlier one never sets aside a later one.
+    early = proposed(db, account_id, doc, change(
+        "move", "experience", EXPERIENCE_SECTION_ID, ids["job"], position=1))
+    proposed(db, account_id, doc, change(
+        "remove", "experience", EXPERIENCE_SECTION_ID, ids["job"]))
+    body = apply(client, doc, early).json()
+    assert (body["updated"], body["stale"]) == ([], 0)
+
+
+def test_new_text_never_sets_others_aside(client: TestClient, db: Session, account_id: int):
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    message = proposed(db, account_id, doc,
+                       change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="A.", **job),
+                       change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="B.", **job))
+    body = apply(client, doc, message, "toolu_2").json()
+    assert [p["state"] for p in body["message"]["proposals"]] == ["pending", "applied"]
+    assert body["stale"] == 0
+
+
 def test_refuses_what_isnt_there_or_cant_change(client: TestClient, db: Session,
                                                 account_id: int):
     doc, ids = setup_resume(db, account_id)

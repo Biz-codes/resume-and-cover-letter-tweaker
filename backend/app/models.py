@@ -210,6 +210,8 @@ class ChatMessage(Base):
     # The turn's content blocks exactly as Claude saw or wrote them, replayed unchanged.
     content: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     proposals: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
+    # A user turn's reply to one of Claude's proposals: its message and id, and how it read.
+    reply_to: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

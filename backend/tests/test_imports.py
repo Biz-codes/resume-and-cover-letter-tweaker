@@ -294,7 +294,8 @@ def test_claude_tailors_it_from_there(client: TestClient, db: Session, account_i
     job = posting(db, account_id, False)
     job.header_id = header(db, account_id).header_id
     db.flush()
-    body = {"name": "Engineer at Acme", "job_posting_id": job.job_posting_id, "sections": [
+    body = {"name": "Engineer at Acme", "job_posting_id": job.job_posting_id, "tone_set_id": None,
+            "sections": [
         item({"title": "Summary"}) | {"entries": [
             item({"content": "I build tools."}) | {"kind": "narrative"}]}]}
     # Claude starts from the document itself, so it isn't based on another one.

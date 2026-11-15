@@ -10,6 +10,11 @@ right after its original, and new text under the section, role, or project it go
 added under a skill category or project is listed under it in the library too, as on the page
 (document_tree.apply_skills), and a new skill is saved the way the page saves one (under its
 category, or under "Other" and the project). The page keeps the document as it was for Undo.
+
+Applying one also sets aside every earlier proposal still pending for the same content (`stale`):
+one in an earlier reply, or earlier in the same reply, that changes the same section, or the same
+item in the same place. Earlier ones never make a later one stale, and new text (an add with no
+item yet) is never the same content as anything.
 """
 
 from typing import Any
@@ -60,6 +65,40 @@ def find_proposal(message: ChatMessage, proposal_id: str) -> tuple[int, Proposal
         if stored.get("id") == proposal_id and stored.get("state") != "left_out":
             return index, Proposal.model_validate(stored)
     raise AppError(ErrorCode.NOT_FOUND)
+
+
+def _content(proposal: dict[str, Any]) -> tuple[Any, ...] | None:
+    """What a proposal changes: the section, or the item in its place; none for new text."""
+    if proposal.get("item_id", 0) == 0 and proposal.get("target") != "section":
+        return None
+    return (proposal["target"], proposal["section_id"], proposal["item_id"],
+            proposal["parent_kind"], proposal["parent_id"])
+
+
+def mark_stale(turns: list[ChatMessage], message: ChatMessage,
+               index: int) -> tuple[list[ChatMessage], int]:
+    """Sets aside the pending proposals for the same content as the one at `index` in `message`
+    that came before it, in the conversation `turns` (in order). Returns the other messages that
+    changed, and how many proposals went stale in all."""
+    key = _content(message.proposals[index])
+    if key is None:
+        return [], 0
+    changed: list[ChatMessage] = []
+    count = 0
+    for turn in turns:
+        if turn.role != ChatRole.assistant or turn.message_id > message.message_id:
+            continue
+        stale = [at for at, stored in enumerate(turn.proposals or [])
+                 if (turn.message_id < message.message_id or at < index)
+                 and stored.get("state") == "pending" and _content(stored) == key]
+        if not stale:
+            continue
+        for at in stale:
+            set_state(turn, at, "stale")
+        count += len(stale)
+        if turn is not message:
+            changed.append(turn)
+    return changed, count
 
 
 def set_state(message: ChatMessage, index: int, state: str) -> None:

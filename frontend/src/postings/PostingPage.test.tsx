@@ -66,6 +66,7 @@ function stub(posting: unknown = POSTING, extra: Record<string, Reply[]> = {}, h
     'GET /api/resumes': [{ status: 200, body: [doc(1, 'Tech base')] }],
     'GET /api/cover-letters': [{ status: 200, body: [doc(3, 'General letter')] }],
     'GET /api/tone-sets': [{ status: 200, body: [WARM] }],
+    'GET /api/tone-sets/default': [{ status: 200, body: { tone_set_id: WARM.tone_set_id } }],
     ...extra,
   })
 }
@@ -201,7 +202,8 @@ describe('PostingPage', () => {
     expect(sentBody(fetchMock, 'POST /api/resumes/imported/tailored')).toEqual({
       name: 'English Teacher at Lincoln High',
       job_posting_id: 9,
-      tone_set_id: null,
+      // The form starts on the default tone (the most recently used).
+      tone_set_id: 4,
       header: null,
       sections: [{ item_id: null, values: { title: 'Summary' }, entries: [] }],
       addressee: null,
@@ -222,7 +224,8 @@ describe('PostingPage', () => {
       name: 'English Teacher at Lincoln High',
       job_posting_id: 9,
       empty: true,
-      tone_set_id: null,
+      // The form starts on the default tone (the most recently used).
+      tone_set_id: 4,
     })
   })
 
@@ -237,7 +240,8 @@ describe('PostingPage', () => {
       expect(sentBody(fetchMock, 'POST /api/resumes/tailored')).toEqual({
         name: `${'R'.repeat(100)} at ${'O'.repeat(100)}`,
         job_posting_id: 9,
-        tone_set_id: null,
+        // The form starts on the default tone (the most recently used).
+      tone_set_id: 4,
         start_from_id: null,
       }),
     )
@@ -328,6 +332,7 @@ describe('PostingPage', () => {
       'GET /api/resumes': [{ status: 200, body: [] }],
       'GET /api/cover-letters': [{ status: 200, body: [] }],
       'GET /api/tone-sets': [{ status: 200, body: [] }],
+      'GET /api/tone-sets/default': [{ status: 200, body: { tone_set_id: 1 } }],
     })
     renderPage()
     expect(await screen.findByRole('alert')).toHaveTextContent("That item doesn't exist.")

@@ -260,6 +260,28 @@ describe('ChatPanel', () => {
     await expectNoA11yViolations()
   })
 
+  it('sends on Enter, and starts a new line on Shift+Enter or while composing', async () => {
+    const fine = () => {
+      const reply = streamed()
+      reply.send({ type: 'done', messages: [asked(1, 'Hello'), answered(2, 'Hi.')] })
+      reply.end()
+      return reply.response
+    }
+    const fetchMock = stubChat([], [fine])
+    renderPanel()
+    await screen.findByText('No messages yet.')
+    const box = screen.getByLabelText('Message to Claude')
+    fireEvent.change(box, { target: { value: 'Hello' } })
+    const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').length
+    // Shift+Enter, or Enter finishing an input method's word, is left to the box.
+    expect(fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })).toBe(true)
+    expect(fireEvent.keyDown(box, { key: 'Enter', isComposing: true })).toBe(true)
+    expect(posts()).toBe(0)
+    expect(fireEvent.keyDown(box, { key: 'Enter' })).toBe(false)
+    await vi.waitFor(() => expect(announced()).toBe('Claude: Hi.'))
+    expect(posts()).toBe(1)
+  })
+
   it('sends nothing while the box is empty', async () => {
     const fetchMock = stubChat([])
     renderPanel()
@@ -318,6 +340,130 @@ describe('ChatPanel', () => {
     expect(conversation.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(waiting.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await expectNoA11yViolations()
+  })
+
+  describe('replying to a proposal', () => {
+    const REPLY = { message_id: 2, proposal_id: 'toolu_1', label: 'Reword the bullet "Shipped it" in Experience', text: 'Shipped it weekly.' }
+    const OTHER = { message_id: 2, proposal_id: 'toolu_2', label: 'Remove the skill React in Experience', text: '' }
+    // A stand-in for the cards: a Reply button for each.
+    const cards: Parameters<typeof ChatPanel>[0]['proposals'] = (_message, { reply }) => (
+      <>
+        <button type="button" onClick={() => reply(REPLY)}>
+          Reply one
+        </button>
+        <button type="button" onClick={() => reply(OTHER)}>
+          Reply two
+        </button>
+      </>
+    )
+
+    it('puts the proposal above the box, read with it, and cancels it', async () => {
+      stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL])])
+      renderPanel({ proposals: cards })
+      fireEvent.click(await screen.findByRole('button', { name: 'Reply one' }))
+      const box = screen.getByLabelText('Message to Claude')
+      await vi.waitFor(() => expect(box).toHaveFocus())
+      expect(box).toHaveAccessibleDescription('Replying to: Reword the bullet "Shipped it" in Experience Shipped it weekly.')
+      expect(screen.getByText('Shipped it weekly.', { selector: 'blockquote' })).toBeInTheDocument()
+      expect(announced()).toBe('Replying to: Reword the bullet "Shipped it" in Experience.')
+      // Above the box, in reading and tab order.
+      const cancel = screen.getByRole('button', { name: 'Cancel reply to: Reword the bullet "Shipped it" in Experience' })
+      expect(cancel).toHaveTextContent('Cancel reply')
+      expect(cancel.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      await expectNoA11yViolations()
+
+      // Another card's Reply replaces it; one with no new text shows only its title.
+      fireEvent.click(screen.getByRole('button', { name: 'Reply two' }))
+      expect(box).toHaveAccessibleDescription('Replying to: Remove the skill React in Experience')
+      expect(screen.queryByText('Shipped it weekly.', { selector: 'blockquote' })).not.toBeInTheDocument()
+      await expectNoA11yViolations()
+
+      cancel.focus()
+      fireEvent.click(screen.getByRole('button', { name: /^Cancel reply/ }))
+      expect(screen.queryByText('Replying to:')).not.toBeInTheDocument()
+      expect(box).not.toHaveAccessibleDescription()
+      expect(announced()).toBe('No longer replying to: Remove the skill React in Experience.')
+      await vi.waitFor(() => expect(box).toHaveFocus())
+    })
+
+    it('sends the reply with the message, shows it in the conversation, and clears it', async () => {
+      const reply = streamed()
+      const fetchMock = stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL])], [reply.response])
+      renderPanel({ proposals: cards })
+      fireEvent.click(await screen.findByRole('button', { name: 'Reply one' }))
+      fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Why weekly?' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      await screen.findByRole('button', { name: 'Sending…' })
+      const [, init] = fetchMock.mock.calls.find(([, call]) => call?.method === 'POST')!
+      expect(JSON.parse(init!.body as string)).toEqual({
+        text: 'Why weekly?',
+        about: DOCUMENT,
+        reply_to: { message_id: 2, proposal_id: 'toolu_1', label: REPLY.label },
+      })
+      reply.send({ type: 'done', messages: [{ ...asked(3, 'Why weekly?'), reply_to: REPLY }, answered(4, 'It reads tighter.')] })
+      reply.end()
+      await vi.waitFor(() => expect(announced()).toBe('Claude: It reads tighter.'))
+      expect(screen.queryByRole('button', { name: /^Cancel reply/ })).not.toBeInTheDocument()
+      const [, , mine] = within(screen.getByRole('list', { name: 'Conversation' })).getAllByRole('listitem')
+      expect(mine).toHaveTextContent('YouAbout the whole resumeReplying to: Reword the bullet "Shipped it" in ExperienceShipped it weekly.Why weekly?')
+      await expectNoA11yViolations()
+    })
+
+    it('keeps the reply when sending fails', async () => {
+      stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL])], [
+        Response.json(errorBody('VALIDATION_FAILED', "That proposed change isn't in this chat. Reply to one shown above.", 'reply_to'), { status: 422 }),
+      ])
+      renderPanel({ proposals: cards })
+      fireEvent.click(await screen.findByRole('button', { name: 'Reply one' }))
+      fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Why weekly?' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent("That proposed change isn't in this chat.")
+      const box = screen.getByLabelText('Message to Claude')
+      expect(box).toHaveValue('Why weekly?')
+      // Read with the box: what it replies to, then the error.
+      expect(box).toHaveAccessibleDescription(/^Replying to: Reword the bullet .*That proposed change isn't in this chat/)
+      expect(screen.getByRole('button', { name: /^Cancel reply/ })).toBeInTheDocument()
+      await expectNoA11yViolations()
+    })
+
+    it('shows what a saved message replied to, linking each end to the other', async () => {
+      stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL]), { ...asked(3, 'And this?'), reply_to: OTHER }, answered(4, 'Sure.')])
+      // A stand-in card, with the replies the panel finds for it.
+      const card: Parameters<typeof ChatPanel>[0]['proposals'] = (message, { repliesTo }) =>
+        message.message_id === 2 && (
+          <div id="proposal-2-toolu_2" tabIndex={-1}>
+            Card, replied to by {repliesTo('toolu_2').join(', ')}; {repliesTo('toolu_1').length} for the other
+          </div>
+        )
+      // In a sent one's read-only chat too.
+      renderPanel({ locked: true, proposals: card })
+      const conversation = await screen.findByRole('list', { name: 'Conversation' })
+      const mine = within(conversation).getAllByRole('listitem')[2]
+      expect(mine).toHaveTextContent('YouAbout the whole resumeReplying to: Remove the skill React in ExperienceAnd this?')
+      expect(within(mine).queryByRole('blockquote')).not.toBeInTheDocument()
+      expect(screen.getByText(/^Card, replied to by/)).toHaveTextContent('Card, replied to by 3; 0 for the other')
+      await expectNoA11yViolations()
+      fireEvent.click(within(mine).getByRole('button', { name: 'Go to: Remove the skill React in Experience' }))
+      await vi.waitFor(() => expect(document.getElementById('proposal-2-toolu_2')).toHaveFocus())
+      // The user's messages take focus, so a card can go to them.
+      expect(mine).toHaveAttribute('id', 'chat-message-3')
+      expect(mine).toHaveAttribute('tabindex', '-1')
+    })
+
+    it('goes to the card from the reply above the box', async () => {
+      stubChat([asked(1, 'Hello'), answered(2, 'Try this.', [PROPOSAL])])
+      renderPanel({
+        proposals: (message, helpers) => (
+          <div id="proposal-2-toolu_1" tabIndex={-1}>
+            {cards(message, helpers)}
+          </div>
+        ),
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Reply one' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Go to: Reword the bullet "Shipped it" in Experience' }))
+      await vi.waitFor(() => expect(document.getElementById('proposal-2-toolu_1')).toHaveFocus())
+      await expectNoA11yViolations()
+    })
   })
 
   it("lists nothing waiting in a sent one's conversation", async () => {

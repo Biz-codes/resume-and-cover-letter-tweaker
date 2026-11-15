@@ -28,8 +28,10 @@ export interface Placement {
   // The row's View and Edit button, where focus goes when the dialog closes after a change.
   returnTo: string
   // The document's chat with Claude, when it has one: what a question asked in the dialog is
-  // about (the row), and what to call once one is sent, so the chat panel shows it too.
-  chat?: { about: ChatAbout; onSent: () => void }
+  // about (the row), what to call once one is sent, so the chat panel shows it too, and how to
+  // apply Claude's wording (its proposal), as a card's Apply does, giving how many earlier
+  // proposals for the same content went stale.
+  chat?: { about: ChatAbout; onSent: () => void; apply: (messageId: number, proposalId: string) => Promise<number> }
 }
 
 // An item to show, with the title its dialog is named by.

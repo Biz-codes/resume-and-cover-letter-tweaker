@@ -20,7 +20,8 @@ export interface ChatAbout {
   unsaved?: Record<string, string | null> | null
 }
 
-export type ProposalState = 'pending' | 'applied' | 'dismissed'
+// "stale": applying a later proposal for the same content set it aside.
+export type ProposalState = 'pending' | 'applied' | 'dismissed' | 'stale'
 
 // One change Claude proposed, shown as a card the user applies or dismisses.
 export interface Proposal {
@@ -51,10 +52,33 @@ export interface Proposal {
 export const checksText = (proposal: Proposal) =>
   (proposal.target === 'narrative' || proposal.target === 'bullet') && (proposal.action === 'reword' || proposal.action === 'add')
 
-// The reply's proposals the writing check couldn't read and that aren't applied yet, which
+// The reply's proposals the writing check couldn't read and that aren't applied (or stale), which
 // "Check writing rules again" checks.
 export const uncheckedOf = (message: ChatMessage) =>
-  (message.proposals ?? []).filter((proposal) => checksText(proposal) && !proposal.checked && proposal.state !== 'applied')
+  (message.proposals ?? []).filter(
+    (proposal) => checksText(proposal) && !proposal.checked && (proposal.state === 'pending' || proposal.state === 'dismissed'),
+  )
+
+// One of Claude's proposals a message replies to (its card's Reply): the message it's in, its id,
+// the card's title, and its new text, if it has any, as it read when the user replied.
+export interface ReplyTo {
+  message_id: number
+  proposal_id: string
+  label: string
+  text: string
+}
+
+// What applying a proposal changed in the chat: its message, the other messages whose earlier
+// proposals for the same content it set aside, and how many went stale in all.
+export interface Applied {
+  message: ChatMessage
+  updated: ChatMessage[]
+  stale: number
+}
+
+// " 2 earlier changes to the same content are now stale." for announcing an apply, or nothing.
+export const staleNote = (stale: number) =>
+  stale === 0 ? '' : ` ${stale === 1 ? '1 earlier change to the same content is' : `${stale} earlier changes to the same content are`} now stale.`
 
 export interface ChatMessage {
   message_id: number
@@ -62,6 +86,7 @@ export interface ChatMessage {
   text: string
   about: ChatAbout | null
   proposals: Proposal[] | null
+  reply_to?: ReplyTo | null
   created_at: string | null
 }
 
@@ -78,11 +103,12 @@ export function chatApi(kind: DocKind) {
   const path = KINDS[kind].path
   return {
     list: (id: number) => api.get<ChatMessage[]>(`${path}/${id}/chat`),
-    // Makes the proposed change to the document, and returns it with the message.
+    // Makes the proposed change to the document, and returns it with what changed in the chat
+    // (earlier proposals for the same content go stale).
     apply: (id: number, messageId: number, proposalId: string) =>
       api
-        .post<{ document: Raw; message: ChatMessage }>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}/apply`)
-        .then(({ document, message }) => ({ document: withId<DocDetail>(kind, document), message })),
+        .post<Applied & { document: Raw }>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}/apply`)
+        .then(({ document, ...applied }) => ({ ...applied, document: withId<DocDetail>(kind, document) })),
     // Dismisses a proposal, or takes that back.
     setState: (id: number, messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
       api.put<ChatMessage>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}`, { state }),
@@ -90,21 +116,29 @@ export function chatApi(kind: DocKind) {
     check: (id: number, messageId: number) => api.post<ChatMessage>(`${path}/${id}/chat/${messageId}/check`),
     // Sends a message, calling `onText` with each piece of Claude's reply as it's written and
     // `onChecking` once the reply is written and its proposals are being checked against the
-    // writing rules, and returns the two saved turns. A refusal before the reply starts, or a
-    // failure during it, throws an ApiError, and nothing is saved.
+    // writing rules, and returns the two saved turns. `replyTo` is the proposal it replies to, if
+    // any (the backend fills in its text). A refusal before the reply starts, or a failure during
+    // it, throws an ApiError, and nothing is saved.
     async send(
       id: number,
       text: string,
       about: ChatAbout,
       onText: (piece: string) => void,
       onChecking: () => void = () => {},
+      replyTo: ReplyTo | null = null,
     ): Promise<ChatMessage[]> {
       let response: Response
       try {
         response = await fetch(`/api${path}/${id}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, about }),
+          body: JSON.stringify({
+            text,
+            about,
+            ...(replyTo && {
+              reply_to: { message_id: replyTo.message_id, proposal_id: replyTo.proposal_id, label: replyTo.label },
+            }),
+          }),
         })
       } catch {
         throw new ApiError('INTERNAL_ERROR', UNREACHABLE, null, 0)

@@ -26,6 +26,7 @@ from app.documents import (
     doc_info,
     document_name,
     latest_header_id,
+    latest_tone_id,
     list_docs,
     load_tree,
     posting_for_version,
@@ -129,6 +130,8 @@ def new_resume(db: Session, body: NewResume, account_id: int) -> Resume:
         body.header_id = posting_header_id(posting, body.header_id)
     elif "header_id" not in body.model_fields_set:
         body.header_id = latest_header_id(db, account_id)
+    if "tone_set_id" not in body.model_fields_set:
+        body.tone_set_id = latest_tone_id(db, account_id)
     body.name = document_name(db, RESUME, account_id, body.name, body.job_posting_id is not None)
     check_links(db, body, account_id)
     resume = Resume(account_id=account_id, **body.model_dump(exclude={"empty"}))
@@ -175,8 +178,10 @@ def imported_resume(db: Session, body: ImportIn, account_id: int) -> Resume:
     """A new resume with the corrected items, each reused from the library or added to it
     (app/imports.py). A base one uses the header read from it (a saved one with the same
     values, or a new one); one for a posting uses the posting's."""
-    fields = {"name": body.name, "tone_set_id": body.tone_set_id,
-              "job_posting_id": body.job_posting_id, "empty": True}
+    fields = {"name": body.name, "job_posting_id": body.job_posting_id, "empty": True}
+    # Left out, it starts with the usual default tone; given (even as none), it's kept.
+    if "tone_set_id" in body.model_fields_set:
+        fields["tone_set_id"] = body.tone_set_id
     if body.job_posting_id is None and body.header is not None:
         fields["header_id"] = find_or_add(db, account_id, body.header)[0].header_id
     resume = new_resume(db, NewResume(**fields), account_id)

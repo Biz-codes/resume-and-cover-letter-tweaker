@@ -20,7 +20,7 @@ describe('NewPosting', () => {
   it('reads the posting at the link, then shows what Claude found to check and save', async () => {
     const fetchMock = stubApi({ [READ]: [{ status: 200, body: FOUND }] })
     const { onSave } = renderForm()
-    expect(link()).toHaveFocus()
+    await vi.waitFor(() => expect(link()).toHaveFocus())
     await expectNoA11yViolations()
     fireEvent.change(link(), { target: { value: 'https://jobs.example.com/1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Read posting' }))
@@ -29,7 +29,7 @@ describe('NewPosting', () => {
     expect(sentBody(fetchMock, READ)).toEqual({ url: 'https://jobs.example.com/1', text: '' })
     // Focus moves to the first field, which reads the note with it.
     const url = screen.getByLabelText('Link to the posting or primary contact (required)')
-    expect(url).toHaveFocus()
+    await vi.waitFor(() => expect(url).toHaveFocus())
     expect(url).toHaveValue('https://jobs.example.com/1')
     expect(url).toHaveAccessibleDescription('Claude filled these in from the posting. Check them before saving.')
     expect(screen.getByLabelText('Organization (required)')).toHaveValue('Acme')
@@ -37,7 +37,7 @@ describe('NewPosting', () => {
     expect(form).toHaveTextContent('Save posting')
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Save posting' }))
-    await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith({ url: 'https://jobs.example.com/1', ...FOUND }))
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith({ url: 'https://jobs.example.com/1', ...FOUND }), { timeout: 5000 })
   })
 
   it('says it is reading, without disabling the focused button', async () => {

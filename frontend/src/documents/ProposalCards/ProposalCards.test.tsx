@@ -40,13 +40,18 @@ function renderCards(
   onCheck: (messageId: number) => Promise<ChatMessage> = vi.fn(),
 ) {
   const onApply = vi.fn((_m: number, id: string) =>
-    Promise.resolve(message(...(shown.proposals ?? []).map((p) => (p.id === id ? { ...p, state: 'applied' as const } : p)))),
+    Promise.resolve({
+      message: message(...(shown.proposals ?? []).map((p) => (p.id === id ? { ...p, state: 'applied' as const } : p))),
+      updated: [] as ChatMessage[],
+      stale: 0,
+    }),
   )
   const onState = vi.fn((_m: number, id: string, state: 'pending' | 'dismissed') =>
     Promise.resolve(message(...(shown.proposals ?? []).map((p) => (p.id === id ? { ...p, state } : p)))),
   )
   const onUpdate = vi.fn()
   const announce = vi.fn()
+  const onReply = vi.fn()
   const view = render(
     <ProposalCards
       message={shown}
@@ -57,9 +62,10 @@ function renderCards(
       onCheck={onCheck}
       onUpdate={onUpdate}
       announce={announce}
+      onReply={onReply}
     />,
   )
-  return { onApply, onState, onUpdate, announce, view }
+  return { onApply, onState, onUpdate, announce, onReply, view }
 }
 
 const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
@@ -117,7 +123,50 @@ group('ProposalCards', () => {
     await vi.waitFor(() => expect(announce).toHaveBeenCalledWith('Applied: Reword the bullet "Shipped it" in Experience.'))
     expect(onApply).toHaveBeenCalledWith(4, 'toolu_1')
     expect(onUpdate.mock.calls[0][0].proposals[0].state).toBe('applied')
+    // Nothing went stale, so nothing more is said.
+    expect(announce).toHaveBeenLastCalledWith('Applied: Reword the bullet "Shipped it" in Experience.')
     await vi.waitFor(() => expect(document.getElementById('proposal-4-toolu_1')).toHaveFocus())
+  })
+
+  it('shows the earlier changes an apply set aside as stale, with Restore and Reply', async () => {
+    const earlier: ChatMessage = { ...message({ ...base, id: 'toolu_7' }), message_id: 3 }
+    const { onApply, onUpdate, announce, view } = renderCards()
+    const setAside = { ...earlier, proposals: [{ ...base, id: 'toolu_7', state: 'stale' as const }] }
+    onApply.mockResolvedValueOnce({ message: message({ ...base, state: 'applied' }, NEW), updated: [setAside], stale: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply: Reword the bullet "Shipped it" in Experience' }))
+    await vi.waitFor(() =>
+      expect(announce).toHaveBeenCalledWith('Applied: Reword the bullet "Shipped it" in Experience. 1 earlier change to the same content is now stale.'),
+    )
+    // Every message it changed is shown with its new state.
+    expect(onUpdate.mock.calls.map(([changed]) => changed.message_id)).toEqual([4, 3])
+    view.rerender(
+      <ProposalCards
+        message={setAside}
+        sections={SECTIONS}
+        readOnly={false}
+        onApply={vi.fn()}
+        onState={vi.fn()}
+        onCheck={vi.fn()}
+        onUpdate={vi.fn()}
+        announce={vi.fn()}
+        onReply={vi.fn()}
+      />,
+    )
+    const card = document.getElementById('proposal-3-toolu_7')!
+    expect(within(card).getByText('stale')).toHaveClass('tag')
+    expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual(['Restore', 'Reply'])
+    expect(within(card).getByRole('button', { name: 'Restore: Reword the bullet "Shipped it" in Experience' })).toBeInTheDocument()
+    expect(within(card).getByText('Details', { exact: false, selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    await expectNoA11yViolations()
+  })
+
+  it('says how many earlier changes went stale', async () => {
+    const { onApply, announce } = renderCards()
+    onApply.mockResolvedValueOnce({ message: message({ ...base, state: 'applied' }, NEW), updated: [], stale: 2 })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply: Reword the bullet "Shipped it" in Experience' }))
+    await vi.waitFor(() =>
+      expect(announce).toHaveBeenCalledWith('Applied: Reword the bullet "Shipped it" in Experience. 2 earlier changes to the same content are now stale.'),
+    )
   })
 
   it('dismisses a change, and restores it', async () => {
@@ -135,6 +184,7 @@ group('ProposalCards', () => {
         onCheck={vi.fn()}
         onUpdate={vi.fn()}
         announce={announce}
+        onReply={vi.fn()}
       />,
     )
     const card = document.getElementById('proposal-4-toolu_2')!
@@ -157,10 +207,64 @@ group('ProposalCards', () => {
     await expectNoA11yViolations()
   })
 
-  it('marks an applied change, with nothing left to do and its details folded away', async () => {
+  it('replies to a change in any state, with its title and new text', async () => {
+    const { onReply } = renderCards(message(base, { ...NEW, state: 'dismissed' }, { ...base, id: 'toolu_5', action: 'remove', new_text: '', state: 'applied' }))
+    const [pending, dismissed, applied] = screen.getAllByRole('button', { name: /^Reply: / })
+    expect(pending).toHaveTextContent('Reply')
+    expect(pending).toHaveAccessibleName('Reply: Reword the bullet "Shipped it" in Experience')
+    // Beside Apply and Dismiss, or Restore.
+    expect(pending.previousElementSibling).toHaveTextContent('Dismiss')
+    expect(dismissed.previousElementSibling).toHaveTextContent('Restore')
+    fireEvent.click(pending)
+    expect(onReply).toHaveBeenLastCalledWith({
+      message_id: 4, proposal_id: 'toolu_1', label: 'Reword the bullet "Shipped it" in Experience', text: 'Shipped weekly.',
+    })
+    fireEvent.click(dismissed)
+    expect(onReply).toHaveBeenLastCalledWith(expect.objectContaining({ proposal_id: 'toolu_2', text: 'Mentored two.' }))
+    fireEvent.click(applied)
+    expect(onReply).toHaveBeenLastCalledWith(expect.objectContaining({ proposal_id: 'toolu_5', text: '' }))
+    await expectNoA11yViolations()
+  })
+
+  it('goes to each message that replied to a card, in a sent document too', async () => {
+    render(
+      <>
+        <p id="chat-message-5" tabIndex={-1}>
+          First reply
+        </p>
+        <p id="chat-message-8" tabIndex={-1}>
+          Second reply
+        </p>
+        <ProposalCards
+          message={message(base, NEW)}
+          sections={SECTIONS}
+          readOnly
+          onApply={vi.fn()}
+          onState={vi.fn()}
+          onCheck={vi.fn()}
+          onUpdate={vi.fn()}
+          announce={vi.fn()}
+          onReply={vi.fn()}
+          repliesTo={(id) => (id === 'toolu_1' ? [5, 8] : id === 'toolu_2' ? [9] : [])}
+        />
+      </>,
+    )
+    const [first, second] = screen.getAllByRole('button', { name: /^Go to your reply \d to: Reword/ })
+    expect([first.textContent, second.textContent]).toEqual(['Go to your reply 1', 'Go to your reply 2'])
+    expect(first).toHaveAccessibleName('Go to your reply 1 to: Reword the bullet "Shipped it" in Experience')
+    // One reply isn't numbered.
+    expect(screen.getByRole('button', { name: 'Go to your reply to: Add new bullet in Experience' })).toHaveTextContent('Go to your reply')
+    await expectNoA11yViolations()
+    fireEvent.click(second)
+    await vi.waitFor(() => expect(screen.getByText('Second reply')).toHaveFocus())
+    fireEvent.click(first)
+    await vi.waitFor(() => expect(screen.getByText('First reply')).toHaveFocus())
+  })
+
+  it('marks an applied change, with only Reply left and its details folded away', async () => {
     renderCards(message({ ...base, state: 'applied' }))
     expect(screen.getByText('applied')).toHaveClass('tag')
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Reply'])
     const summary = screen.getByText('Details', { exact: false, selector: 'summary' })
     expect(summary).toHaveTextContent('Details of Reword the bullet "Shipped it" in Experience')
     expect(summary.closest('details')).not.toHaveAttribute('open')
@@ -291,24 +395,65 @@ group('WaitingForYou', () => {
             onCheck={vi.fn()}
             onUpdate={vi.fn()}
             announce={vi.fn()}
+            onReply={vi.fn()}
           />
         ))}
       </>,
     )
   }
 
-  it('lists every change still waiting, oldest first, leaving out applied and dismissed ones', async () => {
-    renderWaiting([message(base, { ...NEW, state: 'applied' }, { ...base, id: 'toolu_4', state: 'dismissed' }), later])
+  const toggle = () => screen.getByRole('button', { name: /^Waiting for you/ })
+
+  it('lists every change still waiting, oldest first, leaving out applied, dismissed, and stale ones', async () => {
+    renderWaiting([
+      message(base, { ...NEW, state: 'applied' }, { ...base, id: 'toolu_4', state: 'dismissed' }, { ...base, id: 'toolu_5', state: 'stale' }),
+      later,
+    ])
     const list = screen.getByRole('region', { name: 'Waiting for you (2)' })
-    expect(within(list).getAllByRole('button').map((button) => button.textContent)).toEqual([
+    // Closed to start, under a heading that opens it.
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('heading', { level: 4, name: 'Waiting for you (2)' })).toContainElement(toggle())
+    expect(within(list).queryByRole('button', { name: /^Go to/ })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(toggle())
+    expect(within(list).getAllByRole('button', { name: /^Go to/ }).map((button) => button.textContent)).toEqual([
       'Reword the bullet "Shipped it" in Experience',
       'Remove the skill React in Experience',
     ])
     await expectNoA11yViolations()
   })
 
+  it('stays open or closed as the user last left it', () => {
+    const { unmount } = renderWaiting([message(base)])
+    fireEvent.click(toggle())
+    unmount()
+    const again = renderWaiting([message(base)])
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(toggle())
+    again.unmount()
+    renderWaiting([message(base)])
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('starts closed when the browser blocks storage', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    renderWaiting([message(base)])
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
+    // Still opens.
+    fireEvent.click(toggle())
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+    getItem.mockRestore()
+    setItem.mockRestore()
+  })
+
   it('moves focus to the card it names', async () => {
     renderWaiting([message(base), later])
+    fireEvent.click(toggle())
     fireEvent.click(screen.getByRole('button', { name: 'Go to: Remove the skill React in Experience' }))
     await vi.waitFor(() => expect(document.getElementById('proposal-6-toolu_3')).toHaveFocus())
   })

@@ -25,6 +25,7 @@ from app.documents import (
     doc_info,
     document_name,
     latest_header_id,
+    latest_tone_id,
     list_docs,
     load_tree,
     posting_for_version,
@@ -150,6 +151,8 @@ def new_letter(db: Session, body: NewLetter, account_id: int) -> CoverLetter:
         body.header_id = posting_header_id(posting, body.header_id)
     elif "header_id" not in given:
         body.header_id = latest_header_id(db, account_id)
+    if "tone_set_id" not in given:
+        body.tone_set_id = latest_tone_id(db, account_id)
     if "addressee" not in given:
         body.addressee = default_addressee(posting)
     if "sign_off_id" not in given:
@@ -201,9 +204,11 @@ def imported_letter(db: Session, body: ImportIn, account_id: int) -> CoverLetter
     The sign-off is a saved one with the same text, or a new one. Left out, the greeting and
     sign-off are a new letter's usual ones."""
     match = Matcher(db, account_id)
-    fields = {"name": body.name, "tone_set_id": body.tone_set_id,
-              "job_posting_id": body.job_posting_id, "signature_name": body.signature_name,
-              "empty": True}
+    fields = {"name": body.name, "job_posting_id": body.job_posting_id,
+              "signature_name": body.signature_name, "empty": True}
+    # Left out, it starts with the usual default tone; given (even as none), it's kept.
+    if "tone_set_id" in body.model_fields_set:
+        fields["tone_set_id"] = body.tone_set_id
     if body.job_posting_id is None and body.header is not None:
         fields["header_id"] = find_or_add(db, account_id, body.header)[0].header_id
     if body.addressee is not None:

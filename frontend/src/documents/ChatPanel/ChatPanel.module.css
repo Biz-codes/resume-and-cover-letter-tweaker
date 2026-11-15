@@ -69,3 +69,54 @@
 .about p {
   margin: 0;
 }
+
+/* What a message replies to (a card's Reply): in the conversation, and above the message box,
+   where it sits on the highlight with Cancel reply. The bar on the left marks it as a quote. */
+.replyTo {
+  border-left: 4px solid var(--outline);
+  padding: 4px 0 4px 10px;
+  margin: 0 0 6px;
+}
+
+.replyTo p,
+.replyTo blockquote {
+  margin: 0;
+}
+
+.replyTo blockquote {
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.replyLabel {
+  font-weight: 600;
+}
+
+.replying {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--highlight);
+}
+
+.replying .replyTo {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+/* The card's title in "Replying to:", which goes to the card: read as text in the quote, with
+   the usual underline that marks a link. */
+.goTo {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}

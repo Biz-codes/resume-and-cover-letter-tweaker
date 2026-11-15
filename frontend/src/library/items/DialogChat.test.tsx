@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ChatAbout, ChatMessage } from '../../shared/api/chat'
+import { ApiError } from '../../shared/api/client'
 import { expectNoA11yViolations } from '../../test/axe'
 import { renderItem } from '../../test/renderItem'
 import { stubApi } from '../../test/stubApi'
@@ -53,7 +54,7 @@ function Field() {
         Bullet text
         <textarea value={value} onChange={(event) => setValue(event.target.value)} />
       </label>
-      <DialogChat field="content" value={value} onUse={setValue} />
+      <DialogChat field="content" value={value} />
     </>
   )
 }
@@ -64,17 +65,18 @@ function stubSend(...replies: Response[]) {
   return fetchMock
 }
 
-const placed = (onSent = vi.fn()) => ({
+const placed = (onSent = vi.fn(), apply = vi.fn((_messageId: number, _proposalId: string) => Promise.resolve(0))) => ({
   doc: 'resume',
   where: { kind: 'resume' as const, id: 5 },
-  chat: { about: ABOUT, onSent },
+  chat: { about: ABOUT, onSent, apply },
 })
 
 describe('DialogChat', () => {
-  it('asks Claude about the item with its unsaved text, and puts its wording in the field', async () => {
+  it('asks Claude about the item with its unsaved text, and applies its wording right away', async () => {
     const fetchMock = stubSend(streamed({ type: 'text', text: 'Try this.' }, { type: 'done', messages: turns([REWORD]) }))
     const onSent = vi.fn()
-    const host = await renderItem(<Field />, placed(onSent))
+    const apply = vi.fn((_messageId: number, _proposalId: string) => Promise.resolve(0))
+    const host = await renderItem(<Field />, placed(onSent, apply))
     const toggle = screen.getByText('Ask Claude')
     // Closed to start.
     expect(toggle.closest('details')).not.toHaveAttribute('open')
@@ -95,8 +97,60 @@ describe('DialogChat', () => {
     await expectNoA11yViolations()
 
     fireEvent.click(screen.getByRole('button', { name: 'Use this wording: "Shipped weekly."' }))
-    expect(screen.getByLabelText('Bullet text')).toHaveValue('Shipped weekly.')
-    expect(host.say).toHaveBeenLastCalledWith("Claude's wording is in the field. Save keeps it.")
+    // Applied as its card's Apply does, then the dialog closes with a notice on the page.
+    await vi.waitFor(() => expect(host.saved).toHaveBeenCalledWith('Applied Claude\'s wording: "Shipped weekly.".', { kind: 'bullet', id: 8 }))
+    expect(apply).toHaveBeenCalledWith(2, 'toolu_1')
+  })
+
+  it('keeps focus on Use this while it applies, and shows a failure there', async () => {
+    let fail!: (error: unknown) => void
+    const apply = vi.fn((_messageId: number, _proposalId: string) => new Promise<number>((_resolve, reject) => (fail = reject)))
+    stubSend(streamed({ type: 'done', messages: turns([REWORD]) }))
+    const host = await renderItem(<Field />, placed(vi.fn(), apply))
+    fireEvent.click(screen.getByText('Ask Claude'))
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Shorter?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    const button = await screen.findByRole('button', { name: 'Use this wording: "Shipped weekly."' })
+    button.focus()
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).toHaveFocus()
+    // A second press while it applies does nothing.
+    fireEvent.click(button)
+    expect(apply).toHaveBeenCalledTimes(1)
+    await expectNoA11yViolations()
+    fail(new ApiError('VALIDATION_FAILED', "This change doesn't fit the document as it is now.", null, 422))
+    expect(await screen.findByRole('alert')).toHaveTextContent("This change doesn't fit the document as it is now.")
+    expect(button).toHaveAttribute('aria-disabled', 'false')
+    expect(button).toHaveFocus()
+    expect(host.saved).not.toHaveBeenCalled()
+    await expectNoA11yViolations()
+  })
+
+  it('marks wording already applied or dismissed, without Use this', async () => {
+    stubSend(streamed({ type: 'done', messages: turns([{ ...REWORD, state: 'applied' }, { ...REWORD, id: 'toolu_2', state: 'dismissed' }]) }))
+    await renderItem(<Field />, placed())
+    fireEvent.click(screen.getByText('Ask Claude'))
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Shorter?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    const [applied, dismissed] = await screen.findAllByText(/^Claude's wording/)
+    expect(applied).toHaveTextContent("Claude's wording applied")
+    expect(dismissed).toHaveTextContent("Claude's wording dismissed")
+    expect(screen.queryByRole('button', { name: /^Use this/ })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('sends on Enter, and starts a new line on Shift+Enter', async () => {
+    const fetchMock = stubSend(streamed({ type: 'done', messages: turns([]) }))
+    const host = await renderItem(<Field />, placed())
+    fireEvent.click(screen.getByText('Ask Claude'))
+    const box = screen.getByLabelText('Message to Claude')
+    fireEvent.change(box, { target: { value: 'Shorter?' } })
+    expect(fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fireEvent.keyDown(box, { key: 'Enter' })).toBe(false)
+    await vi.waitFor(() => expect(host.say).toHaveBeenLastCalledWith('Claude: Try this.'))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it("shows only Claude's wordings for this item", async () => {
@@ -163,7 +217,9 @@ describe('DialogChat', () => {
     )
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Use this wording: "Shipped it — weekly."' }))
-    expect(host.say).toHaveBeenLastCalledWith("Claude's wording is in the field. Save keeps it. It breaks a writing rule.")
+    await vi.waitFor(() =>
+      expect(host.saved).toHaveBeenCalledWith('Applied Claude\'s wording: "Shipped it — weekly.". It breaks a writing rule.', { kind: 'bullet', id: 8 }),
+    )
   })
 
   it('shows the checking step while the reply is still open', async () => {
@@ -243,6 +299,26 @@ describe('DialogChat', () => {
     expect(await screen.findByRole('button', { name: 'Checking…' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('button', { name: 'Checking…' })).toHaveFocus()
     await expectNoA11yViolations()
+  })
+
+  it('moves focus to the heading after checking again when no wording is waiting', async () => {
+    const unchecked = { ...REWORD, checked: false, state: 'applied' as const }
+    const [, reply] = turns([unchecked])
+    stubSend(streamed({ type: 'done', messages: turns([unchecked]) }), json({ ...reply, proposals: [{ ...unchecked, checked: true }] }))
+    await renderItem(
+      <>
+        <h3 id="item-dialog-heading" tabIndex={-1}>
+          The bullet
+        </h3>
+        <Field />
+      </>,
+      placed(),
+    )
+    fireEvent.click(screen.getByText('Ask Claude'))
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Shorter?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Check writing rules again' }))
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'The bullet' })).toHaveFocus())
   })
 
   it('says when checking again finds nothing', async () => {
