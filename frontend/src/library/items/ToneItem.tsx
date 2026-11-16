@@ -12,7 +12,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import { toneRulesApi } from '../../shared/api/toneRules'
+import { ruleLabel, toneRulesApi } from '../../shared/api/toneRules'
 import { savesNewTone, toneSetsApi, type ToneSet } from '../../shared/api/toneSets'
 import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
@@ -27,6 +27,7 @@ import UsedBy from '../UsedBy'
 import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
+import RuleEditor from './RuleEditor'
 import { useItemData } from './useItemData'
 
 const BUILT_IN_TONE_NOTE = "Built in, so it doesn't change. To vary it, make a copy."
@@ -36,8 +37,6 @@ interface Rule {
   id: number
   text: string
 }
-
-const ruleLabel = (text: string) => `"${shortBullet(text)}"`
 
 export default function ToneItem({ id }: { id: number }) {
   const host = useItemHost()
@@ -311,58 +310,5 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
         </button>
       </div>
     </form>
-  )
-}
-
-// A new rule's text, inside the tone's form, so it has no form of its own: its button puts the text
-// in the list. An empty rule says so instead.
-function RuleEditor({
-  label,
-  text,
-  applyLabel,
-  onText,
-  onApply,
-}: {
-  label: string
-  text: string
-  applyLabel: string
-  onText: (text: string) => void
-  onApply: () => void
-}) {
-  const [empty, setEmpty] = useState(false)
-  const errorId = useId()
-
-  return (
-    <div className="stacked-form">
-      <label>
-        {label}
-        <textarea
-          rows={3}
-          value={text}
-          aria-invalid={empty}
-          aria-describedby={empty ? errorId : undefined}
-          onChange={(event) => {
-            setEmpty(false)
-            onText(event.target.value)
-          }}
-        />
-      </label>
-      {empty && (
-        <p role="alert" id={errorId}>
-          Type the rule.
-        </p>
-      )}
-      <div className="actions">
-        <button
-          type="button"
-          onClick={() => {
-            if (!text.trim()) setEmpty(true)
-            else onApply()
-          }}
-        >
-          {applyLabel}
-        </button>
-      </div>
-    </div>
   )
 }

@@ -1,7 +1,8 @@
 // A section's dialog: rename it (following "Changing an item" in docs/FRONTEND_CHECKS.md), delete
 // it, and edit which narrative content, skill categories, roles, projects, bullets, and education
 // entries it lists. Each of those opens in the same dialog. Only its default kind and the kinds it
-// already lists show; the rest are under More options. A built-in section can't be hidden or
+// already lists show; the rest are under "Other kinds of content", so "More options" only ever
+// means saved items to add. A built-in section can't be hidden or
 // deleted, and a new title for it saves a new section.
 import { Fragment, useState, type ReactNode } from 'react'
 import { bulletsApi, shortBullet } from '../../shared/api/bullets'
@@ -81,7 +82,7 @@ export default function SectionItem({ id }: { id: number }) {
   )
   const [applyTo, setApplyTo] = useState<Use[]>([])
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
-  // Decided once when it loads, so a kind added to from More options stays where the user is
+  // Decided once when it loads, so a kind added to from "Other kinds of content" stays where the user is
   // working until the dialog opens again.
   const [shown, setShown] = useState<ContentKind[] | null>(null)
 
@@ -295,7 +296,7 @@ export default function SectionItem({ id }: { id: number }) {
         <Disclosure
           title={
             <>
-              More options <span className="visually-hidden">for {section.title}</span>
+              Other kinds of content <span className="visually-hidden">in {section.title}</span>
             </>
           }
           initiallyOpen={shownKinds.length === 0}

@@ -9,10 +9,11 @@ the same text is reused). Editing one follows "Changing an item" in docs/FRONTEN
 resumes and cover letters change only if the user picks them (apply_to), sent ones too, since
 tones aren't printed. Unless every one is picked, the edit is saved as a new tone with the name
 in the form, and the original is renamed to `earlier_name`; only the picked ones switch to the
-new one. Names are unique, counting the built-in ones (DUPLICATE). Any tone, built-in ones too,
-can be copied into a new one of the account's own with the same rules, to build on. Deleting a
-tone deletes only its list: its rules stay in the library, and the resumes and cover letters
-that used it keep going with no tone.
+new one. Names are unique, counting the built-in ones (DUPLICATE). A new tone can start with
+its rules, as when the user saves the tone Claude suggests for a posting (suggested_set). Any
+tone, built-in ones too, can be copied into a new one of the account's own with the same rules,
+to build on. Deleting a tone deletes only its list: its rules stay in the library, and the
+resumes and cover letters that used it keep going with no tone.
 """
 
 from datetime import datetime
@@ -23,6 +24,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.account import AccountId
+from app.claude import Claude
 from app.db import DbSession
 from app.documents import latest_tone_id
 from app.errors import AppError, ErrorCode
@@ -30,6 +32,7 @@ from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, check_unique_name
 from app.models import ToneRule, ToneSet
 from app.schemas import OptionalText, RequiredText
+from app.tone_suggestions import SuggestToneIn, ToneSuggestion, suggest_tone
 from app.tones import (
     USED_BY,
     check_earlier_name,
@@ -152,13 +155,29 @@ def get_one(tone_set_id: int, db: DbSession, account_id: AccountId) -> ToneSetOu
     return one_out(db, get_tone_item(db, ToneSet, tone_set_id, account_id))
 
 
+class NewToneSet(ToneSetIn):
+    # Its rules, in order: saved ones by id, and new text, which joins the library now.
+    rules: list[RuleChoice] = []
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_set(body: ToneSetIn, db: DbSession, account_id: AccountId) -> ToneSetOut:
+def create_set(body: NewToneSet, db: DbSession, account_id: AccountId) -> ToneSetOut:
+    """A new tone, with its rules (a tone Claude suggested, as the user edited it), or none."""
     check_unique_name(db, ToneSet.name, account_id, body.name, "tone")
+    rule_ids = chosen_rules(db, account_id, [], body.rules)
     tone_set = ToneSet(account_id=account_id, name=body.name)
     db.add(tone_set)
     db.flush()
+    set_rules(db, tone_set.tone_set_id, rule_ids)
     return one_out(db, tone_set)
+
+
+@router.post("/suggested")
+def suggested_set(body: SuggestToneIn, db: DbSession, account_id: AccountId,
+                  client: Claude) -> ToneSuggestion:
+    """Claude's tone for a posting's resume or cover letter (app/tone_suggestions.py), for the
+    user to edit and save. Saves nothing."""
+    return suggest_tone(db, client, account_id, body)
 
 
 @router.post("/{tone_set_id}/copies", status_code=status.HTTP_201_CREATED)

@@ -167,6 +167,7 @@ export function Row({
   source,
   flags,
   onReject,
+  rejectText = 'Reject',
   children,
 }: {
   name: ReactNode
@@ -178,6 +179,8 @@ export function Row({
   // Absent for what was already in the starting document, and for a rewording, which goes back
   // to the original instead.
   onReject?: () => void
+  // The button's text where taking it out isn't rejecting Claude's (a suggested tone's rules).
+  rejectText?: string
   children?: ReactNode
 }) {
   return (
@@ -187,8 +190,8 @@ export function Row({
         {source && <Badge source={source} />}
         {flags && flags.length > 0 && <span className="badge badge-flagged">Flagged</span>}
         {onReject && (
-          <button type="button" aria-label={`Reject ${label}`} onClick={onReject}>
-            Reject
+          <button type="button" aria-label={`${rejectText} ${label}`} onClick={onReject}>
+            {rejectText}
           </button>
         )}
       </div>
@@ -527,6 +530,13 @@ export default function DraftTree({
         )}
         {draft.starting_reason}
       </p>
+      {draft.tone && (
+        <p>
+          {draft.tone.reason
+                ? `Claude picked the "${draft.tone.name}" tone. ${draft.tone.reason}`
+                : `Uses the "${draft.tone.name}" tone, the usual one, since Claude's pick couldn't be used.`}
+        </p>
+      )}
       {draft.checked === false && (
         <div role="group" aria-labelledby={listId('unchecked')}>
           <p id={listId('unchecked')}>Claude couldn&apos;t check this draft against your writing rules, so nothing in it is flagged.</p>

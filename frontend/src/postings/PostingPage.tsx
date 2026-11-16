@@ -142,7 +142,7 @@ export function PostingPage({ id }: { id: number }) {
     const forPosting = { job_posting_id: id }
     const doc =
       choice.how === 'claude'
-        ? await api.tailor(name, forPosting, choice.toneSetId, choice.startFromId)
+        ? await api.tailor(name, forPosting, choice.toneSetId, choice.startFromId, choice.pickTone)
         : choice.how === 'copy'
           ? await api.copy(choice.fromId, name, forPosting)
           : choice.how === 'imported'
@@ -333,6 +333,11 @@ export function PostingPage({ id }: { id: number }) {
                     docs={docs[kind]}
                     toneSets={toneSets}
                     defaultTone={defaultTone}
+                    postingId={id}
+                    onToneSaved={async (toneSet) => {
+                      setToneSets(await toneSetsApi.list())
+                      setNotice(`Saved the tone "${toneSet.name}" and picked it for this ${singular}.`)
+                    }}
                     onStart={(choice) => start(kind, posting, choice)}
                   />
                 )}

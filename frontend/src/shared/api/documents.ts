@@ -146,10 +146,20 @@ export interface DraftGreeting {
   use_default: boolean
 }
 
+// The saved tone Claude picked ("Let Claude pick"), and why (empty when its pick couldn't be used
+// and the usual default was).
+export interface PickedTone {
+  tone_set_id: number
+  name: string
+  reason: string
+}
+
 export interface Draft {
   // The earlier one Claude started from, or null for none.
   starting_document: { id: number; name: string } | null
   starting_reason: string
+  // Null (or absent) when the user picked the tone.
+  tone?: PickedTone | null
   texts: ClaudeText[]
   sections: DraftSection[]
   new_sections?: { key: number; title: string }[]
@@ -184,6 +194,7 @@ export interface FirstDraft {
   // The starting document, the document's own tree (read from the user's file), or the library.
   started_from: 'document' | 'own' | 'library'
   starting_reason: string
+  tone?: PickedTone | null
   checked: boolean
   sections: (FirstDraftRow & { entries: FirstDraftEntry[] })[]
   // A cover letter's: Claude's greeting, the usual one then, and which one was kept.
@@ -306,13 +317,14 @@ export function docsApi(kind: DocKind) {
       one(api.post<Raw>(path, { name, ...forPosting, ...options })),
     // A posting's version started by Claude: empty, with Claude's suggestion in its draft to review.
     // If Claude fails (AI_UNAVAILABLE), nothing is created.
-    // With `startFromId`, Claude starts from that saved one instead of picking one.
-    tailor: (name: string, forPosting: ForPosting, toneSetId: number | null, startFromId: number | null = null) =>
+    // With `startFromId`, Claude starts from that saved one instead of picking one. With
+    // `pickTone` ("Let Claude pick"), Claude picks the saved tone instead of following toneSetId.
+    tailor: (name: string, forPosting: ForPosting, toneSetId: number | null, startFromId: number | null = null, pickTone = false) =>
       one(
         api.post<Raw>(`${path}/tailored`, {
           name,
           ...forPosting,
-          tone_set_id: toneSetId,
+          ...(pickTone ? { pick_tone: true } : { tone_set_id: toneSetId }),
           start_from_id: startFromId,
         }),
       ),

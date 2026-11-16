@@ -1,4 +1,5 @@
 // Tone rules: library items any tone can list. See backend/app/routers/tone_rules.py.
+import { shortBullet } from './bullets'
 import { api } from './client'
 import { refs, type Use } from './usage'
 
@@ -44,3 +45,6 @@ export const toneRulesApi = {
   setHidden: (id: number, hidden: boolean) => api.put<ToneRule>(`/tone-rules/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/tone-rules/${id}`),
 }
+
+// How a rule is named in buttons and announcements: its text, shortened when it's long, in quotes.
+export const ruleLabel = (text: string) => `"${shortBullet(text)}"`

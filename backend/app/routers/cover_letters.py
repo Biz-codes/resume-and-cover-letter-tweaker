@@ -77,6 +77,8 @@ class TailoredLetter(NewLetter):
     with start_from_id, that one (as resumes.TailoredResume)."""
 
     start_from_id: int | None = None
+    # "Let Claude pick": Claude picks the saved tone that fits best, in place of tone_set_id.
+    pick_tone: bool = False
 
 
 class LetterOut(LetterIn, DocInfo):
@@ -187,10 +189,11 @@ def tailor_letter(body: TailoredLetter, db: DbSession, account_id: AccountId,
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Claude tailors a cover letter only for a job posting.",
                        field="job_posting_id")
-    letter = new_letter(db, NewLetter.model_validate(body.model_dump(exclude={"start_from_id"},
-                                                                     exclude_unset=True)
-                                                     | {"empty": True}), account_id)
-    start_draft(db, client, COVER_LETTER, account_id, letter, start_from=body.start_from_id)
+    letter = new_letter(db, NewLetter.model_validate(
+        body.model_dump(exclude={"start_from_id", "pick_tone"}, exclude_unset=True)
+        | {"empty": True}), account_id)
+    start_draft(db, client, COVER_LETTER, account_id, letter, start_from=body.start_from_id,
+                pick_tone=body.pick_tone)
     db.refresh(letter)
     return detail(db, letter)
 

@@ -179,6 +179,46 @@ describe('PostingPage', () => {
     })
   })
 
+  it('has Claude pick the tone', async () => {
+    const created = { ...doc(20, 'English Teacher (Lincoln High)'), sections: [], output: { parts: [], text: '' } }
+    const fetchMock = stub(EMPTY, { 'POST /api/resumes/tailored': [{ status: 201, body: created }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start a resume' }))
+    fireEvent.change(screen.getByLabelText('Tone'), { target: { value: 'claude' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start resume' }))
+    expect(await screen.findByRole('heading', { name: 'Opened resume' })).toBeInTheDocument()
+    expect(sentBody(fetchMock, 'POST /api/resumes/tailored')).toEqual({
+      name: 'English Teacher at Lincoln High',
+      job_posting_id: 9,
+      pick_tone: true,
+      start_from_id: null,
+    })
+  })
+
+  it("saves a tone Claude suggested, says so, and picks it", async () => {
+    const startup = { ...WARM, tone_set_id: 8, name: 'Startup' }
+    stub(EMPTY, {
+      'POST /api/tone-sets/suggested': [{ status: 200, body: { name: 'Startup', reason: 'A small team.', rules: [] } }],
+      'GET /api/tone-rules': [{ status: 200, body: [] }],
+      'POST /api/tone-sets': [{ status: 201, body: startup }],
+      'GET /api/tone-sets': [
+        { status: 200, body: [WARM] },
+        { status: 200, body: [WARM, startup] },
+      ],
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start a resume' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest a new tone' }))
+    await screen.findByRole('textbox', { name: 'Tone name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save tone' }))
+    const notice = await screen.findByRole('alertdialog', { name: 'Saved the tone "Startup" and picked it for this resume.' })
+    await expectNoA11yViolations()
+    fireEvent.click(within(notice).getByRole('button', { name: 'OK' }))
+    const tone = screen.getByLabelText('Tone')
+    expect(tone).toHaveValue('8')
+    await vi.waitFor(() => expect(tone).toHaveFocus())
+  })
+
   it('starts a resume from pasted text, which Claude then tailors', async () => {
     const read = {
       header: null,

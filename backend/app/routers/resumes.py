@@ -69,6 +69,8 @@ class TailoredResume(NewResume):
     the earlier resume that fits best; with it, Claude starts from that one."""
 
     start_from_id: int | None = None
+    # "Let Claude pick": Claude picks the saved tone that fits best, in place of tone_set_id.
+    pick_tone: bool = False
 
 
 class CopyIn(BaseModel):
@@ -161,10 +163,11 @@ def tailor_resume(body: TailoredResume, db: DbSession, account_id: AccountId,
     if body.job_posting_id is None:
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Claude tailors a resume only for a job posting.", field="job_posting_id")
-    resume = new_resume(db, NewResume.model_validate(body.model_dump(exclude={"start_from_id"},
-                                                                     exclude_unset=True)
-                                                     | {"empty": True}), account_id)
-    start_draft(db, client, RESUME, account_id, resume, start_from=body.start_from_id)
+    resume = new_resume(db, NewResume.model_validate(
+        body.model_dump(exclude={"start_from_id", "pick_tone"}, exclude_unset=True)
+        | {"empty": True}), account_id)
+    start_draft(db, client, RESUME, account_id, resume, start_from=body.start_from_id,
+                pick_tone=body.pick_tone)
     db.refresh(resume)
     return detail(db, resume)
 

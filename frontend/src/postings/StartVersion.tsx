@@ -6,8 +6,10 @@
 // Claude from there. All but a copy take a tone; a copy keeps the original's. It uses the
 // posting's header and is named for the posting. The original of a copy never changes. It opens
 // in place of its button, so focus moves to the choice, and back to the button when it's
-// cancelled. See "Starting a version for a posting", "Claude's suggestions", and "Reading an
-// existing resume or cover letter" in docs/FRONTEND_CHECKS.md.
+// cancelled. When Claude tailors it, the Tone picker also offers "Let Claude pick", and beside it,
+// "Suggest a new tone" opens Claude's suggested tone in place of the form (SuggestTone); saving it
+// picks it here. See "Starting a version for a posting", "Claude's suggestions", "Claude's
+// suggested tone", and "Reading an existing resume or cover letter" in docs/FRONTEND_CHECKS.md.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError, toApiError } from '../shared/api/client'
 import { docsApi, KINDS, shownName, type Doc, type DocKind } from '../shared/api/documents'
@@ -19,10 +21,12 @@ import { offered } from '../shared/offered'
 import { sortByName } from '../shared/sortByName'
 import ImportReview from '../documents/ImportReview/ImportReview'
 import SourceField from '../documents/ImportReview/SourceField'
+import SuggestTone from './SuggestTone'
 
 export type StartChoice =
-  // `startFromId`: the saved one Claude starts from, or null for Claude to pick.
-  | { how: 'claude'; toneSetId: number | null; startFromId: number | null }
+  // `startFromId`: the saved one Claude starts from, or null for Claude to pick. With `pickTone`,
+  // Claude picks the saved tone too, and `toneSetId` is null.
+  | { how: 'claude'; toneSetId: number | null; startFromId: number | null; pickTone: boolean }
   | { how: 'copy'; fromId: number }
   | { how: 'scratch'; toneSetId: number | null }
   // What Claude read in the user's own file or text, as the user corrected it; with `tailor`,
@@ -31,20 +35,28 @@ export type StartChoice =
 
 type How = 'claude' | 'copy' | 'scratch' | 'upload' | 'paste'
 
+// The Tone picker's value for "Let Claude pick".
+const CLAUDE_PICKS = 'claude'
+
 export default function StartVersion({
   kind,
+  postingId,
   docs,
   toneSets,
   defaultTone = null,
+  onToneSaved,
   onStart,
 }: {
   kind: DocKind
+  postingId: number
   // Every resume or cover letter, to start a copy of.
   docs: Doc[]
   toneSets: ToneSet[]
   // The tone the form starts on: what a new one gets left alone (the most recently used, or
   // Professional). "None" can still be picked.
   defaultTone?: number | null
+  // A tone Claude suggested, as the user saved it: added to the page's tones, and said.
+  onToneSaved: (toneSet: ToneSet) => Promise<void>
   onStart: (choice: StartChoice) => Promise<void>
 }) {
   const { singular, plural } = KINDS[kind]
@@ -56,6 +68,7 @@ export default function StartVersion({
   const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
   const [imported, setImported] = useState<Imported | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
   const firstRef = useRef<HTMLInputElement>(null)
@@ -66,10 +79,15 @@ export default function StartVersion({
   const claudeFromId = `start-claude-from-${kind}`
   const sourceId = `start-source-${kind}`
   const errorId = `start-error-${kind}`
+  const toneId = `start-tone-${kind}`
+  const suggestId = `start-suggest-tone-${kind}`
 
+  // Not when coming back from Claude's suggested tone, which moves focus itself.
+  const returning = useRef(false)
   useEffect(() => {
-    if (open && !imported) firstRef.current?.focus()
-  }, [open, imported])
+    if (open && !imported && !suggesting && !returning.current) firstRef.current?.focus()
+    returning.current = false
+  }, [open, imported, suggesting])
 
   if (!open) {
     return (
@@ -88,7 +106,29 @@ export default function StartVersion({
     focusLater(buttonId)
   }
 
-  const toneSetId = tone ? Number(tone) : null
+  const pickTone = tone === CLAUDE_PICKS
+  const toneSetId = tone && !pickTone ? Number(tone) : null
+
+  if (suggesting) {
+    return (
+      <SuggestTone
+        kind={kind}
+        postingId={postingId}
+        onSaved={async (toneSet) => {
+          await onToneSaved(toneSet)
+          returning.current = true
+          setTone(String(toneSet.tone_set_id))
+          setSuggesting(false)
+          focusLater(toneId)
+        }}
+        onCancel={() => {
+          returning.current = true
+          setSuggesting(false)
+          focusLater(suggestId)
+        }}
+      />
+    )
+  }
 
   if (imported) {
     return (
@@ -137,7 +177,7 @@ export default function StartVersion({
         how === 'copy'
           ? { how, fromId: Number(from) }
           : how === 'claude'
-            ? { how, toneSetId, startFromId: claudeFrom ? Number(claudeFrom) : null }
+            ? { how, toneSetId, startFromId: claudeFrom ? Number(claudeFrom) : null, pickTone }
             : { how, toneSetId },
       )
     } catch (caught) {
@@ -193,6 +233,8 @@ export default function StartVersion({
               onChange={() => {
                 setHow(choice.value)
                 setError(null)
+                // "Let Claude pick" is only for Claude's tailoring.
+                if (choice.value !== 'claude' && pickTone) setTone(defaultTone === null ? '' : String(defaultTone))
               }}
             />
             {choice.label}
@@ -244,7 +286,8 @@ export default function StartVersion({
       {how !== 'copy' && (
         <label>
           Tone
-          <select value={tone} onChange={(event) => setTone(event.target.value)}>
+          <select id={toneId} value={tone} onChange={(event) => setTone(event.target.value)}>
+            {how === 'claude' && <option value={CLAUDE_PICKS}>Let Claude pick</option>}
             <option value="">None</option>
             {sortByName(offered(toneSets), toneLabel).map((item) => (
               <option key={item.tone_set_id} value={item.tone_set_id}>
@@ -253,6 +296,13 @@ export default function StartVersion({
             ))}
           </select>
         </label>
+      )}
+      {how === 'claude' && (
+        <div className="actions">
+          <button type="button" id={suggestId} onClick={() => setSuggesting(true)}>
+            Suggest a new tone
+          </button>
+        </div>
       )}
       {error && (
         <p role="alert" id={fromError || claudeFromError || sourceError ? errorId : undefined}>

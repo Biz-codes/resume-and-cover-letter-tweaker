@@ -141,6 +141,13 @@ describe('FirstDraft', () => {
     await expectNoA11yViolations()
   })
 
+  it('says which tone Claude picked', async () => {
+    renderKept({ ...KEPT, tone: { tone_set_id: 2, name: 'Technical', reason: 'The posting is about tools.' } })
+    const dialog = await openIt()
+    expect(dialog).toHaveTextContent('Claude picked the "Technical" tone. The posting is about tools.')
+    await expectNoA11yViolations()
+  })
+
   it("shows a cover letter's greeting, Claude's or the usual one", async () => {
     const greeting = { claude: 'Jordan Rivera', usual: 'Acme Hiring Team', reason: 'The posting names them.', use_default: false }
     renderKept({ ...KEPT, starting_document: null, started_from: 'library', greeting }, 'cover_letter')

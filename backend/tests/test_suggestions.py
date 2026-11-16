@@ -34,11 +34,13 @@ from app.models import (
 from app.suggestions import (
     LetterSection,
     LetterSuggestion,
+    PickedSuggestion,
     SuggestedBullet,
     SuggestedEntry,
     SuggestedSection,
     Suggestion,
 )
+from app.writing_check import Review
 from tests.test_documents import header, posting
 from tests.test_education_narrative_rules import tone as tone_with
 from tests.test_experience_projects_bullets import bullet, role, show_job
@@ -437,3 +439,81 @@ def test_a_letter_reads_the_postings_resume(client: TestClient, db: Session, acc
     claude.reply = Suggestion(starting_document_id=None, starting_reason="", sections=[])
     tailor(client, db, account_id)
     assert "_for_this_posting>" not in claude.calls[1]["messages"][0]["content"]
+
+
+def test_claude_can_pick_the_tone(client: TestClient, db: Session, account_id: int,
+                                  claude: FakeMessages):
+    """"Let Claude pick": Claude picks a saved tone first, which the document takes before its
+    writing is checked, and the draft (then the first draft) says which and why."""
+    warm = tone_with(db, account_id, "Warm", ["Sound friendly."])
+    hidden = tone_with(db, account_id, "Set aside", ["Hidden."])
+    hidden.hidden = True
+    earlier = resume(db, account_id, "Tech base", sent=True)
+    earlier.tone_set_id = warm.tone_set_id
+    summary = add(db, NarrativeContent(account_id=account_id, content="I build apps."))
+    add(db, SectionNarrativeContent(section_id=SUMMARY_SECTION_ID,
+                                    content_id=summary.content_id, position=1))
+    show_job(db, earlier, role(db, account_id, ["Shipped it"]), ["Shipped it"])
+    db.flush()
+    claude.reply = PickedSuggestion(
+        tone_set_id=warm.tone_set_id, tone_reason="  The posting is friendly. ",
+        starting_document_id=None, starting_reason="None.",
+        sections=[section(SUMMARY_SECTION_ID, entry("narrative", summary.content_id))])
+    claude.replies[Review] = Review(texts=[])
+
+    response = tailor(client, db, account_id, pick_tone=True)
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    assert body["tone_set_id"] == warm.tone_set_id
+    assert body["draft"]["tone"] == {"tone_set_id": warm.tone_set_id, "name": "Warm",
+                                     "reason": "The posting is friendly."}
+    tailoring, writing_check = claude.calls
+    assert tailoring["output_format"] is PickedSuggestion
+    # The tone's fields come first, since its rules steer everything after them.
+    assert list(PickedSuggestion.model_fields)[:2] == ["tone_set_id", "tone_reason"]
+    content = tailoring["messages"][0]["content"]
+    tones = json.loads(content.split("<tones>\n")[1].split("\n</tones>")[0])
+    # Every tone offered, built-in ones first, and never a hidden one.
+    assert tones[0] == {"id": PROFESSIONAL_TONE_ID, "name": "Professional",
+                        "rules": tones[0]["rules"]}
+    assert {"id": warm.tone_set_id, "name": "Warm", "rules": ["Sound friendly."]} in tones
+    assert hidden.tone_set_id not in [tone["id"] for tone in tones]
+    assert "Tone for this document" not in content
+    # Earlier documents say which tone they used.
+    documents = json.loads(tailoring["system"][1]["text"].split("<documents>\n")[1]
+                           .split("\n</documents>")[0])
+    assert documents[0]["tone"] == "Warm"
+    # The check reads the picked tone's rules.
+    assert "Sound friendly." in json.dumps(writing_check["system"])
+
+    finished = client.post(f"/api/resumes/{body['resume_id']}/draft/finish", json={"keep": []})
+    assert finished.status_code == 200, finished.json()
+    assert finished.json()["first_draft"]["tone"] == body["draft"]["tone"]
+
+
+def test_a_tone_claude_cant_pick_is_the_usual_default(client: TestClient, db: Session,
+                                                      account_id: int, claude: FakeMessages):
+    hidden = tone_with(db, account_id, "Set aside", ["Hidden."])
+    hidden.hidden = True
+    db.flush()
+    claude.reply = PickedSuggestion(tone_set_id=hidden.tone_set_id, tone_reason="Fits.",
+                                    starting_document_id=None, starting_reason="None.",
+                                    sections=[])
+    claude.replies[Review] = Review(texts=[])
+    body = tailor(client, db, account_id, pick_tone=True).json()
+    assert body["tone_set_id"] == PROFESSIONAL_TONE_ID
+    assert body["draft"]["tone"] == {"tone_set_id": PROFESSIONAL_TONE_ID,
+                                     "name": "Professional", "reason": ""}
+
+
+def test_a_tone_the_user_picks_is_followed(client: TestClient, db: Session, account_id: int,
+                                           claude: FakeMessages):
+    warm = tone_with(db, account_id, "Warm", ["Sound friendly."])
+    claude.replies[Review] = Review(texts=[])
+    body = tailor(client, db, account_id, tone_set_id=warm.tone_set_id).json()
+    assert body["tone_set_id"] == warm.tone_set_id
+    assert body["draft"]["tone"] is None
+    request = claude.calls[0]
+    assert request["output_format"] is Suggestion
+    assert "<tones>" not in request["messages"][0]["content"]
+    assert "Tone for this document:\n- Sound friendly." in request["messages"][0]["content"]

@@ -17,6 +17,8 @@ Prompt caching: the instructions and writing rules, then the library and earlier
 come first and are cached (they're the same for every request about this account's content
 until the library changes); the posting, the posting's other document (its resume, for a
 cover letter, or the other way around) when it has one, and the document's tone come last.
+With "Let Claude pick" (pick_tone), the offered tones come last instead, and the reply starts
+with the one Claude picks.
 """
 
 import json
@@ -30,7 +32,16 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.claude import ask
-from app.documents import COVER_LETTER, RESUME, EntryKind, Kind, doc_info, list_docs, load_tree
+from app.documents import (
+    COVER_LETTER,
+    RESUME,
+    EntryKind,
+    Kind,
+    doc_info,
+    latest_tone_id,
+    list_docs,
+    load_tree,
+)
 from app.errors import AppError, ErrorCode
 from app.models import (
     BulletPoint,
@@ -52,11 +63,12 @@ from app.models import (
     Skill,
     SkillCategory,
     SkillCategorySkill,
+    ToneSet,
     WritingRule,
     WritingRuleKind,
 )
 from app.plain_text import letter_output, resume_output
-from app.tones import rule_texts
+from app.tones import rule_texts, rules_of, visible
 from app.writing_check import TECHNICAL_EXCEPTIONS
 
 logger = logging.getLogger(__name__)
@@ -125,6 +137,32 @@ class LetterSuggestion(Suggestion):
     sections: list[LetterSection] = Field(description=WHOLE)
     addressee: str = Field(description='Everything after "Dear" in the greeting, or "".')
     addressee_reason: str
+
+
+# With "Let Claude pick" for the tone, the reply starts with the saved tone Claude picks, since
+# its rules steer everything after it. Listed last among the bases, so its fields come first.
+
+
+class TonePick(BaseModel):
+    tone_set_id: int = Field(description="The id of the saved tone this document follows, "
+                                         "picked before anything else.")
+    tone_reason: str
+
+
+class PickedSuggestion(Suggestion, TonePick):
+    pass
+
+
+class PickedLetterSuggestion(LetterSuggestion, TonePick):
+    pass
+
+
+class PickedTone(BaseModel):
+    """The saved tone Claude picked, and why (no reason when its pick couldn't be used)."""
+
+    tone_set_id: int
+    name: str
+    reason: str
 
 
 def new_title(section: SuggestedSection) -> str:
@@ -336,6 +374,8 @@ def documents_json(db: Session, kind: Kind, account_id: int, doc_id: int,
     docs = [doc for doc in list_docs(db, kind, account_id)
             if with_itself or getattr(doc, kind.doc_id) != doc_id]
     info = doc_info(db, kind, docs)
+    tones = dict(db.execute(select(ToneSet.tone_set_id, ToneSet.name).where(
+        ToneSet.tone_set_id.in_({doc.tone_set_id for doc in docs} - {None}))).all())
     found = []
     for doc in docs:
         this_id = getattr(doc, kind.doc_id)
@@ -348,6 +388,7 @@ def documents_json(db: Session, kind: Kind, account_id: int, doc_id: int,
             "name": doc.name,
             "made_for": f"{posting.role_title} at {posting.organization}" if posting else None,
             "sent": info[this_id].locked,
+            "tone": tones.get(doc.tone_set_id),
             "sections": [{"section_id": section.section_id, "title": section.title,
                           "entries": [{"kind": entry.kind, "item_id": entry.item_id,
                                        "skill_ids": [child.item_id for child in entry.skills],
@@ -377,6 +418,32 @@ def tone_text(db: Session, doc: Any) -> str:
     if not rules:
         return ""
     return "\n\nTone for this document:\n" + "\n".join(f"- {rule}" for rule in rules)
+
+
+PICK_TONE = """
+
+Pick this {doc}'s tone first, from the person's saved tones in the <tones> tags below (JSON, \
+each with its rules): the one that fits the posting best (its word choices, the role, and how \
+the organization describes itself), taking into account the tones the person used for earlier \
+{docs} made for similar postings (each one's "tone" in <documents>). Give its id as \
+tone_set_id, with a one-sentence tone_reason. Then write everything following that tone's \
+rules.
+<tones>
+{tones}
+</tones>"""
+
+
+def offered_tones(db: Session, account_id: int) -> list[ToneSet]:
+    """The tones Claude can pick from: the built-in ones and the account's, not hidden."""
+    return list(db.scalars(select(ToneSet).where(visible(ToneSet, account_id), ~ToneSet.hidden)
+                           .order_by(ToneSet.account_id.is_not(None), ToneSet.tone_set_id)))
+
+
+def pick_tone_text(db: Session, tones: list[ToneSet], one: str, many: str) -> str:
+    listed = [{"id": tone.tone_set_id, "name": tone.name,
+               "rules": [rule.rule_text for rule in rules_of(db, tone.tone_set_id)]}
+              for tone in tones]
+    return PICK_TONE.format(doc=one, docs=many, tones=json.dumps(listed, ensure_ascii=False))
 
 
 COMPANION = """\
@@ -428,12 +495,18 @@ def _words(kind: Kind) -> tuple[str, str]:
 
 
 def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
-            doc: Any, start_from: int | None = None) -> Suggestion:
+            doc: Any, start_from: int | None = None,
+            pick_tone: bool = False) -> tuple[Suggestion, PickedTone | None]:
     """Claude's suggestion for a posting's document, checked (see check). With `start_from`,
     Claude starts from that document instead of picking one, still looking through the whole
     library for better items: one the user chose, or the document itself (its tree just read
     from the user's own file, app/imports.py). One that isn't the account's own, or has nothing
-    in it, is VALIDATION_FAILED, before Claude is asked."""
+    in it, is VALIDATION_FAILED, before Claude is asked.
+
+    With `pick_tone` ("Let Claude pick"), Claude first picks the saved tone that fits best,
+    instead of following the document's, and the pick comes back with the suggestion. A pick
+    that isn't one of the tones offered is replaced with the usual default (latest_tone_id),
+    logged, with no reason."""
     doc_id = getattr(doc, kind.doc_id)
     posting = db.get(JobPosting, doc.job_posting_id)
     library = load_library(db, account_id)
@@ -465,8 +538,14 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
                 if letter and (posting.contacts or "").strip() else "")
     content = (f"Tailor a new {one} for this posting.{start}\n<posting>\n"
                f"Organization: {posting.organization}\nRole: {posting.role_title}\n\n"
-               f"{posting.description}\n</posting>{contacts}{other}{tone_text(db, doc)}")
-    reply_type = LetterSuggestion if letter else Suggestion
+               f"{posting.description}\n</posting>{contacts}{other}")
+    tones = offered_tones(db, account_id) if pick_tone else []
+    if pick_tone:
+        content += pick_tone_text(db, tones, one, many)
+        reply_type = PickedLetterSuggestion if letter else PickedSuggestion
+    else:
+        content += tone_text(db, doc)
+        reply_type = LetterSuggestion if letter else Suggestion
     system = [{"type": "text", "text": instructions},
               {"type": "text", "text": data, "cache_control": {"type": "ephemeral"}}]
     reply = ask(client, step=f"suggest {one}", system=system, content=content,
@@ -485,8 +564,21 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
     if start_from is not None:
         # The starting point is the one asked for, whichever id Claude gave.
         reply.starting_document_id = start_from
+    picked = _picked_tone(db, reply, tones, account_id, f"{one} {doc_id}") if pick_tone else None
     return check(reply, library, {document["id"] for document in documents},
-                 f"{one} {doc_id}")
+                 f"{one} {doc_id}"), picked
+
+
+def _picked_tone(db: Session, reply: Any, tones: list[ToneSet], account_id: int,
+                 where: str) -> PickedTone:
+    by_id = {tone.tone_set_id: tone for tone in tones}
+    tone = by_id.get(reply.tone_set_id)
+    if tone is not None:
+        return PickedTone(tone_set_id=tone.tone_set_id, name=tone.name,
+                          reason=" ".join(reply.tone_reason.split()))
+    logger.warning("Claude's suggestion for %s: left out tone %s", where, reply.tone_set_id)
+    fallback = db.get(ToneSet, latest_tone_id(db, account_id))
+    return PickedTone(tone_set_id=fallback.tone_set_id, name=fallback.name, reason="")
 
 
 def _left_out_most(reply: Suggestion, start: dict[str, Any] | None) -> bool:

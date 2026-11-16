@@ -178,7 +178,7 @@ describe('SectionsPage', () => {
     stub({}, [skills, FREELANCE])
     render(<SectionsPage />)
     const dialog = await card('Skills')
-    const more = within(dialog).getByRole('button', { name: 'More options for Skills' })
+    const more = within(dialog).getByRole('button', { name: 'Other kinds of content in Skills' })
     expect(more).toHaveAttribute('aria-expanded', 'false')
     expect(within(dialog).getByText('Skill categories (1)')).toBeInTheDocument()
     expect(within(dialog).getByText('Bullets (1)')).toBeInTheDocument()
@@ -190,11 +190,11 @@ describe('SectionsPage', () => {
     expect(within(dialog).getAllByText(/^(Narrative content|Roles|Projects|Education) \(0\)$/)).toHaveLength(4)
   })
 
-  it('opens More options from the start for a section that lists nothing', async () => {
+  it('opens its other kinds of content from the start for a section that lists nothing', async () => {
     stub()
     render(<SectionsPage />)
     const dialog = await card('Freelance')
-    expect(within(dialog).getByRole('button', { name: 'More options for Freelance' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(dialog).getByRole('button', { name: 'Other kinds of content in Freelance' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('warns that renaming a section a sent version uses saves a new one', async () => {

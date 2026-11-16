@@ -112,6 +112,13 @@ export default function FirstDraft({ kind, firstDraft }: { kind: DocKind; firstD
             )}
             {firstDraft.starting_reason}
           </p>
+          {firstDraft.tone && (
+            <p>
+              {firstDraft.tone.reason
+                ? `Claude picked the "${firstDraft.tone.name}" tone. ${firstDraft.tone.reason}`
+                : `Uses the "${firstDraft.tone.name}" tone, the usual one, since Claude's pick couldn't be used.`}
+            </p>
+          )}
           {!firstDraft.checked && (
             <p>Claude couldn&apos;t check this draft against your writing rules, so nothing in it is flagged.</p>
           )}

@@ -42,3 +42,5 @@ Being built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's dra
 
 ## Tone rules
 The user can add and adjust rules about tone, combine them into tones (one rule can be in many tones), and pick which tone applies to a resume or cover letter. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.
+
+Claude can help with tones too, and the user decides: when tailoring, "Let Claude pick" has Claude pick the saved tone that fits the posting, saying why, and "Suggest a new tone" has Claude write a tone for a posting, reusing the user's saved rules where they fit, which the user edits and saves (see "Claude's suggested tone" in [APP_FLOW.md](APP_FLOW.md)).

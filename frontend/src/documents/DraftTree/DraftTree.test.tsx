@@ -389,6 +389,21 @@ describe('DraftTree', () => {
     expect(await rows('Items in Experience')).toEqual(['Role: Engineer, AcmeSource: LibraryReject', 'Skills: Front EndSource: LibraryReject'])
   })
 
+  it('says which tone Claude picked, and why', async () => {
+    stubLibrary()
+    renderDraft({ ...DRAFT, tone: { tone_set_id: 2, name: 'Technical', reason: 'The posting is about tools.' } })
+    expect(await screen.findByText('Claude picked the "Technical" tone. The posting is about tools.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it("says when Claude's pick of a tone couldn't be used", async () => {
+    stubLibrary()
+    renderDraft({ ...DRAFT, tone: { tone_set_id: 1, name: 'Professional', reason: '' } })
+    expect(
+      await screen.findByText(`Uses the "Professional" tone, the usual one, since Claude's pick couldn't be used.`),
+    ).toBeInTheDocument()
+  })
+
   it('starts from its own tree when it was read from the user’s file', async () => {
     stubLibrary()
     renderDraft({ ...DRAFT, starting_document: null, starting_reason: 'Your own resume.' }, undefined, START)

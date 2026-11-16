@@ -60,6 +60,7 @@ from app.suggestions import (
     LetterSection,
     LetterSuggestion,
     Library,
+    PickedTone,
     SuggestedBullet,
     SuggestedEntry,
     SuggestedSection,
@@ -155,6 +156,8 @@ class StartingDocument(BaseModel):
 class Draft(BaseModel):
     starting_document: StartingDocument | None
     starting_reason: str
+    # The saved tone Claude picked ("Let Claude pick"), or None when the user picked one.
+    tone: PickedTone | None = None
     texts: list[ClaudeText]
     sections: list[DraftSection]
     new_sections: list[ClaudeSection] = []
@@ -214,6 +217,7 @@ class FirstDraft(BaseModel):
     # user's file), or the library alone.
     started_from: Literal["document", "own", "library"]
     starting_reason: str
+    tone: PickedTone | None = None
     checked: bool
     sections: list[FirstDraftSection]
     greeting: FirstDraftGreeting | None = None
@@ -278,12 +282,15 @@ def to_draft(suggestion: Suggestion, starting: StartingDocument | None,
 
 
 def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
-                doc: Any, start_from: int | None = None) -> None:
+                doc: Any, start_from: int | None = None, pick_tone: bool = False) -> None:
     """Claude's suggestion for a new posting's document, stored in its draft. With
     `start_from`, Claude starts from that document (see suggestions.suggest). When that's the
     document's own tree, the finished review replaces it, so there's no other document it's
-    based on."""
-    suggestion = suggest(db, client, kind, account_id, doc, start_from)
+    based on. With `pick_tone`, the document takes the tone Claude picked, before its writing is
+    checked, and the draft says which one and why."""
+    suggestion, picked = suggest(db, client, kind, account_id, doc, start_from, pick_tone)
+    if picked is not None:
+        doc.tone_set_id = picked.tone_set_id
     starting = None
     if suggestion.starting_document_id not in (None, getattr(doc, kind.doc_id)):
         pk = getattr(kind.doc, kind.doc_id)
@@ -291,6 +298,7 @@ def start_draft(db: Session, client: anthropic.Anthropic, kind: Kind, account_id
             pk == suggestion.starting_document_id))
         starting = StartingDocument(id=suggestion.starting_document_id, name=name)
     draft = to_draft(suggestion, starting, getattr(doc, "addressee", None))
+    draft.tone = picked
     _check_doc(db, client, account_id, doc, draft, keep_unchecked=True)
     doc.draft = draft.model_dump()
     db.flush()
@@ -625,5 +633,5 @@ def snapshot(db: Session, kind: Kind, account_id: int, doc: Any, draft: Draft) -
         claude=draft.greeting.addressee, usual=getattr(doc, "addressee", None),
         reason=draft.greeting.reason, use_default=draft.greeting.use_default)
     return FirstDraft(starting_document=start, started_from=started_from,
-                      starting_reason=draft.starting_reason, checked=draft.checked,
-                      sections=sections, greeting=greeting)
+                      starting_reason=draft.starting_reason, tone=draft.tone,
+                      checked=draft.checked, sections=sections, greeting=greeting)
