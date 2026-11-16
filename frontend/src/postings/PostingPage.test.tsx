@@ -18,6 +18,7 @@ const POSTING = {
   header_id: 2,
   applied_on: null,
   locked: false,
+  hidden: false,
   versions: [
     { kind: 'resume', id: 11, name: 'English Teacher (Lincoln High)', locked: false },
     { kind: 'cover_letter', id: 12, name: 'Lincoln letter', locked: false },
@@ -283,11 +284,10 @@ describe('PostingPage', () => {
   it('deletes it after listing what goes with it', async () => {
     stub({ ...POSTING, lone_interviews: 2 }, { 'DELETE /api/job-postings/9': [{ status: 204, body: null }] })
     renderPage()
-    // Edit details and Delete are inside the job description.
-    const description = await screen.findByRole('button', { name: 'Job description' })
-    expect(screen.queryByRole('button', { name: 'Delete job posting' })).not.toBeInTheDocument()
-    fireEvent.click(description)
+    // Delete is at the top of the page, not inside the closed job description.
+    expect(await screen.findByRole('button', { name: 'Job description' })).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(screen.getByRole('button', { name: 'Delete job posting' }))
+    expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument()
     const confirm = screen.getByRole('group', { name: 'Delete job posting for English Teacher at Lincoln High?' })
     expect(confirm).toHaveTextContent(
       'Its resumes and cover letters: Resume; Cover letter. They\'re deleted too.',
@@ -297,6 +297,45 @@ describe('PostingPage', () => {
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete job posting' }))
     expect(await screen.findByRole('heading', { name: 'All postings' })).toBeInTheDocument()
+  })
+
+  it('cancels a delete back to its button', async () => {
+    stub()
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete job posting' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Delete job posting' })).toHaveFocus())
+  })
+
+  it('hides and unhides it, keeping focus on the button', async () => {
+    const fetchMock = stub(POSTING, {
+      'PUT /api/job-postings/9/hidden': [
+        { status: 200, body: { ...POSTING, hidden: true } },
+        { status: 200, body: POSTING },
+      ],
+    })
+    renderPage()
+    const button = await screen.findByRole('button', { name: 'Hide' })
+    button.focus()
+    fireEvent.click(button)
+    await expectNotice('Hid "English Teacher at Lincoln High".')
+    expect(sentBody(fetchMock, 'PUT /api/job-postings/9/hidden')).toEqual({ hidden: true })
+    expect(screen.getByText('hidden')).toHaveClass('tag')
+    const unhide = screen.getByRole('button', { name: 'Unhide' })
+    await vi.waitFor(() => expect(unhide).toHaveFocus())
+    await expectNoA11yViolations()
+    fireEvent.click(unhide)
+    await expectNotice('Unhid "English Teacher at Lincoln High".')
+    expect(screen.queryByText('hidden')).not.toBeInTheDocument()
+  })
+
+  it('shows a failed hide', async () => {
+    stub(POSTING, { 'PUT /api/job-postings/9/hidden': [{ status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 
   it('shows a contact, not a link, for a job with no posting online', async () => {

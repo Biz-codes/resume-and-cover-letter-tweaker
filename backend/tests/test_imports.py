@@ -317,6 +317,14 @@ def test_claude_tailors_it_from_there(client: TestClient, db: Session, account_i
     [call] = claude.calls
     assert f"with id {doc['resume_id']}" in call["messages"][0]["content"]
     assert f'"id": {doc["resume_id"]}' in call["system"][1]["text"]
+    # Its first draft started from the user's own file, which holds what's marked Original.
+    kept = client.post(f"/api/resumes/{doc['resume_id']}/draft/finish",
+                       json={"keep": []}).json()["first_draft"]
+    assert (kept["started_from"], kept["starting_document"]) == ("own", None)
+    [summary] = kept["sections"]
+    assert [(row["name"], row["source"]) for row in [summary, *summary["entries"]]] == [
+        ("Summary", "original"), ("I build React tools.", "claude")]
+    assert summary["entries"][0]["rewording"]["original"] == "I build tools."
 
     # Only for a posting, and if Claude fails, nothing is saved.
     assert error(client.post("/api/resumes/imported/tailored", json=body | {

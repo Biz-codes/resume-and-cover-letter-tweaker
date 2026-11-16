@@ -266,8 +266,7 @@ function EntryChildren({
             choices={skillChoices}
             emptyText={`No skills shown with ${name} yet.`}
             readOnly={readOnly}
-            moreOptions
-            actions={readOnly ? undefined : skillActions}
+              actions={readOnly ? undefined : skillActions}
             onChange={onSkills}
           />
           {!readOnly && (
@@ -305,8 +304,7 @@ function EntryChildren({
             choices={bulletChoices}
             emptyText={`No bullets shown with ${name} yet.`}
             readOnly={readOnly}
-            moreOptions
-            actions={readOnly ? undefined : bulletActions}
+              actions={readOnly ? undefined : bulletActions}
             onChange={onBullets}
           />
           {!readOnly && (
@@ -439,7 +437,6 @@ function SectionBody({
         choices={choices}
         emptyText="Nothing here yet."
         readOnly={readOnly}
-        moreOptions
         // An empty section opens it, to show the Add content form.
         moreOpen={items.length === 0}
         moreChildren={
@@ -635,7 +632,6 @@ export default function DocumentTree({
         choices={shown ? offered(shown.sections).map((section) => ({ id: section.id, name: section.title })) : []}
         emptyText={readOnly ? 'No sections.' : 'No sections yet. Add one to start.'}
         readOnly={readOnly}
-        moreOptions
         moreChildren={
           <Writer
             idBase="sections"

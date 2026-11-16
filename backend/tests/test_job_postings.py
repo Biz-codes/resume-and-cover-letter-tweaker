@@ -349,3 +349,37 @@ def test_interview_links_are_checked(client: TestClient, db: Session, account_id
     assert client.get(url.removesuffix("/interviews")).json()["interviews"] == []
     assert error(client.post(f"/api/job-postings/{theirs.job_posting_id}/interviews",
                              json=day))[1] == "NOT_FOUND"
+
+
+def test_a_posting_can_be_hidden_and_unhidden(client: TestClient, db: Session, account_id: int):
+    first = created(client)
+    second = other_posting(client, "Debate Coach")
+    url = f"/api/job-postings/{second['job_posting_id']}"
+    sent = posting(db, account_id, sent=True)
+    letter = add(db, CoverLetter(account_id=account_id, name="Sent letter",
+                                 job_posting_id=sent.job_posting_id))
+    assert first["hidden"] is False
+
+    # Hidden, it isn't offered as another posting an interview covers.
+    response = client.put(f"{url}/hidden", json={"hidden": True})
+    assert response.status_code == 200, response.json()
+    assert response.json()["hidden"] is True
+    first_url = f"/api/job-postings/{first['job_posting_id']}"
+    assert client.get(first_url).json()["same_organization"] == []
+    listed = {item["job_posting_id"]: item["hidden"] for item in
+              client.get("/api/job-postings").json()}
+    assert listed[second["job_posting_id"]] is True
+
+    # An applied one can be hidden too, and its documents don't change.
+    sent_url = f"/api/job-postings/{sent.job_posting_id}"
+    assert client.put(f"{sent_url}/hidden", json={"hidden": True}).json()["hidden"] is True
+    db.expire_all()
+    assert (db.get(CoverLetter, letter.letter_id).hidden,
+            db.get(CoverLetter, letter.letter_id).job_posting_id) == (False, sent.job_posting_id)
+
+    assert client.put(f"{url}/hidden", json={"hidden": False}).json()["hidden"] is False
+    assert [item["role_title"] for item in client.get(first_url).json()["same_organization"]] == [
+        "Debate Coach"]
+    theirs = posting(db, add(db, Account()).account_id, sent=False)
+    assert error(client.put(f"/api/job-postings/{theirs.job_posting_id}/hidden",
+                            json={"hidden": True}))[:2] == (404, "NOT_FOUND")

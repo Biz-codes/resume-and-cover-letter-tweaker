@@ -16,6 +16,7 @@ const POSTING: PostingDetail = {
   header_id: 2,
   applied_on: null,
   locked: false,
+  hidden: false,
   versions: [],
   updated_at: null,
   suggested_header: null,

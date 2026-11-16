@@ -38,16 +38,6 @@
   cursor: grabbing;
 }
 
-/* The picker's label shares the row with the picker, which shrinks before the page would scroll. */
-.picker {
-  display: flex;
-  flex: 1 1 16rem;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
 .row-actions {
   display: flex;
   flex-wrap: wrap;

@@ -1,11 +1,14 @@
 // A tone's dialog: edit it, or delete it. A tone is saved whole: its name and its list of rules,
-// where saved rules are added (from the library's tone rules, which a tone shares with others) and
-// new ones written, reordered, and removed in the form, each change announced (the list says its
-// own), and saved together with Save. A rule's own text is edited in its dialog (ToneRuleItem),
+// where saved rules are checked and added (from the library's tone rules, which a tone shares with
+// others, under "More options", as in a resume's tree) and new ones written there, reordered, and
+// removed in the form, each change announced (the list says its own), and saved together with
+// Save. A rule's own text is edited in its dialog (ToneRuleItem),
 // from the Tones page. Saving follows "Changing an item" in docs/FRONTEND_CHECKS.md: resumes and
 // cover letters change only if the user picks them, sent ones too (tagged "sent"), since tones
 // aren't printed. Tone names are unique, so when saving adds a new tone, the form asks what
-// to call the earlier one (which the rest keep), starting from "[name] (earlier)".
+// to call the earlier one (which the rest keep), starting from "[name] (earlier)". Any tone, a
+// built-in one too, can be copied into a new one of the user's own with the same rules, to build
+// on; the dialog then shows the copy.
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -13,7 +16,9 @@ import { toneRulesApi } from '../../shared/api/toneRules'
 import { savesNewTone, toneSetsApi, type ToneSet } from '../../shared/api/toneSets'
 import { anyLocked, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
+import NameForm from '../../shared/components/NameForm/NameForm'
 import OrderedList from '../../shared/components/OrderedList/OrderedList'
+import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import { offered } from '../../shared/offered'
 import ApplyChoice from '../ApplyChoice'
 import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
@@ -24,7 +29,7 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 
-const BUILT_IN_TONE_NOTE = "Built in, so it doesn't change. To vary it, make a tone of your own and add its rules."
+const BUILT_IN_TONE_NOTE = "Built in, so it doesn't change. To vary it, make a copy."
 
 // A rule in the form: a saved one by its id, or new text, which has a negative id until it's saved.
 interface Rule {
@@ -73,6 +78,7 @@ export default function ToneItem({ id }: { id: number }) {
           </div>
         }
       >
+        <CopyTone toneSet={toneSet} />
         <UsedBy uses={toneSet.used_by} />
       </ItemParts>
     )
@@ -104,8 +110,50 @@ export default function ToneItem({ id }: { id: number }) {
         />
       )}
     >
+      <CopyTone toneSet={toneSet} />
       <UsedBy uses={toneSet.used_by} />
     </ItemParts>
+  )
+}
+
+// "Make a copy": a new tone of the user's own with the same rules, named in place (starting from
+// "Copy of [name]"). The dialog then shows the copy, with Back to this one, and says so; Cancel
+// goes back to the button.
+function CopyTone({ toneSet }: { toneSet: ToneSet }) {
+  const host = useItemHost()
+  const [naming, setNaming] = useState(false)
+  const focusLater = useFocusLater()
+  const buttonId = `${useId()}-copy`
+
+  if (naming) {
+    // Named, since the tone's own form has a Cancel too.
+    return (
+      <div role="group" aria-label={`Make a copy of "${toneSet.name}"`}>
+      <NameForm
+        label="Name of the copy"
+        field="name"
+        initial={`Copy of ${toneSet.name}`.slice(0, 100)}
+        submitLabel="Make copy"
+        onSave={async (name) => {
+          const copy = await toneSetsApi.copy(toneSet.tone_set_id, name)
+          await host.refresh()
+          host.open({ kind: 'tone', id: copy.tone_set_id, title: copy.name })
+          host.say(`Made a copy of "${toneSet.name}" named "${copy.name}", with the same rules.`)
+        }}
+        onCancel={() => {
+          setNaming(false)
+          focusLater(buttonId)
+        }}
+      />
+      </div>
+    )
+  }
+  return (
+    <div className="actions">
+      <button type="button" id={buttonId} aria-label={`Make a copy of "${toneSet.name}"`} onClick={() => setNaming(true)}>
+        Make a copy
+      </button>
+    </div>
   )
 }
 
@@ -214,7 +262,12 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
               group: rule.builtIn ? 'Built-in rules' : 'Your rules',
             }))}
           emptyText="No rules yet."
-          // Reordered, removed, or a saved rule added, in the form only.
+          // Saved rules are checked and added together, as in a resume's tree, with a new rule's
+          // field in the same level.
+          moreChildren={
+            <RuleEditor label={`New rule for ${toneSet.name}`} text={newRule} applyLabel="Add rule" onText={setNewRule} onApply={addRule} />
+          }
+          // Reordered, removed, or saved rules added, in the form only.
           onChange={async (ids) => {
             setRules(
               ids
@@ -224,7 +277,6 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
             )
           }}
         />
-        <RuleEditor label={`New rule for ${toneSet.name}`} text={newRule} applyLabel="Add rule" onText={setNewRule} onApply={addRule} />
       </Collapsible>
       {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} sentToo applyTo={applyTo} onChange={setApplyTo} />}
       {splits && (

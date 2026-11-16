@@ -25,7 +25,9 @@ under a category or project that doesn't list it yet is listed there in the libr
 page. Any of Claude's
 texts the user didn't use is kept in the library the same way only if the user asks. Claude's
 new sections the draft still has are added to the library first (or the saved one with the same
-title is used).
+title is used). Before that, the draft as it was approved is kept to look back on (snapshot, a
+FirstDraft in the document's `first_draft`): every row the user kept, with its name or text as it
+is then, so later edits to the document or the library don't change it.
 """
 
 import logging
@@ -36,7 +38,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.documents import EntryKind, Kind
+from app.documents import EntryKind, Kind, SectionTree, load_tree
 from app.errors import AppError, ErrorCode
 from app.library import append
 from app.models import (
@@ -161,6 +163,60 @@ class Draft(BaseModel):
     item_flags: list[ItemFlags] = []
     # False when the writing check couldn't run (Claude failed), so nothing is flagged.
     checked: bool = False
+
+
+Source = Literal["original", "library", "claude"]
+
+
+class Rewording(BaseModel):
+    """Both wordings of an item Claude reworded, and whether the user went back to the original."""
+
+    claude: str
+    original: str
+    use_original: bool
+
+
+class FirstDraftRow(BaseModel):
+    """A kept row of the approved draft: its name or text in use, where it came from (the
+    review's badge), the writing rules that wording broke, and Claude's reason."""
+
+    name: str
+    source: Source
+    reason: str = ""
+    flags: list[Flag] = []
+    rewording: Rewording | None = None
+
+
+class FirstDraftEntry(FirstDraftRow):
+    kind: EntryKind
+    skills: list[FirstDraftRow] = []
+    bullets: list[FirstDraftRow] = []
+
+
+class FirstDraftSection(FirstDraftRow):
+    entries: list[FirstDraftEntry] = []
+
+
+class FirstDraftGreeting(BaseModel):
+    """Claude's greeting, the letter's usual one then, and which one the user kept."""
+
+    claude: str
+    usual: str | None
+    reason: str
+    use_default: bool
+
+
+class FirstDraft(BaseModel):
+    """Claude's draft as it was approved, kept to look back on (only what the user kept)."""
+
+    starting_document: StartingDocument | None
+    # Where Claude started from: the starting document, the document's own tree (read from the
+    # user's file), or the library alone.
+    started_from: Literal["document", "own", "library"]
+    starting_reason: str
+    checked: bool
+    sections: list[FirstDraftSection]
+    greeting: FirstDraftGreeting | None = None
 
 
 class DraftSections(BaseModel):
@@ -477,3 +533,97 @@ def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[
          "bullet_ids": [placed_id(bullet.bullet_id, bullet.text_key, bullet.use_original)
                         for bullet in entry.bullets]}
         for entry in section.entries]} for section in draft.sections]
+
+
+def _item_name(library: Library, kind: str, item_id: int) -> str:
+    """An item's name as the page shows it (frontend/src/shared/api/experience.ts and the like)."""
+    item = library.items[kind].get(item_id, {})
+    if kind in ("narrative", "bullet"):
+        return item.get("text", "")
+    if kind == "category":
+        return item.get("name", "")
+    if kind == "experience":
+        name = f"{item.get('role_title', '')}, {item.get('organization', '')}"
+        return f"{name} ({item['dates']})" if item.get("dates") else name
+    if kind == "project":
+        title = item.get("project_title", "")
+        return f"{title} ({item['done_for']})" if item.get("done_for") else title
+    name = f"{item.get('degree', '')}, {item.get('institution', '')}"
+    return f"{name} ({item['graduation']})" if item.get("graduation") else name
+
+
+def snapshot(db: Session, kind: Kind, account_id: int, doc: Any, draft: Draft) -> FirstDraft:
+    """The draft as the user approves it, with every kept row's name or text as it is now, and
+    the badge the review showed it with: "claude" for Claude's wording in use, else "original"
+    when the document Claude started from (or the document's own tree, read from the user's
+    file) has it, else "library". Call it before the draft's rows are saved."""
+    library = load_library(db, account_id)
+    texts = {text.key: text for text in draft.texts}
+    start = draft.starting_document
+    start_tree: list[SectionTree] = []
+    if start is not None:
+        pk = getattr(kind.doc, kind.doc_id)
+        if db.scalar(select(func.count()).select_from(kind.doc).where(
+                pk == start.id, kind.doc.account_id == account_id)):
+            start_tree = load_tree(db, kind, start.id)
+        started_from = "document"
+    else:
+        start_tree = load_tree(db, kind, getattr(doc, kind.doc_id))
+        started_from = "own" if start_tree else "library"
+    start_entries = [entry for section in start_tree for entry in section.entries]
+    start_sections = {section.section_id for section in start_tree}
+    start_items = {(entry.kind, entry.item_id) for entry in start_entries}
+    start_bullets = ({entry.item_id for entry in start_entries if entry.kind == "bullet"}
+                     | {bullet.item_id for entry in start_entries for bullet in entry.bullets})
+    start_skills = {skill.item_id for entry in start_entries for skill in entry.skills}
+    item_flags = {(row.kind, row.item_id): row.flags for row in draft.item_flags}
+    titles = {new.key: new.title for new in draft.new_sections}
+
+    def text_row(text_kind: Literal["narrative", "bullet"], item_id: int | None,
+                 text_key: int | None, use_original: bool, reason: str,
+                 in_start: bool) -> FirstDraftRow:
+        claude = texts.get(text_key) if text_key is not None else None
+        saved = _item_name(library, text_kind, item_id) if item_id is not None else ""
+        if claude is not None and not use_original:
+            name, source, flags = claude.text, "claude", claude.flags
+        else:
+            name = saved
+            source = "original" if in_start else "library"
+            flags = item_flags.get((text_kind, item_id), []) if item_id is not None else []
+        rewording = (Rewording(claude=claude.text, original=saved, use_original=use_original)
+                     if claude is not None and item_id is not None else None)
+        return FirstDraftRow(name=name, source=source, reason=reason, flags=flags,
+                             rewording=rewording)
+
+    def entry_row(entry: DraftEntry) -> FirstDraftEntry:
+        in_start = entry.item_id is not None and (entry.kind, entry.item_id) in start_items
+        if entry.kind in ("narrative", "bullet"):
+            row = text_row(entry.kind, entry.item_id, entry.text_key, entry.use_original,
+                           entry.reason, in_start)
+        else:
+            row = FirstDraftRow(name=_item_name(library, entry.kind, entry.item_id),
+                                source="original" if in_start else "library",
+                                reason=entry.reason)
+        return FirstDraftEntry(
+            **row.model_dump(), kind=entry.kind,
+            skills=[FirstDraftRow(name=library.items["skill"].get(skill_id, {}).get("name", ""),
+                                  source="original" if skill_id in start_skills else "library")
+                    for skill_id in entry.skill_ids],
+            bullets=[text_row("bullet", bullet.bullet_id, bullet.text_key, bullet.use_original,
+                              bullet.reason,
+                              bullet.bullet_id is not None and bullet.bullet_id in start_bullets)
+                     for bullet in entry.bullets])
+
+    sections = [FirstDraftSection(
+        name=(titles.get(section.new_key, "") if section.section_id is None
+              else library.sections.get(section.section_id, "")),
+        source=("claude" if section.section_id is None
+                else "original" if section.section_id in start_sections else "library"),
+        reason=section.reason, entries=[entry_row(entry) for entry in section.entries])
+        for section in draft.sections]
+    greeting = draft.greeting and FirstDraftGreeting(
+        claude=draft.greeting.addressee, usual=getattr(doc, "addressee", None),
+        reason=draft.greeting.reason, use_default=draft.greeting.use_default)
+    return FirstDraft(starting_document=start, started_from=started_from,
+                      starting_reason=draft.starting_reason, checked=draft.checked,
+                      sections=sections, greeting=greeting)

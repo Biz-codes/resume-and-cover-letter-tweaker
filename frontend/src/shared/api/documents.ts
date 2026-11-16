@@ -159,6 +159,37 @@ export interface Draft {
   checked?: boolean
 }
 
+// Claude's draft as it was approved (backend/app/drafts.py, snapshot): only what the user kept,
+// each row with its name or text as it was then, so later edits don't change it. `source` is the
+// review's badge.
+export type DraftSource = 'original' | 'library' | 'claude'
+
+export interface FirstDraftRow {
+  name: string
+  source: DraftSource
+  reason: string
+  flags: WritingFlag[]
+  // Both wordings of an item Claude reworded, and whether the user went back to the original.
+  rewording: { claude: string; original: string; use_original: boolean } | null
+}
+
+export interface FirstDraftEntry extends FirstDraftRow {
+  kind: EntryKind
+  skills: FirstDraftRow[]
+  bullets: FirstDraftRow[]
+}
+
+export interface FirstDraft {
+  starting_document: { id: number; name: string } | null
+  // The starting document, the document's own tree (read from the user's file), or the library.
+  started_from: 'document' | 'own' | 'library'
+  starting_reason: string
+  checked: boolean
+  sections: (FirstDraftRow & { entries: FirstDraftEntry[] })[]
+  // A cover letter's: Claude's greeting, the usual one then, and which one was kept.
+  greeting: { claude: string; usual: string | null; reason: string; use_default: boolean } | null
+}
+
 // The keys of Claude's texts the draft uses (not gone back to the original). The rest can be kept
 // in the library for later when the review is finished.
 export function textsInUse(sections: DraftSection[]) {
@@ -181,6 +212,9 @@ export interface DocDetail extends Doc {
   // The document as plain text, in parts (header, each section, greeting, sign-off).
   output: { parts: OutputPart[]; text: string }
   draft: Draft | null
+  // Claude's draft as it was approved, kept to look back on; absent or null for one not started
+  // with Claude, or approved before it was kept.
+  first_draft?: FirstDraft | null
 }
 
 export interface KindInfo {

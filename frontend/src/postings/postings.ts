@@ -22,6 +22,8 @@ export interface Posting extends PostingFields {
   applied_on: string | null
   // Applied to: its resumes and cover letters are a record of what was sent.
   locked: boolean
+  // Set aside: listed last under "Hidden", and not offered anywhere new. Nothing else changes.
+  hidden: boolean
   // Its resumes, then its cover letters.
   versions: Use[]
   updated_at: string | null
@@ -125,6 +127,8 @@ export const postingsApi = {
     api.put<PostingDetail>(`/job-postings/${id}/interviews/${interviewId}`, { ...fields, also_posting_ids: also }),
   // Removes it from every posting it's linked to.
   deleteInterview: (id: number, interviewId: number) => api.delete(`/job-postings/${id}/interviews/${interviewId}`),
+  // Hides or unhides it; its resumes, cover letters, and interviews don't change.
+  setHidden: (id: number, hidden: boolean) => api.put<PostingDetail>(`/job-postings/${id}/hidden`, { hidden }),
   // Deletes its resumes and cover letters, and the interviews only it is linked to.
   delete: (id: number) => api.delete(`/job-postings/${id}`),
 }

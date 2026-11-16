@@ -153,13 +153,13 @@ describe('SectionsPage', () => {
   it('offers categories to list, but never "Other"', async () => {
     const fetchMock = stub({ 'PUT /api/sections/2/skill-categories': [{ status: 200, body: SKILLS }] })
     render(<SectionsPage />)
-    const select = within(await card('Skills')).getByLabelText('Choose one to add to Skills skill categories')
-    expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'None chosen',
-      'Front End',
-    ])
-    fireEvent.change(select, { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Skills skill categories' }))
+    const skills = await card('Skills')
+    fireEvent.click(within(skills).getByRole('button', { name: 'More options for Skills skill categories (1)' }))
+    const offeredOnes = within(skills).getByRole('group', { name: 'Choose any to add to Skills skill categories' })
+    expect(within(offeredOnes).getAllByRole('checkbox').map((box) => box.closest('label')!.textContent)).toEqual(['Front End'])
+    await expectNoA11yViolations()
+    fireEvent.click(within(offeredOnes).getByRole('checkbox', { name: 'Front End' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add checked to Skills skill categories' }))
     await screen.findAllByText('Back End')
     expect(sentBody(fetchMock, 'PUT /api/sections/2/skill-categories')).toEqual({ category_ids: [3, 2] })
   })
@@ -286,9 +286,9 @@ describe('SectionsPage', () => {
     render(<SectionsPage />)
     const freelance = await card('Freelance')
     expect(within(freelance).getByText('Roles (0)')).toBeInTheDocument()
-    const picker = within(freelance).getByLabelText('Choose one to add to Freelance roles')
-    fireEvent.change(picker, { target: { value: '9' } })
-    fireEvent.click(within(freelance).getByRole('button', { name: 'Add to Freelance roles' }))
+    fireEvent.click(within(freelance).getByRole('button', { name: /^More options for Freelance roles/ }))
+    fireEvent.click(within(freelance).getByRole('checkbox', { name: 'Engineer, Acme' }))
+    fireEvent.click(within(freelance).getByRole('button', { name: 'Add checked to Freelance roles' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/sections/6/experience')).toEqual({ experience_ids: [9] }),
     )
@@ -305,8 +305,8 @@ describe('SectionsPage', () => {
     render(<SectionsPage />)
     const freelance = await card('Freelance')
     expect(within(freelance).getByText('Roles (0)')).toBeInTheDocument()
-    expect(within(freelance).queryByLabelText('Choose one to add to Freelance roles')).not.toBeInTheDocument()
-    expect(within(freelance).getByLabelText('Choose one to add to Freelance education')).toBeInTheDocument()
+    expect(freelance).toHaveTextContent('No more options for Freelance roles.')
+    expect(within(freelance).getByRole('button', { name: 'More options for Freelance education (1)' })).toBeInTheDocument()
   })
 
   it("writes narrative content in a section and saves its education list", async () => {
@@ -329,10 +329,9 @@ describe('SectionsPage', () => {
         'Added the narrative content "I take on short projects.".',
       ),
     )
-    const picker = within(freelance).getByLabelText('Choose one to add to Freelance education')
-    expect(within(picker).getByRole('option', { name: 'B.A. in English, State University (May 2015)' })).toBeInTheDocument()
-    fireEvent.change(picker, { target: { value: '7' } })
-    fireEvent.click(within(freelance).getByRole('button', { name: 'Add to Freelance education' }))
+    fireEvent.click(within(freelance).getByRole('button', { name: 'More options for Freelance education (1)' }))
+    fireEvent.click(within(freelance).getByRole('checkbox', { name: 'B.A. in English, State University (May 2015)' }))
+    fireEvent.click(within(freelance).getByRole('button', { name: 'Add checked to Freelance education' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/sections/6/education')).toEqual({ education_ids: [7] }),
     )

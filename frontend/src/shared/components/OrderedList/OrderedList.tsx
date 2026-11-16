@@ -9,8 +9,7 @@
 //   another row.
 // Each step is announced in the list's live region. Focus never drops to the top of the
 // page: it stays on the moving item's handle, removing an item moves focus to the list, and
-// adding one moves it back to the picker (with `moreOptions`, it stays on Add, or goes to the
-// list once nothing is left to add).
+// adding stays on Add, or goes to the list once nothing is left to add.
 //
 // A row can also open and close (`details`): its name becomes a disclosure button that shows
 // what's under the item (a section's contents, a role's bullets) below the row. With
@@ -19,13 +18,12 @@
 // With `where`, each row's buttons also say where the list is ("Move React under Front End in
 // Skills"), for a page that shows the same item in more than one list (a resume's tree).
 //
-// Adding is from a picker, or with `moreOptions`, from checkboxes behind a "More options" level
-// (MoreOptions), for the lists in a resume's or cover letter's tree, which start with defaults;
+// Adding is from checkboxes behind a "More options" level (MoreOptions), closed to start, the same
+// in a resume's or cover letter's tree and in a library dialog: check any number, then Add;
 // `moreChildren` adds other ways to add inside that level.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
 import MoreOptions from '../MoreOptions'
-import { sortByName } from '../../sortByName'
 import styles from './OrderedList.module.css'
 
 // Ids are numbers, or strings for a list that mixes kinds of item (a section's items in a
@@ -37,7 +35,7 @@ export interface ListItem<K extends ListKey = number> {
   name: string
   // A shorter name for the buttons' labels, when the name is long (a bullet point).
   label?: string
-  // For choices: the heading the picker shows it under. Groups appear in the order first seen.
+  // For choices: the heading More options shows it under. Groups appear in the order first seen.
   group?: string
 }
 
@@ -48,16 +46,6 @@ const placed = (name: string, where?: string) => (where ? `${name} ${where}` : n
 const DRAG_THRESHOLD = 4
 
 type Moving<K> = { id: K; order: K[]; dragging: boolean }
-
-// Choices in their groups, in the order each group first appears.
-function grouped<K extends ListKey>(choices: ListItem<K>[]) {
-  const groups = new Map<string, ListItem<K>[]>()
-  for (const choice of choices) {
-    const group = choice.group ?? ''
-    groups.set(group, [...(groups.get(group) ?? []), choice])
-  }
-  return [...groups].map(([group, options]) => [group, sortByName(options, (choice) => choice.name)] as const)
-}
 
 export default function OrderedList<K extends ListKey = number>({
   label,
@@ -70,7 +58,6 @@ export default function OrderedList<K extends ListKey = number>({
   details,
   onOpen,
   readOnly = false,
-  moreOptions = false,
   moreChildren,
   moreOpen = false,
   onAdd,
@@ -94,9 +81,7 @@ export default function OrderedList<K extends ListKey = number>({
   onOpen?: (item: ListItem<K>) => void
   // Names only: no reordering, adding, or removing (a sent version, or before editing starts).
   readOnly?: boolean
-  // Add any number of the choices at once, from checkboxes, instead of one from a picker.
-  moreOptions?: boolean
-  // With `moreOptions`: more inside the "More options" level, and whether it starts open.
+  // More inside the "More options" level (other ways to add), and whether it starts open.
   moreChildren?: ReactNode
   moreOpen?: boolean
   // Saves added items, when adding isn't saving the whole list (placing items with defaults).
@@ -104,14 +89,12 @@ export default function OrderedList<K extends ListKey = number>({
   onChange: (ids: K[]) => Promise<void>
 }) {
   const [error, setError] = useState<ApiError | null>(null)
-  const [adding, setAdding] = useState('')
   const [moving, setMoving] = useState<Moving<K> | null>(null)
   // The order just dropped, shown until the saved list comes back, so rows don't jump back.
   const [saving, setSaving] = useState<K[] | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const [focusId, setFocusId] = useState<{ id: K } | null>(null)
   const groupRef = useRef<HTMLDivElement>(null)
-  const pickerRef = useRef<HTMLSelectElement>(null)
   const handles = useRef(new Map<K, HTMLButtonElement>())
   const rows = useRef(new Map<K, HTMLLIElement>())
   // A press on a handle that may become a drag (order is set once it does). Its pointer moves
@@ -426,50 +409,10 @@ export default function OrderedList<K extends ListKey = number>({
           })}
         </ol>
       )}
-      {!readOnly && moreOptions && !moving && (
+      {!readOnly && !moving && (
         <MoreOptions label={label} choices={available} onAdd={addChecked} initiallyOpen={moreOpen}>
           {moreChildren}
         </MoreOptions>
-      )}
-      {!readOnly && !moreOptions && available.length > 0 && !moving && (
-        <div className="actions">
-          {/* The list's name is in the label for screen readers, after the visible text (WCAG 2.5.3). */}
-          <label className={styles.picker}>
-            Choose one to add<span className="visually-hidden"> to {label}</span>
-            <select ref={pickerRef} value={adding} onChange={(event) => setAdding(event.target.value)}>
-              <option value="">None chosen</option>
-              {grouped(available).map(([group, options]) => {
-                const rendered = options.map((choice) => (
-                  <option key={choice.id} value={String(choice.id)}>
-                    {choice.name}
-                  </option>
-                ))
-                return group ? (
-                  <optgroup key={group} label={group}>
-                    {rendered}
-                  </optgroup>
-                ) : (
-                  rendered
-                )
-              })}
-            </select>
-          </label>
-          <button
-            type="button"
-            aria-disabled={!adding}
-            aria-label={`Add to ${label}`}
-            onClick={() => {
-              const chosen = available.find((choice) => String(choice.id) === adding)
-              if (!chosen) return
-              void save([...items.map((item) => item.id), chosen.id], pickerRef.current).then(
-                (saved) => saved && setAnnouncement(`Added ${labelOf(chosen)} to ${label}.`),
-              )
-              setAdding('')
-            }}
-          >
-            Add
-          </button>
-        </div>
       )}
       {/* A plain live region rather than role="status", so a dialog's notice stays its only status. */}
       <p aria-live="polite" className="visually-hidden">

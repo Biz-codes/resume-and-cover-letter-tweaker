@@ -187,6 +187,46 @@ def test_finishing_saves_what_was_kept(client: TestClient, db: Session, account_
     assert error(finish(client, doc))[:2] == (422, "VALIDATION_FAILED")
 
 
+def test_finishing_keeps_the_draft_as_it_was_approved(client: TestClient, db: Session,
+                                                       account_id: int, claude: FakeMessages):
+    doc, ids, keys = started(client, db, account_id, claude)
+    assert doc["first_draft"] is None
+    summary, experience = doc["draft"]["sections"]
+    # The new sentence is rejected, and the reworded one goes back to its original.
+    summary["entries"] = [summary["entries"][0] | {"use_original": True}]
+    put_draft(client, doc, [summary, experience])
+    body = finish(client, doc).json()
+    kept = body["first_draft"]
+    assert kept["starting_document"] == {"id": ids["earlier"], "name": "Tech"}
+    assert (kept["started_from"], kept["starting_reason"]) == ("document", "Same.")
+    assert kept["checked"] == doc["draft"]["checked"]
+    summary_row, experience_row = kept["sections"]
+    assert [(row["name"], row["source"]) for row in kept["sections"]] == [
+        ("Summary", "library"), ("Experience", "original")]
+    # What the user rejected isn't in it.
+    [intro] = summary_row["entries"]
+    assert (intro["kind"], intro["name"], intro["source"]) == (
+        "narrative", "I build tools.", "library")
+    assert intro["rewording"] == {"claude": "I build React tools.", "original": "I build tools.",
+                                  "use_original": True}
+    [job] = experience_row["entries"]
+    assert (job["kind"], job["source"], job["rewording"]) == ("experience", "original", None)
+    assert [(row["name"], row["source"]) for row in job["bullets"]] == [
+        ("Shipped it in React.", "claude"), ("Tested it", "library"), ("Led a team.", "claude")]
+    assert job["bullets"][0]["rewording"] == {"claude": "Shipped it in React.",
+                                              "original": "Shipped it", "use_original": False}
+    # New text has no original.
+    assert job["bullets"][2]["rewording"] is None
+
+    # It's a snapshot: a later library edit doesn't reach it, and a copy doesn't copy it.
+    db.get(BulletPoint, ids["tested"]).content = "Tested it well"
+    db.flush()
+    assert client.get(_url(doc)).json()["first_draft"] == kept
+    copy = client.post(f"{_url(doc)}/copies", json={"name": "Copied"})
+    assert copy.status_code == 201, copy.json()
+    assert copy.json()["first_draft"] is None
+
+
 def test_only_unused_text_can_be_kept_for_later(client: TestClient, db: Session,
                                                account_id: int, claude: FakeMessages):
     doc, ids, keys = started(client, db, account_id, claude)
@@ -221,6 +261,14 @@ def test_finishing_a_letter_adds_its_new_sections_and_greeting(client: TestClien
     assert response.status_code == 200, response.json()
     body = response.json()
     assert body["addressee"] == "Jordan Rivera"
+    kept = body["first_draft"]
+    assert kept["started_from"] == "library"
+    assert [(row["name"], row["source"]) for row in kept["sections"]] == [
+        ("why Acme", "claude"), ("Summary", "library")]
+    assert [(row["name"], row["source"]) for row in kept["sections"][0]["entries"]] == [
+        ("Acme ships.", "claude"), ("I ship too.", "claude")]
+    assert kept["greeting"] == {"claude": "Jordan Rivera", "usual": "Acme Hiring Team",
+                                "reason": "The posting names them.", "use_default": False}
     why, summary = body["sections"]
     assert (why["title"], summary["section_id"]) == ("why Acme", SUMMARY_SECTION_ID)
     assert [e["values"]["content"] for e in why["entries"]] == ["Acme ships.", "I ship too."]

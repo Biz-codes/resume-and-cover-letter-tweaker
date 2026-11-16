@@ -33,6 +33,7 @@ import {
   type DraftEntry,
   type DraftGreeting as Greeting,
   type DraftSection,
+  type DraftSource,
   type TreeSection,
   type WritingFlag,
 } from '../../shared/api/documents'
@@ -50,7 +51,7 @@ const FINISH_ID = 'draft-finish'
 const isText = (kind: string) => kind === 'narrative' || kind === 'bullet'
 
 type Texts = Map<number, ClaudeText>
-type Source = 'original' | 'library' | 'claude'
+type Source = DraftSource
 
 const BADGES: Record<Source, string> = { original: 'Original', library: 'Library', claude: 'Claude' }
 
@@ -87,7 +88,7 @@ function sourceOf(texts: Texts, row: { text_key?: number | null; use_original?: 
 }
 
 // "Source:" is for screen readers, so the badge makes sense heard after the row's name.
-function Badge({ source }: { source: Source }) {
+export function Badge({ source }: { source: Source }) {
   return (
     <span className={`badge badge-${source}`}>
       <span className="visually-hidden">Source: </span>
@@ -103,9 +104,10 @@ interface Words {
   useClaude: string
 }
 
-// Claude's reason, then for a rewording, the wording not in use and a button to switch to it.
-// One button whose text changes, so it keeps focus.
-function Rationale({
+// Claude's reason, then for a rewording, the wording not in use and a button to switch to it
+// (none without `onSwitch`, as in the first draft kept to look back on). One button whose text
+// changes, so it keeps focus.
+export function Rationale({
   name,
   reason,
   claude,
@@ -125,7 +127,7 @@ function Rationale({
   // In place of a rewording's: the button names say what they switch on their own.
   words?: Words
 }) {
-  const reworded = claude !== undefined && original !== undefined && onSwitch !== undefined
+  const reworded = claude !== undefined && original !== undefined
   if (!reason && !reworded) return null
   const useOriginalName = words?.useOriginal ?? `Use the original wording of ${name}`
   const useClaudeName = words?.useClaude ?? `Use Claude's wording of ${name}`
@@ -142,6 +144,7 @@ function Rationale({
         <>
           <p className={styles.label}>{useOriginal ? "Claude's suggestion" : (words?.original ?? 'Original')}</p>
           <p>{useOriginal ? claude.text : original}</p>
+          {onSwitch && (
           <button
             type="button"
             aria-label={words ? undefined : useOriginal ? useClaudeName : useOriginalName}
@@ -149,6 +152,7 @@ function Rationale({
           >
             {words ? (useOriginal ? useClaudeName : useOriginalName) : useOriginal ? "Use Claude's wording" : 'Use the original'}
           </button>
+          )}
         </>
       )}
     </Disclosure>
@@ -157,7 +161,7 @@ function Rationale({
 
 // One row: its name, badge, and Reject for what Claude brought in or wrote, then the writing
 // rules it breaks, its rationale, and what's under it.
-function Row({
+export function Row({
   name,
   label,
   source,

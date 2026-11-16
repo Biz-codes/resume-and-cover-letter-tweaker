@@ -708,6 +708,48 @@ def test_the_built_in_tones_are_every_accounts_and_never_change(client: TestClie
         "Mine", "Professional"]
 
 
+
+def test_any_tone_can_be_copied_to_build_on(client: TestClient, db: Session, account_id: int):
+    # A built-in one, into one of the account's own with the same rules, in order.
+    professional = client.get(f"/api/tone-sets/{PROFESSIONAL_TONE_ID}").json()
+    response = client.post(f"/api/tone-sets/{PROFESSIONAL_TONE_ID}/copies",
+                           json={"name": "My professional"})
+    assert response.status_code == 201, response.json()
+    copy = response.json()
+    assert (copy["name"], copy["built_in"], copy["hidden"], copy["used_by"]) == (
+        "My professional", False, False, [])
+    assert [rule["tone_rule_id"] for rule in copy["rules"]] == [
+        rule["tone_rule_id"] for rule in professional["rules"]]
+    # The copy changes on its own: the original keeps its rules.
+    url = f"/api/tone-sets/{copy['tone_set_id']}"
+    assert client.put(url, json={"name": "My professional", "rules": [
+        {"rule_text": "Short sentences."}]}).status_code == 200
+    assert client.get(f"/api/tone-sets/{PROFESSIONAL_TONE_ID}").json()["rules"] == \
+        professional["rules"]
+
+    # One of the account's own, hidden too, with a hidden rule; the copy isn't hidden, and
+    # what uses the original keeps it.
+    mine = tone(db, account_id, "Mine", ["Warm.", "Brief."])
+    mine.hidden = True
+    db.get(ToneRule, rule_id(db, account_id, "Brief.")).hidden = True
+    doc = resume(db, account_id, "Draft", sent=False)
+    uses(db, mine, doc)
+    copy = client.post(f"/api/tone-sets/{mine.tone_set_id}/copies",
+                       json={"name": "Mine again"}).json()
+    assert (rule_texts(copy), copy["hidden"]) == (["Warm.", "Brief."], False)
+    db.expire_all()
+    assert db.get(Resume, doc.resume_id).tone_set_id == mine.tone_set_id
+
+    # Names are unique, counting the built-in ones, and another account's tone isn't found.
+    for name in ("mine", "Casual", "My Professional"):
+        assert error(client.post(f"/api/tone-sets/{mine.tone_set_id}/copies",
+                                 json={"name": name})) == (409, "DUPLICATE", "name")
+    assert error(client.post(f"/api/tone-sets/{mine.tone_set_id}/copies",
+                             json={"name": " "}))[:2] == (422, "VALIDATION_FAILED")
+    theirs = tone(db, add(db, Account()).account_id, "Theirs", [])
+    assert error(client.post(f"/api/tone-sets/{theirs.tone_set_id}/copies",
+                             json={"name": "Stolen"}))[:2] == (404, "NOT_FOUND")
+
 # Sign-offs
 
 

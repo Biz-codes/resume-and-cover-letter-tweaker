@@ -1,6 +1,7 @@
 // The job postings page: every posting, most recently updated first, each linking to its own
 // page (PostingPage), and a form for a new one (NewPosting), read from its page or pasted text. A
-// new posting opens on its own page, to pick its header.
+// new posting opens on its own page, to pick its header. Hidden ones are listed last, under
+// "Hidden (n)", with Unhide (docs/FRONTEND_CHECKS.md, "Hiding").
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toApiError, type ApiError } from '../shared/api/client'
@@ -10,8 +11,11 @@ import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import type { ListState } from '../documents/DocumentsPage'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
+import HiddenItems, { UnhideButton } from '../library/HiddenItems'
 
 const NEW_POSTING_ID = 'new-posting'
+// Each posting's link, where focus goes once it's unhidden.
+const linkId = (id: number) => `posting-${id}-link`
 
 // How many resumes and cover letters a posting has, for its line in a list.
 function versionCount(posting: Posting) {
@@ -63,6 +67,31 @@ export default function PostingsPage() {
     })
   }
 
+  async function unhide(posting: Posting) {
+    await postingsApi.setHidden(posting.job_posting_id, false)
+    await load()
+    setNotice(`Unhid "${postingName(posting)}".`)
+    focusLater(linkId(posting.job_posting_id))
+  }
+
+  const shown = postings?.filter((posting) => !posting.hidden) ?? []
+  const hiddenOnes = postings?.filter((posting) => posting.hidden) ?? []
+  const row = (posting: Posting, hidden = false) => (
+    <li key={posting.job_posting_id}>
+      <Link id={linkId(posting.job_posting_id)} to={`/postings/${posting.job_posting_id}`}>
+        {postingName(posting)}
+      </Link>
+      {posting.locked && <span className="tag">applied</span>}
+      <span className="muted"> ({versionCount(posting)})</span>
+      {hidden && (
+        <>
+          {' '}
+          <UnhideButton name={postingName(posting)} onUnhide={() => unhide(posting)} />
+        </>
+      )}
+    </li>
+  )
+
   return (
     <section>
       <h2 id={PAGE_HEADING_ID} tabIndex={-1}>
@@ -99,20 +128,18 @@ export default function PostingsPage() {
         )
       )}
 
-      {postings &&
-        (postings.length === 0 ? (
-          <p>No job postings yet.</p>
-        ) : (
-          <ul className="doc-list">
-            {postings.map((posting) => (
-              <li key={posting.job_posting_id}>
-                <Link to={`/postings/${posting.job_posting_id}`}>{postingName(posting)}</Link>
-                {posting.locked && <span className="tag">applied</span>}
-                <span className="muted"> ({versionCount(posting)})</span>
-              </li>
-            ))}
-          </ul>
-        ))}
+      {postings && (
+        <>
+          {shown.length === 0 ? (
+            <p>{hiddenOnes.length ? 'No job postings that aren\'t hidden.' : 'No job postings yet.'}</p>
+          ) : (
+            <ul className="doc-list">{shown.map((posting) => row(posting))}</ul>
+          )}
+          <HiddenItems count={hiddenOnes.length}>
+            <ul className="doc-list">{hiddenOnes.map((posting) => row(posting, true))}</ul>
+          </HiddenItems>
+        </>
+      )}
     </section>
   )
 }

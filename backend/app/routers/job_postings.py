@@ -21,6 +21,7 @@ from app.claude import Claude
 from app.db import DbSession
 from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
+from app.hiding import HiddenIn, set_hidden
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.posting_reader import PostingDraft, read_posting
 from app.routers.headers import FIELDS as HEADER_FIELDS
@@ -66,6 +67,8 @@ class PostingOut(PostingIn):
     applied_on: date | None
     # Applied to: its resumes and cover letters are a record of what was sent.
     locked: bool
+    # Set aside: listed last on the postings page, and not offered anywhere new.
+    hidden: bool
     # Its resumes, then its cover letters, oldest first.
     versions: list[Use]
     updated_at: datetime | None
@@ -105,6 +108,7 @@ def to_out(db: Session, postings: list[JobPosting]) -> list[PostingOut]:
     found = versions(db, list(locked), locked)
     return [PostingOut(job_posting_id=posting.job_posting_id, header_id=posting.header_id,
                        applied_on=posting.applied_on, locked=locked[posting.job_posting_id],
+                       hidden=posting.hidden,
                        versions=found[posting.job_posting_id], updated_at=posting.updated_at,
                        **{name: getattr(posting, name) for name in FIELDS})
             for posting in postings]
@@ -132,11 +136,13 @@ def interviews(db: Session, posting_id: int) -> list[InterviewOut]:
 
 
 def same_organization(db: Session, posting: JobPosting) -> list[PostingRef]:
+    """The organization's other postings an interview can also cover, leaving out hidden ones
+    (an interview already linked to one still shows it, through its also_for)."""
     return [posting_ref(other) for other in db.scalars(
         select(JobPosting)
         .where(JobPosting.account_id == posting.account_id,
                func.lower(JobPosting.organization) == posting.organization.lower(),
-               JobPosting.job_posting_id != posting.job_posting_id)
+               JobPosting.job_posting_id != posting.job_posting_id, ~JobPosting.hidden)
         .order_by(JobPosting.job_posting_id))]
 
 
@@ -271,6 +277,16 @@ def set_header(posting_id: int, body: HeaderIn, db: DbSession,
     for model in (Resume, CoverLetter):
         db.execute(update(model).where(model.job_posting_id == posting_id)
                    .values(header_id=header.header_id))
+    return refreshed(db, posting)
+
+
+@router.put("/{posting_id}/hidden")
+def set_posting_hidden(posting_id: int, body: HiddenIn, db: DbSession,
+                       account_id: AccountId) -> PostingDetail:
+    """Hides or unhides it (docs/FRONTEND_CHECKS.md, "Hiding"), applied to or not. Its resumes,
+    cover letters, and interviews don't change."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    set_hidden(db, posting, body.hidden)
     return refreshed(db, posting)
 
 

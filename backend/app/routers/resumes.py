@@ -35,7 +35,7 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
-from app.drafts import Draft, start_draft
+from app.drafts import Draft, FirstDraft, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, ReadIn, read_document, save_items
@@ -88,6 +88,8 @@ class ResumeDetail(ResumeOut):
     output: Output
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
+    # The draft as it was approved, kept to look back on (app/drafts.py, snapshot).
+    first_draft: FirstDraft | None
 
 
 def to_out(db: Session, resumes: list[Resume]) -> list[ResumeOut]:
@@ -101,7 +103,8 @@ def detail(db: Session, resume: Resume) -> ResumeDetail:
     header = db.get(Header, resume.header_id) if resume.header_id else None
     sections = load_tree(db, RESUME, resume.resume_id)
     return ResumeDetail(**to_out(db, [resume])[0].model_dump(), sections=sections,
-                        output=resume_output(header, sections), draft=resume.draft)
+                        output=resume_output(header, sections), draft=resume.draft,
+                        first_draft=resume.first_draft)
 
 
 def check_links(db: Session, body: ResumeIn, account_id: int) -> None:

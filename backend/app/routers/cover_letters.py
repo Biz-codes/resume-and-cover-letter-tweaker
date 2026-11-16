@@ -34,7 +34,7 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
-from app.drafts import Draft, start_draft
+from app.drafts import Draft, FirstDraft, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, Matcher, ReadIn, read_document, save_item, save_items
@@ -88,6 +88,8 @@ class LetterDetail(LetterOut):
     output: Output
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
+    # The draft as it was approved, kept to look back on (app/drafts.py, snapshot).
+    first_draft: FirstDraft | None
 
 
 FIELDS = list(LetterIn.model_fields)
@@ -108,7 +110,8 @@ def detail(db: Session, letter: CoverLetter) -> LetterDetail:
     output = letter_output(header, sections, letter.addressee,
                            sign_off.text if sign_off else None, letter.signature_name)
     return LetterDetail(**to_out(db, [letter])[0].model_dump(), sections=sections,
-                        output=output, draft=letter.draft)
+                        output=output, draft=letter.draft,
+                        first_draft=letter.first_draft)
 
 
 def check_links(db: Session, body: LetterIn, account_id: int) -> None:

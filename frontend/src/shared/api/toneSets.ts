@@ -24,6 +24,8 @@ export const toneSetsApi = {
   // The tone a new resume or cover letter starts with: the most recently used one, or Professional.
   default: () => api.get<{ tone_set_id: number }>('/tone-sets/default').then((found) => found.tone_set_id),
   create: (name: string) => api.post<ToneSet>('/tone-sets', { name }),
+  // A new tone of the account's own with the same rules, in order, to build on (built-in ones too).
+  copy: (id: number, name: string) => api.post<ToneSet>(`/tone-sets/${id}/copies`, { name }),
   // The whole tone: its name and every rule it lists, in order. Saved as a new tone unless every one
   // in progress is picked in applyTo and nothing sent uses it (FRONTEND_CHECKS.md, "Changing an
   // item"); then the new one takes the name and the original is renamed to earlierName.

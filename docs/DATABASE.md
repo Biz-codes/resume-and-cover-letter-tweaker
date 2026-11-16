@@ -33,7 +33,7 @@ Every foreign key uses `ON DELETE CASCADE`: deleting a row also deletes every ro
 
 Checks the app must handle (delete warnings, which items to suggest, timestamp updates) are listed in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
-Every library table except `writing_rule` and `tone_rule` has a `hidden` column, so an item can be set aside without losing it. A hidden item isn't offered anywhere new (pickers, More options, Add content, and the defaults a new resume, cover letter, or section starts with), but every resume and cover letter that already shows it keeps it, sent or not, and the parents that list it keep listing it. The built-in sections and "Other" can't be hidden (`BUILT_IN_PROTECTED`). An item a sent (locked) resume or cover letter uses can't be deleted (`VERSION_LOCKED`), only hidden, so a sent application always keeps its record. The app enforces these; see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
+Every library table except `writing_rule` and `tone_rule` has a `hidden` column, so an item can be set aside without losing it. A hidden item isn't offered anywhere new (More options, Add content, and the defaults a new resume, cover letter, or section starts with), but every resume and cover letter that already shows it keeps it, sent or not, and the parents that list it keep listing it. The built-in sections and "Other" can't be hidden (`BUILT_IN_PROTECTED`). An item a sent (locked) resume or cover letter uses can't be deleted (`VERSION_LOCKED`), only hidden, so a sent application always keeps its record. The app enforces these; see "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Library join tables and resume and cover letter join tables have no timestamps. When a resume's or cover letter's selections change, the app updates that resume's or cover letter's `updated_at` instead.
 
@@ -84,12 +84,15 @@ Note: headers are library items with versions, like roles, and identical headers
 | rejected_on    | DATE         |                                                           | date the application was turned down            |
 | hired_on       | DATE         |                                                           | date the user was hired                         |
 | contacts       | TEXT         |                                                           | people for this posting and how to reach them   |
+| hidden         | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the posting is hidden from new choices  |
 | created_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting added to db               |
 | updated_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting last updated              |
 
 Note: `url` holds a link to the posting, or, for a job with no posting online (a referral, or a description sent by email), how to reach its primary contact. It's free text: the app shows it as a link only when it's a web address, and "Read posting" fetches a posting only from one (anything else needs the description pasted in, or reading returns `VALIDATION_FAILED`).
 
 Note: `description` holds the extracted text after the user has checked and corrected it, so the posting can be reviewed again after the page goes offline.
+
+Note: `hidden` sets a posting aside, applied to or not: the postings page lists it last under "Hidden (n)", and it isn't offered anywhere new (an interview's other postings at the same organization), but nothing else changes: its resumes, cover letters, and interviews stay as they are, and an interview already linked to it keeps it. Deleting it is the way to remove it, with its warning. See "Hiding" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Note: `applied_on`, `rejected_on`, and `hired_on` track what happened with the application, along with its interviews (`job_posting_interview`). They can be recorded or changed at any time, including after the posting's versions are locked.
 
@@ -134,6 +137,7 @@ Note: links each interview to every posting it covered. Deleting a posting remov
 | header_id          | INTEGER      | REFERENCES header(header_id) ON DELETE SET NULL           | id of related header                          |
 | based_on_resume_id | INTEGER      | REFERENCES resume(resume_id) ON DELETE SET NULL           | id of resume this version was copied from     |
 | draft              | JSONB        |                                                           | Claude's suggestion awaiting first review     |
+| first_draft        | JSONB        |                                                           | Claude's draft as it was approved             |
 | hidden             | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the resume is hidden from new choices |
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume added to db                  |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time resume last updated                 |
@@ -154,6 +158,8 @@ Note: `tone_set_id` picks the tone rules applied to this version. It's optional 
 
 Note: `draft` holds Claude's suggestion for a posting's resume (the starting document and Claude's reason; each piece of Claude's reworded or new text once, by key, with the item it replaces and where Claude put it; then the sections, items, skills, and bullets by id, each with a reason, pointing to Claude's text by key, and whether the user went back to the original; for a cover letter, also the new sections Claude titled for its new paragraphs, once each by key, and the greeting Claude suggests, with its reason and whether the user keeps the letter's usual one instead; and the writing check's results: the rules each of Claude's texts still breaks and whether the check reworded it, the rules each library item in the draft breaks, and whether the check ran), with the user's edits during the first review. Nothing in it is saved to the resume or the library until "Approve first draft", which writes what the user kept and clears it. Empty when there's nothing to review. It's set only when a posting's resume is started with Claude (`VALIDATION_FAILED` for a base resume, `VERSION_LOCKED` once the posting is applied to), so there's one at a time, and recording the posting's applied date while one of its documents has a draft returns `VALIDATION_FAILED` (`applied_on`), so a sent version is never an unreviewed draft. The user's edits are checked like Claude's reply, and refused when they break it (`VALIDATION_FAILED`, `sections`), and finishing keeps for later only Claude's text the draft doesn't use (`VALIDATION_FAILED`, `keep`). A copy doesn't copy it. See "Claude's suggestions" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
+Note: `first_draft` is a snapshot of `draft` as it was approved, kept to look back on: where Claude started from and why, whether the writing check ran, and each section, item, skill, and bullet the user kept, in order, with its name or text as it was then, its source ("Original", "Library", or "Claude"), the writing rules it broke, and Claude's reason; for a rewording, both wordings and which one was kept; for a cover letter, the greeting Claude suggested, the usual one, and which one was kept. What the user rejected isn't in it. "Approve first draft" sets it in the same request that clears `draft`, and nothing changes it after, so later edits to the resume or the library don't reach it. Empty for a resume not started with Claude, or approved before it was added. A copy doesn't copy it.
+
 Note: base resumes can be edited directly at any time, but the database keeps no history, so earlier states are lost. Its page says so in a note above Copy, which makes a new base resume based on it, so the original stays available. Tailored versions are never edited to fit a different posting. Starting from any earlier resume copies all of its join rows (sections, items, sub-items) into a new resume, and the library items themselves are not copied.
 
 ### cover_letter
@@ -170,13 +176,14 @@ Note: base resumes can be edited directly at any time, but the database keeps no
 | sign_off_id        | INTEGER      | REFERENCES sign_off(sign_off_id) ON DELETE SET NULL       | id of sign-off used before the name                 |
 | signature_name     | VARCHAR(100) |                                                           | name under the sign-off, if not the header's        |
 | draft              | JSONB        |                                                           | Claude's suggestion awaiting first review           |
+| first_draft        | JSONB        |                                                           | Claude's draft as it was approved                   |
 | hidden             | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the cover letter is hidden from new choices |
 | created_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter added to db                  |
 | updated_at         | TIMESTAMP    | DEFAULT NOW()                                             | date/time cover letter last updated                 |
 
 Unique: (job_posting_id)
 
-Note: works the same way as `resume`, including at most one cover letter per posting, its `draft`, and `hidden`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
+Note: works the same way as `resume`, including at most one cover letter per posting, its `draft`, `first_draft`, and `hidden`. `based_on_letter_id` uses `ON DELETE SET NULL` for the same reason.
 
 Note: there's no direct link between a resume and a cover letter. Both are created under a job posting (`job_posting_id`) and use the posting's header, so they match; deleting one leaves the other in place.
 
@@ -378,9 +385,9 @@ Note: each account is seeded with the starting list in WRITING_RULES.md. Setting
 
 Note: a named group of tone rules. Each resume and cover letter can use one tone set through `tone_set_id`. The app calls a tone set a "tone" everywhere the user sees it.
 
-Note: four built-in tones are created with the database, with fixed ids: "Professional" (1), "Technical" (2), "Friendly but formal" (3), and "Casual" (4), each listing built-in rules (see `tone_rule`). The backend refers to them by these ids (constants in `backend/app/models.py`), never by name. They have no `account_id`, so every account shares them and can use them on any resume or cover letter. They're generic, for any kind of job. They can't be renamed, edited, hidden, or deleted (`BUILT_IN_PROTECTED`), and a database trigger blocks it as a backstop; to vary one, the user makes a tone of their own from its rules. Names are unique counting the built-in ones, so an account's tone can't be named "Professional".
+Note: four built-in tones are created with the database, with fixed ids: "Professional" (1), "Technical" (2), "Friendly but formal" (3), and "Casual" (4), each listing built-in rules (see `tone_rule`). The backend refers to them by these ids (constants in `backend/app/models.py`), never by name. They have no `account_id`, so every account shares them and can use them on any resume or cover letter. They're generic, for any kind of job. They can't be renamed, edited, hidden, or deleted (`BUILT_IN_PROTECTED`), and a database trigger blocks it as a backstop; to vary one, the user makes a copy (a tone of their own listing the same rules) and changes that. Names are unique counting the built-in ones, so an account's tone can't be named "Professional".
 
-Note: a tone set's name is always unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`). Tones aren't printed, so when an edit saves a new set, the new one takes the name and the original (still used by the documents that keep it) is renamed to a name the user gives; the user can hide it.
+Note: a tone set's name is always unique in the account, ignoring capitals (the app checks and returns `DUPLICATE`). Tones aren't printed, so when an edit saves a new set, the new one takes the name and the original (still used by the documents that keep it) is renamed to a name the user gives; the user can hide it. Any tone, built-in or hidden ones too, can be copied into a new one of the account's own, listing the same rules in the same order (the rules are shared, not copied); the name the user gives follows the same check.
 
 Note: a tone set is saved whole: its name and its rules, in order. Editing one follows the same rules as every library item, except that sent resumes and cover letters can be picked too, since tones aren't printed: the ones that use it switch to the edited set only if the user picks them. Unless every one that uses it is picked, sent ones too, the edit is saved as a new set listing the same rules, so no rule is copied, and the original is renamed (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 

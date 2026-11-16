@@ -221,10 +221,9 @@ describe('ExperiencePage', () => {
     })
     render(<ExperiencePage />)
     const engineer = await openItem('Engineer, Acme')
-    fireEvent.change(within(engineer).getByLabelText('Choose one to add to Engineer, Acme (2020 – 2022) bullets'), {
-      target: { value: '11' },
-    })
-    fireEvent.click(within(engineer).getByText('Add'))
+    fireEvent.click(within(engineer).getByRole('button', { name: /^More options for Engineer, Acme \(2020 – 2022\) bullets/ }))
+    fireEvent.click(within(engineer).getByRole('checkbox', { name: 'Tested it' }))
+    fireEvent.click(within(engineer).getByRole('button', { name: 'Add checked to Engineer, Acme (2020 – 2022) bullets' }))
     await vi.waitFor(() =>
       expect(sentBody(fetchMock, 'PUT /api/experience/4/bullets')).toEqual({ bullet_ids: [10, 11] }),
     )

@@ -72,10 +72,14 @@ describe('ProjectsPage', () => {
     const fetchMock = stub({ 'PUT /api/projects/4/skills': [{ status: 200, body: TWEAKER }] })
     render(<ProjectsPage />)
     await openItem('Tweaker')
-    const picker = await screen.findByLabelText(`Choose one to add to ${LABEL} skills`)
-    fireEvent.change(picker, { target: { value: '21' } })
+    const more = (await screen.findAllByRole('button', { name: /^More options for / })).find((toggle) =>
+      toggle.textContent?.includes(`for ${LABEL} skills`),
+    )!
+    fireEvent.click(more)
+    const offeredSkills = screen.getByRole('group', { name: `Choose any to add to ${LABEL} skills` })
+    fireEvent.click(within(offeredSkills).getAllByRole('checkbox')[0])
     // Each list's Add names its list, since the dialog has more than one.
-    fireEvent.click(screen.getByRole('button', { name: `Add to ${LABEL} skills` }))
+    fireEvent.click(screen.getByRole('button', { name: `Add checked to ${LABEL} skills` }))
     await vi.waitFor(() => expect(sentBody(fetchMock, 'PUT /api/projects/4/skills')).toEqual({ skill_ids: [20, 21] }))
   })
 

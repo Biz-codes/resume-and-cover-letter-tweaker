@@ -33,7 +33,7 @@ Every component and page is tested for accessibility from the start. Every test 
 ## Checklist
 
 **Names and labels**
-- Every input, select, and textarea has a visible `<label>` (wrapping the control, as `NameForm` does). Placeholder text is not a label. When the label repeats on a page, the part that tells them apart can be for screen readers only, after the visible text (`OrderedList`'s picker: "Choose one to add" plus a `visually-hidden` " to [list]").
+- Every input, select, and textarea has a visible `<label>` (wrapping the control, as `NameForm` does). Placeholder text is not a label. When the label repeats on a page, the part that tells them apart can be for screen readers only, after the visible text (`MoreOptions`: "More options" plus a `visually-hidden` " for [list]").
 - Buttons and links say what they do. When a page repeats the same button (each card's "View and Edit", a list's "Delete"), give each one an `aria-label` that names its item, starting with the visible text (WCAG 2.5.3, label in name): `aria-label={`Delete "${name}"`}`.
 - Icon-only buttons (the ⠿ drag handle) have an `aria-label`.
 - Anything that can be dragged also works by keyboard and by single clicks (WCAG 2.5.7); reuse `OrderedList` for reordering.

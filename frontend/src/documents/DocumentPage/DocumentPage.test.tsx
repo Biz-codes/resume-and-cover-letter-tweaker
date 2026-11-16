@@ -773,10 +773,36 @@ describe('DocumentPage', () => {
     })
     const drafted = (...entries: object[]) =>
       resume(5, { name: 'Engineer at Acme', job_posting: posting, output: { parts: [], text: '' }, draft: draft(...entries) })
+    const summaryRow = { name: 'Builds accessible apps.', source: 'original', reason: 'Names React.', flags: [] }
     const finished = resume(5, {
       name: 'Engineer at Acme',
       job_posting: posting,
       draft: null,
+      first_draft: {
+        starting_document: null,
+        started_from: 'library',
+        starting_reason: 'There are no earlier resumes.',
+        checked: true,
+        greeting: null,
+        sections: [
+          {
+            name: 'Summary',
+            source: 'library',
+            reason: 'A short summary.',
+            flags: [],
+            rewording: null,
+            entries: [
+              {
+                ...summaryRow,
+                kind: 'narrative',
+                rewording: { claude: 'Builds accessible React apps.', original: 'Builds accessible apps.', use_original: true },
+                skills: [],
+                bullets: [],
+              },
+            ],
+          },
+        ],
+      },
       sections: [
         {
           row_id: 50,
@@ -814,6 +840,7 @@ describe('DocumentPage', () => {
     expect(screen.queryByRole('button', { name: 'Chat with Claude' })).not.toBeInTheDocument()
     expect(screen.queryByText('Edits to the resume below save instantly.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Copy to a new base resume' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Claude's first draft" })).not.toBeInTheDocument()
     // The draft is what there is to do first, so it starts open.
     expect(screen.getByRole('button', { name: 'Sections (1)' })).toHaveAttribute('aria-expanded', 'true')
     await screen.findByRole('list', { name: 'Items in Summary' })
@@ -844,11 +871,16 @@ describe('DocumentPage', () => {
     await expectNotice("Approved the first draft. The resume has what you kept, and Claude's text you kept for later is in your library.")
     expect(sentBody(fetchMock, 'POST /api/resumes/5/draft/finish')).toEqual({ keep: [1] })
     // The usual tree is back, and the library rows it saved can't be undone.
+    // Claude's first draft stays to look back on.
     expect(screen.queryByText(/Below is Claude's draft/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Approve first draft' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sections (1)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('heading', { level: 2, name: 'Engineer at Acme Resume' })).toHaveFocus()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: "Claude's first draft" }))
+    const kept = await screen.findByRole('dialog', { name: "Claude's first draft" })
+    expect(within(kept).getByRole('list', { name: 'Items in Summary' })).toHaveTextContent('Builds accessible apps.Source: Original')
     await expectNoA11yViolations()
   })
 

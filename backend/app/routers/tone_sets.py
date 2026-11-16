@@ -9,9 +9,10 @@ the same text is reused). Editing one follows "Changing an item" in docs/FRONTEN
 resumes and cover letters change only if the user picks them (apply_to), sent ones too, since
 tones aren't printed. Unless every one is picked, the edit is saved as a new tone with the name
 in the form, and the original is renamed to `earlier_name`; only the picked ones switch to the
-new one. Names are unique, counting the
-built-in ones (DUPLICATE). Deleting a tone deletes only its list: its rules stay in the library,
-and the resumes and cover letters that used it keep going with no tone.
+new one. Names are unique, counting the built-in ones (DUPLICATE). Any tone, built-in ones too,
+can be copied into a new one of the account's own with the same rules, to build on. Deleting a
+tone deletes only its list: its rules stay in the library, and the resumes and cover letters
+that used it keep going with no tone.
 """
 
 from datetime import datetime
@@ -158,6 +159,21 @@ def create_set(body: ToneSetIn, db: DbSession, account_id: AccountId) -> ToneSet
     db.add(tone_set)
     db.flush()
     return one_out(db, tone_set)
+
+
+@router.post("/{tone_set_id}/copies", status_code=status.HTTP_201_CREATED)
+def copy_set(tone_set_id: int, body: ToneSetIn, db: DbSession,
+             account_id: AccountId) -> ToneSetOut:
+    """A new tone of the account's own, named `name`, listing the same rules in the same order
+    (the rules themselves are shared, not copied). Built-in and hidden tones can be copied; the
+    copy isn't hidden, and nothing that uses the original changes."""
+    get_tone_item(db, ToneSet, tone_set_id, account_id)
+    check_unique_name(db, ToneSet.name, account_id, body.name, "tone")
+    copy = ToneSet(account_id=account_id, name=body.name)
+    db.add(copy)
+    db.flush()
+    set_rules(db, copy.tone_set_id, [rule.tone_rule_id for rule in rules_of(db, tone_set_id)])
+    return one_out(db, copy)
 
 
 @router.put("/{tone_set_id}")

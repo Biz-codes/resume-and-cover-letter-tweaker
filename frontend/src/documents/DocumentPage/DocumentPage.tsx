@@ -8,7 +8,8 @@
 // or one in progress is edited in place, and a sent one is shown read-only but for its title and
 // its tone (tones aren't printed).
 // A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
-// first review is finished; each change saves the draft, and Undo and Redo cover those too.
+// first review is finished; each change saves the draft, and Undo and Redo cover those too. Once
+// it's approved, "Claude's first draft" (FirstDraft) opens it read-only, as it was approved.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -33,6 +34,7 @@ import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import DocumentTree from '../DocumentTree/DocumentTree'
 import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
+import FirstDraft from '../FirstDraft/FirstDraft'
 import ChatPanel from '../ChatPanel/ChatPanel'
 import ProposalCards, { WaitingForYou } from '../ProposalCards/ProposalCards'
 import { chatApi, type Applied, type ChatAbout } from '../../shared/api/chat'
@@ -504,6 +506,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                   Chat with Claude
                 </button>
               )}
+              {/* Claude's draft as it was approved, kept to look back on. */}
+              {doc.first_draft && <FirstDraft kind={kind} firstDraft={doc.first_draft} />}
               {/* Named for what it makes, since the page's other Copy buttons copy text. Claude's
                   draft isn't a version yet, so there's nothing to copy. */}
               {!doc.draft && (

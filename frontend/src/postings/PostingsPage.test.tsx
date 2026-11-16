@@ -15,6 +15,7 @@ const posting = (id: number, organization: string, extra = {}) => ({
   header_id: 1,
   applied_on: null,
   locked: false,
+  hidden: false,
   versions: [],
   updated_at: null,
   ...extra,
@@ -129,5 +130,35 @@ describe('PostingsPage', () => {
     await expectNoA11yViolations()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('No job postings yet.')).toBeInTheDocument()
+  })
+  it('lists hidden postings last, closed, and unhides one back into the list', async () => {
+    const hidden = { ...BETA, hidden: true }
+    const fetchMock = stubApi({
+      'GET /api/job-postings': [
+        { status: 200, body: [ACME, hidden] },
+        { status: 200, body: [ACME, BETA] },
+      ],
+      'PUT /api/job-postings/5/hidden': [{ status: 200, body: BETA }],
+    })
+    renderPage()
+    const toggle = await screen.findByRole('button', { name: 'Hidden (1)' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('link', { name: 'Engineer at Beta' })).not.toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('link', { name: 'Engineer at Beta' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Unhide "Engineer at Beta"' }))
+    await expectNotice('Unhid "Engineer at Beta".')
+    expect(sentBody(fetchMock, 'PUT /api/job-postings/5/hidden')).toEqual({ hidden: false })
+    await vi.waitFor(() => expect(screen.getByRole('link', { name: 'Engineer at Beta' })).toHaveFocus())
+    expect(screen.queryByRole('button', { name: /^Hidden/ })).not.toBeInTheDocument()
+  })
+
+  it('says when every posting is hidden', async () => {
+    stub({}, [{ ...ACME, hidden: true }])
+    renderPage()
+    expect(await screen.findByText("No job postings that aren't hidden.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hidden (1)' })).toBeInTheDocument()
+    await expectNoA11yViolations()
   })
 })

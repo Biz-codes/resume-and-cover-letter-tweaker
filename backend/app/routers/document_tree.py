@@ -47,7 +47,15 @@ from app.documents import (
     in_section,
     standalone_bullets,
 )
-from app.drafts import DraftSections, FinishIn, check_sections, current_draft, finish, recheck
+from app.drafts import (
+    DraftSections,
+    FinishIn,
+    check_sections,
+    current_draft,
+    finish,
+    recheck,
+    snapshot,
+)
 from app.errors import AppError, ErrorCode
 from app.library import append, check_ids, check_unique_name
 from app.models import (
@@ -443,9 +451,11 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         """Save the reviewed draft: Claude's texts the user kept become new library rows
         (with any it didn't use that the user keeps for later), and the tree is placed with
         them, in this document only, and a letter gets the greeting the user kept. The draft is
-        cleared, and the document is based on the one Claude started from."""
+        cleared, and kept as it was approved in first_draft (app/drafts.py, snapshot), and the
+        document is based on the one Claude started from."""
         doc = editable(db, doc_id, account_id)
         draft = current_draft(doc)
+        kept = snapshot(db, kind, account_id, doc, draft)
         sections = RestoredTree.model_validate({"sections": finish(db, account_id, draft,
                                                                    body.keep)}).sections
         restore(db, kind, doc_id, sections, account_id)
@@ -456,6 +466,7 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                 getattr(kind.doc, kind.doc_id) == start.id, kind.doc.account_id == account_id)):
             setattr(doc, kind.based_on, start.id)
         doc.draft = None
+        doc.first_draft = kept.model_dump()
         return changed(db, doc)
 
     @router.put("/{doc_id}/header")

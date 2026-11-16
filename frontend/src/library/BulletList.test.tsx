@@ -14,7 +14,8 @@ describe('BulletList', () => {
     expect(screen.getByText('Bullets (1)')).toBeInTheDocument()
     expect(screen.getByText(SHIPPED.content)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove "Shipped the new checkout flow to…"' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Tested it' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'More options for Engineer, Acme bullets (1)' }))
+    expect(screen.getByRole('checkbox', { name: 'Tested it' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 

@@ -147,26 +147,22 @@ describe('OrderedList', () => {
     expect(announced()).toHaveTextContent('Removed Python from Back End skills.')
   })
 
-  it('offers only unlisted items, adds one at the end, and returns focus to the picker', async () => {
+  it('offers only unlisted items as checkboxes behind More options, and adds the checked ones at the end', async () => {
     const onChange = renderList()
-    const select = screen.getByLabelText('Choose one to add to Back End skills')
-    expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'None chosen',
-      'Rust',
-    ])
-    expect(button('Add to Back End skills')).toHaveAttribute('aria-disabled', 'true')
-    fireEvent.change(select, { target: { value: '4' } })
-    fireEvent.click(button('Add to Back End skills'))
+    const more = button('More options for Back End skills (1)')
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(more)
+    expect(screen.getAllByRole('checkbox').map((box) => box.closest('label')!.textContent)).toEqual(['Rust'])
+    expect(button('Add checked to Back End skills')).toHaveAttribute('aria-disabled', 'true')
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Rust' }))
+    const add = button('Add checked to Back End skills')
+    add.focus()
+    fireEvent.click(add)
     expect(onChange).toHaveBeenLastCalledWith([1, 2, 3, 4])
-    await vi.waitFor(() => expect(select).toHaveFocus())
-    expect(announced()).toHaveTextContent('Added Rust to Back End skills.')
-  })
-
-  it('shows the picker’s label, with the list’s name for screen readers', () => {
-    renderList()
-    const select = screen.getByLabelText('Choose one to add to Back End skills')
-    expect(select.closest('label')).toHaveTextContent(/^Choose one to add/)
-    expect(screen.getByText('to Back End skills', { exact: false })).toHaveClass('visually-hidden')
+    expect(await screen.findByText('Added 1 to Back End skills.')).toHaveAttribute('aria-live', 'polite')
+    // Nothing is left to add, so focus goes to the list.
+    await vi.waitFor(() => expect(screen.getByRole('group', { name: 'Back End skills' })).toHaveFocus())
   })
 
   it('adds where the list is to each row’s buttons', async () => {
@@ -202,18 +198,16 @@ describe('OrderedList', () => {
         onChange={onChange}
       />,
     )
-    const select = screen.getByLabelText('Choose one to add to Items in Experience')
-    expect([...select.querySelectorAll('optgroup')].map((group) => group.label)).toEqual([
-      'Listed under Experience',
-      'Education',
-    ])
-    expect([...select.querySelectorAll('optgroup')[0].querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+    fireEvent.click(button('More options for Items in Experience (3)'))
+    const listed = screen.getByRole('group', { name: 'Listed under Experience' })
+    expect(screen.getByRole('group', { name: 'Education' })).toBeInTheDocument()
+    expect([...listed.querySelectorAll('label')].map((label) => label.textContent)).toEqual([
       'Bullet: Cut load time.',
       'Bullet: Led the redesign.',
     ])
     await expectNoA11yViolations()
-    fireEvent.change(select, { target: { value: 'bullet:2' } })
-    fireEvent.click(button('Add to Items in Experience'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bullet: Cut load time.' }))
+    fireEvent.click(button('Add checked to Items in Experience'))
     expect(onChange).toHaveBeenLastCalledWith(['experience:1', 'bullet:2'])
   })
 

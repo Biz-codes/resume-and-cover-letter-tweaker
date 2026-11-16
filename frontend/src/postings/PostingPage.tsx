@@ -1,5 +1,5 @@
-// One job posting, headed as the user's application to it: its link and job description (with
-// Edit details and Delete inside it), its header (used by all its versions), and its resume and
+// One job posting, headed as the user's application to it: its link, with Hide (or Unhide) and
+// Delete job posting under it, and its job description (with Edit details inside it), its header (used by all its versions), and its resume and
 // cover letter, each tailored by Claude, copied, built from scratch, or read from the user's own
 // file or text (StartVersion), and named
 // for the posting. A new posting picks its header first, from the suggestion, with that section
@@ -60,6 +60,8 @@ export function PostingPage({ id }: { id: number }) {
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [mode, setMode] = useState<Mode | null>(null)
   const [deleteError, setDeleteError] = useState<ApiError | null>(null)
+  const [hiding, setHiding] = useState(false)
+  const [hideError, setHideError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const focusLater = useFocusLater()
   const title = posting ? `${postingName(posting)} Application` : 'Job posting'
@@ -158,6 +160,21 @@ export function PostingPage({ id }: { id: number }) {
     navigate(`${KINDS[kind].path}/${doc.id}`, { state: { notice, back: `/postings/${id}` } satisfies ListState })
   }
 
+  // The button stays and its text changes, so it keeps focus; the page's notice says so.
+  async function setHidden(current: PostingDetail, hidden: boolean) {
+    if (hiding) return
+    setHiding(true)
+    setHideError(null)
+    try {
+      setPosting(await postingsApi.setHidden(id, hidden))
+      setNotice(`${hidden ? 'Hid' : 'Unhid'} "${postingName(current)}".`)
+    } catch (error) {
+      setHideError(toApiError(error))
+    } finally {
+      setHiding(false)
+    }
+  }
+
   async function confirmDelete(current: PostingDetail) {
     setDeleteError(null)
     try {
@@ -204,7 +221,43 @@ export function PostingPage({ id }: { id: number }) {
               `Contact: ${posting.url}`
             )}
             {posting.locked && <span className="tag">applied</span>}
+            {posting.hidden && <span className="tag">hidden</span>}
           </p>
+          {mode === 'delete' && (
+            <ConfirmDelete
+              what={`job posting for ${postingName(posting)}`}
+              noun="job posting"
+              // Named by kind, since both are named for the posting.
+              uses={posting.versions.map((use) => ({ ...use, name: KIND_LABELS[use.kind] }))}
+              usesLabel="Its resumes and cover letters"
+              effect="They're deleted too."
+              locked={posting.locked}
+              lockedNote="You applied to this posting, so deleting it removes the record of what you sent."
+              error={deleteError}
+              onConfirm={() => void confirmDelete(posting)}
+              onCancel={() => close('delete')}
+            >
+              {interviews > 0 && (
+                <p>
+                  {interviews === 1 ? 'Its interview' : `Its ${interviews} interviews`} with no other posting will be
+                  deleted too.
+                </p>
+              )}
+            </ConfirmDelete>
+          )}
+          {mode !== 'delete' && (
+            <div className="actions">
+              {/* aria-disabled, not disabled, so the button keeps focus while it saves. */}
+              <button type="button" aria-disabled={hiding} onClick={() => void setHidden(posting, !posting.hidden)}>
+                {posting.hidden ? (hiding ? 'Unhiding…' : 'Unhide') : hiding ? 'Hiding…' : 'Hide'}
+              </button>
+              {/* Named by kind, since the page's resume and cover letter are named for it too. */}
+              <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
+                Delete job posting
+              </button>
+            </div>
+          )}
+          {hideError && <p role="alert">{hideError.message}</p>}
           <Disclosure title="Job description">
             <p className="description">{posting.description}</p>
             {mode === 'edit' && (
@@ -216,36 +269,10 @@ export function PostingPage({ id }: { id: number }) {
                 onCancel={() => close('edit')}
               />
             )}
-            {mode === 'delete' && (
-              <ConfirmDelete
-                what={`job posting for ${postingName(posting)}`}
-                noun="job posting"
-                // Named by kind, since both are named for the posting.
-                uses={posting.versions.map((use) => ({ ...use, name: KIND_LABELS[use.kind] }))}
-                usesLabel="Its resumes and cover letters"
-                effect="They're deleted too."
-                locked={posting.locked}
-                lockedNote="You applied to this posting, so deleting it removes the record of what you sent."
-                error={deleteError}
-                onConfirm={() => void confirmDelete(posting)}
-                onCancel={() => close('delete')}
-              >
-                {interviews > 0 && (
-                  <p>
-                    {interviews === 1 ? 'Its interview' : `Its ${interviews} interviews`} with no other posting will
-                    be deleted too.
-                  </p>
-                )}
-              </ConfirmDelete>
-            )}
-            {mode === null && (
+            {mode !== 'edit' && (
               <div className="actions">
                 <button type="button" id={BUTTON_IDS.edit} onClick={() => open('edit')}>
                   Edit details
-                </button>
-                {/* Named by kind, since the page's resume and cover letter are named for it too. */}
-                <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
-                  Delete job posting
                 </button>
               </div>
             )}
