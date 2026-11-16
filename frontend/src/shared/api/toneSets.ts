@@ -1,6 +1,6 @@
 // Tones (tone sets) and the rules each one lists, in order. See backend/app/routers/tone_sets.py.
 import { api } from './client'
-import { anyLocked, refs, type Use } from './usage'
+import { refs, type Use } from './usage'
 
 export interface ToneSet {
   // Set aside: not offered anywhere new, but kept wherever it's used.
@@ -33,8 +33,7 @@ export const toneSetsApi = {
   delete: (id: number) => api.delete(`/tone-sets/${id}`),
 }
 
-// Whether saving an edit adds a new tone: something sent uses it, or one in progress isn't picked.
+// Whether saving an edit adds a new tone: one that uses it, sent or not, isn't picked.
 export function savesNewTone(usedBy: Use[], picked: Use[]) {
-  const inProgress = usedBy.filter((use) => !use.locked)
-  return anyLocked(usedBy) || inProgress.some((use) => !picked.some((other) => other.kind === use.kind && other.id === use.id))
+  return usedBy.some((use) => !picked.some((other) => other.kind === use.kind && other.id === use.id))
 }

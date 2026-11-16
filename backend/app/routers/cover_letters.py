@@ -246,11 +246,11 @@ def import_and_tailor_letter(body: ImportIn, db: DbSession, account_id: AccountI
 @router.put("/{letter_id}")
 def update_letter(letter_id: int, body: LetterIn, db: DbSession,
                   account_id: AccountId) -> LetterDetail:
-    """Replaces the letter's fields. A sent letter can only be renamed, and one for a posting
-    keeps the posting's header."""
+    """Replaces the letter's fields. A sent letter can only be renamed or given another tone,
+    and one for a posting keeps the posting's header."""
     letter = get_owned(db, CoverLetter, letter_id, account_id)
     refuse_locked_change(letter, doc_info(db, COVER_LETTER, [letter])[letter_id],
-                         body.model_dump())
+                         body.model_dump(), "cover letter")
     refuse_header_change(letter, body.header_id)
     body.name = document_name(db, COVER_LETTER, account_id, body.name, doc_id=letter_id)
     check_links(db, body, account_id)

@@ -1,11 +1,11 @@
 """Tone rules: library items that any tone can list (app/tones.py; docs/DATABASE.md, tone_rule).
 
 A rule's uses are the resumes and cover letters whose tone lists it. Editing its text follows
-"Changing an item" in docs/FRONTEND_CHECKS.md: in place only when every one in progress that
-uses it is picked (apply_to) and no sent one does. Otherwise it's saved as a new rule, and each
+"Changing an item" in docs/FRONTEND_CHECKS.md: in place only when every one that uses it, sent
+ones too (tones aren't printed), is picked (apply_to). Otherwise it's saved as a new rule, and each
 tone that lists the original gets it by that tone's own uses:
 - no document uses the tone, or only picked ones: it lists the new rule in the original's place;
-- picked ones and others (or sent ones) use it: it's saved as a new tone with its name, listing
+- picked ones and others use it: it's saved as a new tone with its name, listing
   the new rule, and the original is renamed to the name in `earlier_names` for it; the picked
   ones switch to the new tone;
 - no picked one uses it: it keeps the original.
@@ -140,7 +140,7 @@ def update_rule(tone_rule_id: int, body: ToneRuleChange, db: DbSession,
     tones = tones_listing(db, [tone_rule_id], account_id)[tone_rule_id]
     uses_by_tone = column_uses(db, USED_BY, [tone.tone_set_id for tone in tones])
     all_uses = [use for tone in tones for use in uses_by_tone[tone.tone_set_id]]
-    in_place, chosen = edit_choice(all_uses, body.apply_to)
+    in_place, chosen = edit_choice(all_uses, body.apply_to, include_sent=True)
     if in_place:
         rule.rule_text = text
         db.flush()
@@ -156,7 +156,7 @@ def update_rule(tone_rule_id: int, body: ToneRuleChange, db: DbSession,
         rule_ids = [replacement.tone_rule_id if listed.tone_rule_id == tone_rule_id
                     else listed.tone_rule_id for listed in rules_of(db, tone.tone_set_id)]
         if uses <= chosen:
-            # No document uses it, or only picked ones (never a sent one, which can't be picked).
+            # No document uses it, or only picked ones.
             set_rules(db, tone.tone_set_id, rule_ids)
         elif picked:
             earlier = check_earlier_name(db, account_id, tone, body.earlier_names.get(

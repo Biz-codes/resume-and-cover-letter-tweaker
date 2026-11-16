@@ -17,6 +17,7 @@ from app.drafts import StartingDocument, to_draft
 from app.main import app
 from app.models import (
     EXPERIENCE_SECTION_ID,
+    PROFESSIONAL_TONE_ID,
     SKILLS_SECTION_ID,
     SUMMARY_SECTION_ID,
     Account,
@@ -393,10 +394,23 @@ def test_applying_waits_until_the_draft_is_reviewed(client: TestClient, db: Sess
     # Other tracking still saves.
     assert client.put(tracking, json={"contacts": "Jamie Lee"}).status_code == 200
     db.expire_all()
-    db.get(Resume, draft["resume_id"]).draft = None
+    reviewed = db.get(Resume, draft["resume_id"])
+    reviewed.draft, reviewed.tone_set_id = None, None
+    db.flush()
+    # A sent resume always has a tone, so one with none waits for one too.
+    response = client.put(tracking, json={"applied_on": "2026-11-04"})
+    assert error(response) == (422, "VALIDATION_FAILED", "applied_on")
+    assert response.json()["error"]["message"] == (
+        "Pick a tone for the resume first. A sent resume always has one.")
+    reviewed.tone_set_id = PROFESSIONAL_TONE_ID
     db.flush()
     final = client.put(tracking, json={"applied_on": "2026-11-04"})
     assert final.status_code == 200, final.json()
+    # Once sent, it can change tone but not go back to none.
+    url = f"/api/resumes/{draft['resume_id']}"
+    fields = {"name": draft["name"], "header_id": draft["header_id"]}
+    assert error(client.put(url, json={**fields, "tone_set_id": None})) == (
+        422, "VALIDATION_FAILED", "tone_set_id")
 
 
 def test_a_letter_reads_the_postings_resume(client: TestClient, db: Session, account_id: int,

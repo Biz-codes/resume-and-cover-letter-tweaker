@@ -5,11 +5,11 @@ A resume or cover letter can use one tone (tone_set_id), which steers the sugges
 it. The four built-in tones (no account) are every account's to use and to take rules from, but
 they can't be renamed, edited, hidden, or deleted (BUILT_IN_PROTECTED). A tone is saved whole:
 its name and its list of rules, in order, each a saved rule by id or new text (a saved rule with
-the same text is reused). Editing one follows "Changing an item" in docs/FRONTEND_CHECKS.md, so a
-sent version keeps the tone it was written with: resumes and cover letters in progress change
-only if the user picks them (apply_to). Unless every one is picked and nothing sent uses it, the
-edit is saved as a new tone with the name in the form, and the original is renamed to
-`earlier_name`; only the picked ones switch to the new one. Names are unique, counting the
+the same text is reused). Editing one follows "Changing an item" in docs/FRONTEND_CHECKS.md:
+resumes and cover letters change only if the user picks them (apply_to), sent ones too, since
+tones aren't printed. Unless every one is picked, the edit is saved as a new tone with the name
+in the form, and the original is renamed to `earlier_name`; only the picked ones switch to the
+new one. Names are unique, counting the
 built-in ones (DUPLICATE). Deleting a tone deletes only its list: its rules stay in the library,
 and the resumes and cover letters that used it keep going with no tone.
 """
@@ -176,7 +176,7 @@ def update_set(tone_set_id: int, body: ToneSetChange, db: DbSession,
     check_unique_name(db, ToneSet.name, account_id, body.name, "tone",
                       exclude=ToneSet.tone_set_id != tone_set_id)
     in_place, chosen = edit_choice(column_uses(db, USED_BY, [tone_set_id])[tone_set_id],
-                                   body.apply_to)
+                                   body.apply_to, include_sent=True)
     if in_place:
         tone_set.name = body.name
         set_rules(db, tone_set_id, rule_ids)

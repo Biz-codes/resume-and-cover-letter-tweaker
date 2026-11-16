@@ -1,7 +1,7 @@
 // A tone rule's dialog: edit its text, or delete it. A rule is a library item any tone can list, so
 // editing it follows "Changing an item" in docs/FRONTEND_CHECKS.md across every tone that lists it:
-// resumes and cover letters in progress whose tone lists it change only if the user picks them, and
-// sent ones never do. When the edit saves a tone used by both picked ones and others as a new tone,
+// resumes and cover letters whose tone lists it change only if the user picks them, sent ones too
+// (tagged "sent"), since tones aren't printed. When the edit saves a tone used by both picked ones and others as a new tone,
 // the form asks what to call that tone's earlier version, starting from "[name] (earlier)". The
 // tones that list it open in the same dialog.
 import { useEffect, useId, useRef, useState } from 'react'
@@ -19,8 +19,6 @@ import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
-
-const SENT_NOTE = "A sent version's tone lists this rule, so saving adds a new rule. The sent version keeps this one."
 
 const BUILT_IN_RULE_NOTE = "A built-in tone's rule, so it doesn't change. Any of your tones can list it."
 
@@ -53,7 +51,7 @@ export default function ToneRuleItem({ id }: { id: number }) {
       </ItemParts>
     )
   }
-  const { here, others, elsewhere } = inProgressUses(rule.used_by, host.placed?.where)
+  const { here, others, elsewhere } = inProgressUses(rule.used_by, host.placed?.where, true)
   const picked = pickedFor(here, applyTo)
   const splits = splitTones(rule, picked)
   const earlierName = (toneId: number, name: string) => earlierNames[toneId] ?? `${name} (earlier)`
@@ -105,12 +103,12 @@ export default function ToneRuleItem({ id }: { id: number }) {
           field="rule_text"
           multiline
           initial={rule.rule_text}
-          lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(rule.used_by) ? SENT_NOTE : undefined, elsewhere)}
+          lockedNote={changeNote(here, others, host.placed?.doc, undefined, elsewhere)}
           onSave={(text) => save(rule, text)}
           focusOnOpen={false}
           onCancel={host.close}
         >
-          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+          {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} sentToo applyTo={applyTo} onChange={setApplyTo} />}
           <EarlierNames
             splits={splits}
             nameOf={earlierName}

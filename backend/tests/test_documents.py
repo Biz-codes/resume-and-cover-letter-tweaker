@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.documents import COVER_LETTER, RESUME, load_tree
 from app.models import (
     EXPERIENCE_SECTION_ID,
+    PROFESSIONAL_TONE_ID,
     PROJECTS_SECTION_ID,
     SKILLS_SECTION_ID,
     SUMMARY_SECTION_ID,
@@ -311,7 +312,8 @@ def test_edit_a_base_resume_in_place(client: TestClient, db: Session, account_id
         doc.resume_id, "Tech", tone.tone_set_id)
 
 
-def test_a_sent_version_can_only_be_renamed(client: TestClient, db: Session, account_id: int):
+def test_a_sent_version_can_only_be_renamed_or_given_another_tone(client: TestClient, db: Session,
+                                                                 account_id: int):
     sent_posting = posting(db, account_id, sent=True)
     letter = add(db, CoverLetter(account_id=account_id, name="Acme",
                                  job_posting_id=sent_posting.job_posting_id, addressee="Ms. Lee"))
@@ -319,10 +321,23 @@ def test_a_sent_version_can_only_be_renamed(client: TestClient, db: Session, acc
     fields = {"header_id": None, "tone_set_id": None, "addressee": "Ms. Lee", "sign_off_id": None,
               "signature_name": None}
     assert client.put(url, json={"name": "Acme (sent)", **fields}).json()["name"] == "Acme (sent)"
+    # Tones aren't printed, so a sent version's tone stays changeable, a built-in one too.
+    tone = add(db, ToneSet(account_id=account_id, name="Tech"))
+    for tone_id in (tone.tone_set_id, PROFESSIONAL_TONE_ID):
+        saved = client.put(url, json={"name": "Acme (sent)", **fields, "tone_set_id": tone_id})
+        assert (saved.status_code, saved.json()["tone_set_id"]) == (200, tone_id)
     assert error(client.put(url, json={"name": "Acme", **fields, "addressee": "Hiring Team"})
                  )[:2] == (409, "VERSION_LOCKED")
     db.refresh(letter)
-    assert (letter.name, letter.addressee) == ("Acme (sent)", "Ms. Lee")
+    assert (letter.name, letter.addressee, letter.tone_set_id) == (
+        "Acme (sent)", "Ms. Lee", PROFESSIONAL_TONE_ID)
+    # A sent resume's tone too.
+    resume = add(db, Resume(account_id=account_id, name="Acme resume",
+                            job_posting_id=sent_posting.job_posting_id))
+    saved = client.put(f"/api/resumes/{resume.resume_id}",
+                       json={"name": "Acme resume", "header_id": None,
+                             "tone_set_id": tone.tone_set_id})
+    assert (saved.status_code, saved.json()["tone_set_id"]) == (200, tone.tone_set_id)
 
 
 # Copying and deleting

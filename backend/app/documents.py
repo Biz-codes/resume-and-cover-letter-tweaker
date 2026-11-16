@@ -447,9 +447,21 @@ def refuse_sent_delete(info: DocInfo, singular: str) -> None:
                        f"This {singular} was sent, so it can't be deleted. Hide it instead.")
 
 
-def refuse_locked_change(doc: Any, info: DocInfo, changes: dict[str, Any]) -> None:
-    """A sent version can only be renamed (docs/FRONTEND_CHECKS.md, "Sent versions are
-    locked"): VERSION_LOCKED if any other field would change."""
-    if info.locked and any(getattr(doc, name) != value for name, value in changes.items()
-                           if name != "name"):
+# What a sent version can still change: its name is only a label, and its tone isn't printed.
+UNLOCKED_FIELDS = {"name", "tone_set_id"}
+
+
+def refuse_locked_change(doc: Any, info: DocInfo, changes: dict[str, Any], singular: str) -> None:
+    """A sent version can only be renamed or given another tone (docs/FRONTEND_CHECKS.md, "Sent
+    versions are locked"): VERSION_LOCKED if any other field would change. It always keeps a
+    tone, so one that has a tone can't go back to none (VALIDATION_FAILED). One sent before this
+    rule, with no tone yet, keeps none until the user picks one."""
+    if not info.locked:
+        return
+    if any(getattr(doc, name) != value for name, value in changes.items()
+           if name not in UNLOCKED_FIELDS):
         raise AppError(ErrorCode.VERSION_LOCKED)
+    if doc.tone_set_id is not None and changes.get("tone_set_id", doc.tone_set_id) is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"A sent {singular} always has a tone. Pick another one instead.",
+                       field="tone_set_id")

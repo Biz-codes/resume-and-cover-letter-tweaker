@@ -23,10 +23,11 @@ export interface ToneRule {
 const key = (use: Use) => `${use.kind}:${use.id}`
 
 // The tones an edit to the rule saves as new ones, given the resumes and cover letters picked to
-// get it: each used by picked ones and others (or sent ones), whose original then needs a new name
+// get it (sent ones too, since tones aren't printed): each used by picked ones and others, whose
+// original then needs a new name
 // (backend/app/routers/tone_rules.py).
 export function splitTones(rule: ToneRule, picked: Use[]): ToneListing[] {
-  const chosen = new Set(picked.filter((use) => !use.locked).map(key))
+  const chosen = new Set(picked.map(key))
   return rule.tones.filter(
     (tone) => tone.used_by.some((use) => chosen.has(key(use))) && tone.used_by.some((use) => !chosen.has(key(use))),
   )
@@ -36,7 +37,7 @@ export const toneRulesApi = {
   list: () => api.get<ToneRule[]>('/tone-rules'),
   // A new rule, or the saved one with the same text.
   create: (ruleText: string) => api.post<ToneRule>('/tone-rules', { rule_text: ruleText }),
-  // Saved as a new rule unless every one in progress that uses it is picked and nothing sent does;
+  // Saved as a new rule unless every one that uses it, sent ones too, is picked;
   // earlierNames names the original of each tone that's then saved as a new one, by its id.
   update: (id: number, ruleText: string, applyTo: Use[], earlierNames: Record<number, string>) =>
     api.put<ToneRule>(`/tone-rules/${id}`, { rule_text: ruleText, apply_to: refs(applyTo), earlier_names: earlierNames }),

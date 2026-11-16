@@ -16,6 +16,22 @@ describe('ApplyChoice', () => {
     await expectNoA11yViolations()
   })
 
+  it('offers sent ones too for a tone, last and tagged, saying only the tone changes', async () => {
+    const sent = { kind: 'resume' as const, id: 4, name: 'Acme resume', locked: true }
+    const onChange = vi.fn()
+    render(<ApplyChoice uses={[sent, DRAFT]} sentToo applyTo={[]} onChange={onChange} />)
+    const group = screen.getByRole('group', { name: 'Apply this change to which resumes and cover letters?' })
+    expect(group).toHaveAccessibleDescription(
+      'Unchecked ones keep it as it is. Checking a sent one changes only its tone, not what was sent.',
+    )
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes.map((box) => box.parentElement?.textContent)).toEqual(['Resume: Draft resume', 'Resume: Acme resume sent'])
+    // The tag is in the checkbox's name, so a screen reader hears it too.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Acme resume sent' }))
+    expect(onChange).toHaveBeenLastCalledWith([sent])
+    await expectNoA11yViolations()
+  })
+
   it('reports the checked ones in their order, telling a resume and a letter with one id apart', () => {
     const onChange = vi.fn()
     const { rerender } = render(<ApplyChoice uses={[DRAFT, LETTER]} applyTo={[]} onChange={onChange} />)

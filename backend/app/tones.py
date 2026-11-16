@@ -6,6 +6,10 @@ rule can be in many tones. A tone's list is the tone itself: a resume or cover l
 every rule its tone lists. The account holds each rule once: text that matches a saved rule,
 ignoring spacing and capitals, is that rule.
 
+Tones aren't printed, so a sent resume's or cover letter's tone isn't locked: an edit to a tone
+or rule offers sent ones to pick like the ones in progress (include_sent), and a sent one that
+isn't picked keeps the original.
+
 Tone names are unique in the account. When an edit saves a new tone (docs/FRONTEND_CHECKS.md,
 "Changing an item"), the new one takes the name and the original, which the documents that keep
 it still use, is renamed to a name the user gives (split_tone).
@@ -123,8 +127,8 @@ def check_earlier_name(db: Session, account_id: int, tone_set: ToneSet, name: st
 def split_tone(db: Session, account_id: int, original: ToneSet, name: str, earlier_name: str,
                rule_ids: list[int], chosen: set[tuple[str, int]]) -> ToneSet:
     """Save the edit as a new tone named `name` with these rules, rename the original to
-    `earlier_name` (checked by the caller), and switch the chosen documents in progress to the
-    new one. The rest, and every sent one, keep the original."""
+    `earlier_name` (checked by the caller), and switch the chosen documents, sent ones too, to
+    the new one. The rest keep the original."""
     original.name = earlier_name
     db.flush()
     replacement = ToneSet(account_id=account_id, name=name)
@@ -134,5 +138,5 @@ def split_tone(db: Session, account_id: int, original: ToneSet, name: str, earli
     if chosen:
         for column in USED_BY:
             switch_unsent_column(db, column, original.tone_set_id, replacement.tone_set_id,
-                                 only=chosen)
+                                 only=chosen, include_sent=True)
     return replacement

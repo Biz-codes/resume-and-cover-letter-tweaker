@@ -66,21 +66,22 @@ class UseRef(BaseModel):
 
 
 def chosen_in_progress(apply_to: Sequence[DocRef | UseRef],
-                       used_by: list[Use]) -> set[tuple[str, int]]:
-    """The ones in progress the user chose to apply a change to.
+                       offered: list[Use]) -> set[tuple[str, int]]:
+    """The ones the user chose to apply a change to.
 
-    Each must be one in progress that uses the item; anything else returns VALIDATION_FAILED.
+    Each must be one of those offered (the ones in progress that use the item, or for a tone, sent
+    ones too); anything else returns VALIDATION_FAILED.
     """
-    in_progress = {(use.kind, use.id) for use in used_by if not use.locked}
+    can_pick = {(use.kind, use.id) for use in offered}
     chosen = {(ref.kind, ref.id) for ref in apply_to}
-    if not chosen <= in_progress:
+    if not chosen <= can_pick:
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Only the ones in progress that use it can get the change.", "apply_to")
     return chosen
 
 
 def edit_choice(used_by: list[Use], apply_to: Sequence[DocRef | UseRef], *,
-                offered: list[Use] | None = None,
+                offered: list[Use] | None = None, include_sent: bool = False,
                 fixed: bool = False) -> tuple[bool, set[tuple[str, int]]]:
     """How an edit to a library item is saved (docs/FRONTEND_CHECKS.md, "Changing an item"):
     in place (True) only when nothing sent uses the item, every one in progress was chosen,
@@ -88,11 +89,13 @@ def edit_choice(used_by: list[Use], apply_to: Sequence[DocRef | UseRef], *,
     which only the chosen ones switch to. Also returns the chosen ones.
 
     `offered` is the ones in progress that can be chosen, when that isn't every unsent one in
-    `used_by` (a header's).
+    `used_by` (a header's). `include_sent` offers the sent ones too, and then a sent one is like
+    any other (a tone's, since tones aren't printed).
     """
-    offered = [use for use in used_by if not use.locked] if offered is None else offered
+    if offered is None:
+        offered = used_by if include_sent else [use for use in used_by if not use.locked]
     chosen = chosen_in_progress(apply_to, offered)
-    sent = any(use.locked for use in used_by)
+    sent = not include_sent and any(use.locked for use in used_by)
     every_one = chosen == {(use.kind, use.id) for use in offered}
     return not sent and every_one and not fixed, chosen
 
@@ -275,11 +278,14 @@ def column_uses(db: Session, columns: list[Any], item_ids: list[int]) -> dict[in
 
 
 def switch_unsent_column(db: Session, column: Any, old_id: int, new_id: int,
-                         only: set[tuple[str, int]] | None = None) -> None:
+                         only: set[tuple[str, int]] | None = None,
+                         include_sent: bool = False) -> None:
     """Point every unsent resume or cover letter whose column holds old_id at new_id, or with
-    `only`, just those (by kind and id)."""
+    `only`, just those (by kind and id). `include_sent` switches sent ones too (a tone's)."""
     doc = column.class_
-    query = update(doc).where(column == old_id, ~is_locked(doc))
+    query = update(doc).where(column == old_id)
+    if not include_sent:
+        query = query.where(~is_locked(doc))
     if only is not None:
         kind = "resume" if doc is Resume else "cover_letter"
         query = query.where(doc_id(doc).in_([item for k, item in only if k == kind]))

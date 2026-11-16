@@ -270,6 +270,8 @@ describe('DocumentPage', () => {
     fireEvent.change(screen.getByLabelText('Tone'), { target: { value: '2' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.')
     expect(screen.getByLabelText('Tone')).toHaveAttribute('aria-invalid', 'true')
+    // The message is read again when the picker gets focus.
+    expect(screen.getByLabelText('Tone')).toHaveAccessibleDescription('Something went wrong.')
     await expectNoA11yViolations()
   })
 
@@ -515,26 +517,41 @@ describe('DocumentPage', () => {
     expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toEqual([])
   })
 
-  it('shows a sent version read-only, and only renames it', async () => {
+  it('shows a sent version read-only, but for its title and its tone', async () => {
     const fetchMock = stub(7, resume(7, SENT), {
-      'PUT /api/resumes/7': [{ status: 200, body: resume(7, { ...SENT, name: 'Acme (sent)' }) }],
+      'PUT /api/resumes/7': [
+        { status: 200, body: resume(7, { ...SENT, tone_set_id: 2 }) },
+        { status: 200, body: resume(7, { ...SENT, tone_set_id: 2, name: 'Acme (sent)' }) },
+      ],
     })
     renderAt('/resumes/7')
     // Its posting, linked.
     expect(await screen.findByRole('link', { name: 'Back to job posting' })).toHaveAttribute('href', '/postings/4')
-    expect(screen.getByText(/so the only field you can edit is the title below\./)).toBeInTheDocument()
+    expect(screen.getByText(/so the only fields you can edit are the title and the tone below\./)).toBeInTheDocument()
     expect(
       screen.getByText('If you want to use this resume as a template for a new application, select "Copy".'),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tech Base Resume' })).toHaveAttribute('href', '/resumes/1')
-    expect(screen.getByText('Tone: None')).toBeInTheDocument()
+    // Tones aren't printed, so its tone can still change. A sent one always has a tone, so one
+    // sent with none says to pick one.
+    const tone = screen.getByRole('combobox', { name: 'Tone' })
+    expect(tone).toHaveValue('')
+    expect(tone).toHaveAccessibleDescription('A sent resume always has a tone. Pick one.')
+    await expectNoA11yViolations()
+    fireEvent.change(tone, { target: { value: '2' } })
+    await expectNotice('Tone saved.')
+    expect(tone).toHaveValue('2')
+    // Once it has one, there's no going back to none.
+    expect(within(tone).queryByRole('option', { name: 'None' })).not.toBeInTheDocument()
+    expect(tone).not.toHaveAccessibleDescription()
+    expect(sentBody(fetchMock, 'PUT /api/resumes/7')).toMatchObject({ name: 'Acme resume', tone_set_id: 2 })
     // Nothing else can change, so there's nothing to undo, and it can be hidden, not deleted.
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete resume' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Application header' }))
-    // The header's values are listed, with nothing to pick.
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    // The header's values are listed, with nothing to pick: the tone is the only picker.
+    expect(screen.getAllByRole('combobox')).toEqual([tone])
     await expectNoA11yViolations()
     // A version for a posting's title ends in "Resume", not "Base Resume".
     expect(screen.getByRole('heading', { level: 2, name: 'Acme resume Resume' })).toBeInTheDocument()
@@ -546,7 +563,23 @@ describe('DocumentPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await expectNotice('Renamed to "Acme (sent) Resume".')
     expect(screen.getByRole('heading', { level: 2, name: 'Acme (sent) Resume' })).toBeInTheDocument()
-    expect(sentBody(fetchMock, 'PUT /api/resumes/7').name).toBe('Acme (sent)')
+    expect(sentBody(fetchMock, 'PUT /api/resumes/7', 1)).toMatchObject({ name: 'Acme (sent)', tone_set_id: 2 })
+  })
+
+  it("offers no None for a sent version's tone, and shows a refusal", async () => {
+    stub(7, resume(7, { ...SENT, tone_set_id: 2 }), {
+      'PUT /api/resumes/7': [
+        { status: 422, body: errorBody('VALIDATION_FAILED', 'A sent resume always has a tone. Pick another one instead.', 'tone_set_id') },
+      ],
+    })
+    renderAt('/resumes/7')
+    const tone = await screen.findByRole('combobox', { name: 'Tone' })
+    expect(tone).toHaveValue('2')
+    expect(within(tone).queryByRole('option', { name: 'None' })).not.toBeInTheDocument()
+    fireEvent.change(tone, { target: { value: '2' } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('A sent resume always has a tone.')
+    expect(tone).toHaveAccessibleDescription('A sent resume always has a tone. Pick another one instead.')
+    await expectNoA11yViolations()
   })
 
   it('hides and unhides a sent version, keeping focus on the button', async () => {

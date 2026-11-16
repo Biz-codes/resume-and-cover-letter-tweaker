@@ -32,7 +32,7 @@ const rule = (tone_rule_id: number, rule_text: string, hidden = false): ToneRule
 })
 // The library's rules: the tone's two, one more, and a hidden one.
 const RULES = [rule(30, 'Lead with tools.'), rule(31, 'Use metrics.'), rule(32, 'Keep it short.'), rule(33, 'Set aside.', true)]
-const CHOICE = 'Apply this change to which resumes and cover letters in progress?'
+const CHOICE = 'Apply this change to which resumes and cover letters?'
 
 function stub(sets: ToneSet[] = [TECH], extra: Record<string, { status: number; body?: unknown }[]> = {}) {
   return stubApi({ 'GET /api/tone-sets': [{ status: 200, body: sets }], 'GET /api/tone-rules': [{ status: 200, body: RULES }], ...extra })
@@ -110,13 +110,21 @@ describe('ToneItem', () => {
     expect(field).toHaveAttribute('aria-invalid', 'false')
   })
 
-  it('asks which ones in progress get the change, and names the earlier version the rest keep', async () => {
+  it('asks which ones get the change, sent ones too, and names the earlier version the rest keep', async () => {
     const copy = { ...TECH, tone_set_id: 5, used_by: [DRAFT] }
-    const fetchMock = stub([{ ...TECH, used_by: [DRAFT, SENT] }], { 'PUT /api/tone-sets/3': [{ status: 200, body: copy }] })
+    const fetchMock = stub([{ ...TECH, used_by: [SENT, DRAFT] }], { 'PUT /api/tone-sets/3': [{ status: 200, body: copy }] })
     const host = await renderItem(<ToneItem id={3} />)
     expect(screen.getByLabelText('Tone name')).toHaveAccessibleDescription(
-      'A sent version uses this tone, so saving adds a new one. The sent version keeps this one. Saving changes it only in the ones you check below; the rest keep it as it is.',
+      'Saving changes it only in the ones you check below; the rest keep it as it is.',
     )
+    // Tones aren't printed, so a sent one is offered too: after the ones in progress, tagged "sent".
+    const group = screen.getByRole('group', { name: CHOICE })
+    expect(group).toHaveAccessibleDescription('Unchecked ones keep it as it is. Checking a sent one changes only its tone, not what was sent.')
+    expect(within(group).getAllByRole('checkbox').map((box) => box.parentElement?.textContent)).toEqual([
+      'Resume: Acme resume',
+      'Resume: Sent resume sent',
+    ])
+    expect(within(group).getByText('sent')).toHaveClass('tag')
     const earlier = screen.getByLabelText('Name for the earlier version')
     expect(earlier).toHaveValue('Tech (earlier)')
     expect(earlier).toHaveAccessibleDescription('Saving adds a new tone named “Tech”. The ones that keep this tone use it under this name.')
@@ -133,6 +141,33 @@ describe('ToneItem', () => {
       ),
     )
     expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toMatchObject({ apply_to: [{ kind: 'resume', id: 2 }], earlier_name: 'Tech 2025' })
+  })
+
+  it('switches a checked sent one, saying the ones checked use it now', async () => {
+    const copy = { ...TECH, tone_set_id: 5, used_by: [SENT] }
+    const fetchMock = stub([{ ...TECH, used_by: [SENT, DRAFT] }], { 'PUT /api/tone-sets/3': [{ status: 200, body: copy }] })
+    const host = await renderItem(<ToneItem id={3} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Sent resume sent' }))
+    // The draft isn't checked, so it's still a new tone.
+    expect(screen.getByLabelText('Name for the earlier version')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    save()
+    await vi.waitFor(() =>
+      expect(host.saved).toHaveBeenCalledWith(
+        'Saved as a new version, "Tech". The ones you checked use it now; everything else keeps "Tech (earlier)".',
+        { kind: 'tone', id: 5 },
+      ),
+    )
+    expect(sentBody(fetchMock, 'PUT /api/tone-sets/3')).toMatchObject({ apply_to: [{ kind: 'resume', id: 4 }] })
+  })
+
+  it('saves in place, with no earlier name, once every one is checked, sent ones too', async () => {
+    stub([{ ...TECH, used_by: [SENT, DRAFT] }])
+    await renderItem(<ToneItem id={3} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Acme resume' }))
+    expect(screen.getByLabelText('Name for the earlier version')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Resume: Sent resume sent' }))
+    expect(screen.queryByLabelText('Name for the earlier version')).not.toBeInTheDocument()
   })
 
   it('asks for no earlier name once every one in progress is checked', async () => {

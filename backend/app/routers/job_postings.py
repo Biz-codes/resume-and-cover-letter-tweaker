@@ -236,7 +236,8 @@ def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
     time. An applied date locks the posting's versions, and clearing it unlocks them
     (docs/FRONTEND_CHECKS.md, "Sent versions are locked"). It can't be set while one of them
     has a suggestion still to review, so a sent version is never an unreviewed draft
-    (docs/FRONTEND_CHECKS.md, "Claude's suggestions")."""
+    (docs/FRONTEND_CHECKS.md, "Claude's suggestions"), or has no tone, since a sent one always
+    has one ("Sent versions are locked")."""
     posting = get_owned(db, JobPosting, posting_id, account_id)
     if posting.applied_on is None and body.applied_on is not None:
         for model, what in ((Resume, "resume"), (CoverLetter, "cover letter")):
@@ -245,6 +246,11 @@ def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
                 raise AppError(ErrorCode.VALIDATION_FAILED,
                                f"Approve the first draft of the {what} first.",
                                "applied_on")
+            if db.scalar(select(model.tone_set_id.is_(None))
+                         .where(model.job_posting_id == posting_id)):
+                raise AppError(ErrorCode.VALIDATION_FAILED,
+                               f"Pick a tone for the {what} first. A sent {what} always has "
+                               "one.", "applied_on")
     for name, value in body.model_dump().items():
         setattr(posting, name, value)
     return refreshed(db, posting)

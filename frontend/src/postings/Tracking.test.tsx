@@ -113,6 +113,21 @@ describe('Tracking', () => {
     await expectNoA11yViolations()
   })
 
+  it('reads a refused applied date with its field, keeping the form open', async () => {
+    const message = 'Pick a tone for the resume first. A sent resume always has one.'
+    const onSave = vi.fn(() => Promise.reject(new ApiError('VALIDATION_FAILED', message, 'applied_on', 422)))
+    renderTracking(POSTING, onSave)
+    edit()
+    fireEvent.change(screen.getByLabelText('Applied on'), { target: { value: '2026-11-04' } })
+    save()
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    const applied = screen.getByLabelText('Applied on')
+    expect(applied).toHaveAttribute('aria-invalid', 'true')
+    expect(applied).toHaveAccessibleDescription(expect.stringContaining(message))
+    expect(applied).toHaveValue('2026-11-04')
+    await expectNoA11yViolations()
+  })
+
   it('cancels back to its button', async () => {
     renderTracking()
     edit()

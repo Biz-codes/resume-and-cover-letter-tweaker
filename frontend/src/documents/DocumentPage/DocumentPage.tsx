@@ -5,7 +5,8 @@
 // changed on the posting. A note on what editing does, and Copy and Delete (a sent one: Hide or
 // Unhide), sit under its title; its title is changed under Contents, in a modal opened by "New
 // title". See "Versions" and "Sent versions are locked" in docs/FRONTEND_CHECKS.md: a base version
-// or one in progress is edited in place, and a sent one is shown read-only and can only be renamed.
+// or one in progress is edited in place, and a sent one is shown read-only but for its title and
+// its tone (tones aren't printed).
 // A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
 // first review is finished; each change saves the draft, and Undo and Redo cover those too.
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -51,18 +52,20 @@ import Dialog from '../../shared/components/Dialog/Dialog'
 // The buttons that open each form, where focus returns when it closes.
 const BUTTON_IDS = { copy: 'doc-copy', delete: 'doc-delete', title: 'doc-title' }
 const TONE_ID = 'doc-tone'
+const TONE_ERROR_ID = 'doc-tone-error'
+const TONE_NOTE_ID = 'doc-tone-note'
 const CHAT_BUTTON_ID = 'doc-chat'
 
 type Mode = 'copy' | 'delete' | 'title'
 
 // What editing does, above the buttons: one in progress saves as it's edited, and a sent one
-// keeps everything but its name.
+// keeps everything but its name and its tone.
 function EditNote({ singular, sent, draft }: { singular: string; sent: boolean; draft: boolean }) {
   return sent ? (
     <div className="note">
       <p>
-        This {singular} has already been sent with a submitted application, so the only field you can edit is the title
-        below.
+        This {singular} has already been sent with a submitted application, so the only fields you can edit are the
+        title and the tone below.
       </p>
       <p>If you want to use this {singular} as a template for a new application, select "Copy".</p>
     </div>
@@ -424,6 +427,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const toneLabel = toneLabels(toneSets)
   // Sent versions never change.
   const readOnly = !doc || doc.locked
+  // A sent one always has a tone; one sent before that rule may have none yet.
+  const needsTone = Boolean(doc?.locked && doc.tone_set_id === null)
 
   return (
     <section>
@@ -546,27 +551,35 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
               />
             </Dialog>
           )}
-          {readOnly ? (
-            <p>Tone: {toneSet ? toneLabel(toneSet) : 'None'}</p>
-          ) : (
-            <label className={styles.tone}>
-              Tone
-              <select
-                id={TONE_ID}
-                value={doc.tone_set_id ?? ''}
-                aria-invalid={Boolean(toneError)}
-                onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
-              >
-                <option value="">None</option>
-                {sortByName(offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id), toneLabel).map((item) => (
-                  <option key={item.tone_set_id} value={item.tone_set_id}>
-                    {toneLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {/* Tones aren't printed, so even a sent one's tone can change, but a sent one always has
+              one: "None" is left out once it has one, and one sent with none says to pick one. */}
+          <label className={styles.tone}>
+            Tone
+            <select
+              id={TONE_ID}
+              value={doc.tone_set_id ?? ''}
+              aria-invalid={Boolean(toneError)}
+              aria-describedby={[needsTone && TONE_NOTE_ID, toneError && TONE_ERROR_ID].filter(Boolean).join(' ') || undefined}
+              onChange={(event) => void changeTone(event.target.value ? Number(event.target.value) : null)}
+            >
+              {(!doc.locked || needsTone) && <option value="">None</option>}
+              {sortByName(offered(toneSets, (item) => item.tone_set_id === doc.tone_set_id), toneLabel).map((item) => (
+                <option key={item.tone_set_id} value={item.tone_set_id}>
+                  {toneLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {needsTone && (
+            <p id={TONE_NOTE_ID} className="muted">
+              A sent {singular} always has a tone. Pick one.
+            </p>
           )}
-          {toneError && <p role="alert">{toneError.message}</p>}
+          {toneError && (
+            <p id={TONE_ERROR_ID} role="alert">
+              {toneError.message}
+            </p>
+          )}
           {!readOnly && (
             <>
               {/* aria-disabled, not disabled, so a focused button keeps focus when its list runs out. */}

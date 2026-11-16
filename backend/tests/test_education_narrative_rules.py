@@ -464,8 +464,8 @@ def test_a_tones_rules_are_checked(client: TestClient, db: Session, account_id: 
     assert save({"tone_rule_id": listed}).status_code == 200
 
 
-def test_editing_a_tone_a_sent_resume_uses_saves_a_new_one(client: TestClient, db: Session,
-                                                           account_id: int):
+def test_editing_a_tone_saves_a_new_one_unless_every_use_is_picked(client: TestClient,
+                                                                   db: Session, account_id: int):
     original = tone(db, account_id, "Tech", ["Lead with tools."])
     sent = resume(db, account_id, "Sent", sent=True)
     draft = resume(db, account_id, "Draft", sent=False)
@@ -492,10 +492,31 @@ def test_editing_a_tone_a_sent_resume_uses_saves_a_new_one(client: TestClient, d
     db.expire_all()
     assert db.get(Resume, sent.resume_id).tone_set_id == original.tone_set_id
     assert db.get(Resume, other.resume_id).tone_set_id == original.tone_set_id
-    # Only one in progress that uses it can be picked.
-    response = client.put(url, json={"name": "Tech (earlier)", "rules": [],
-                                     "apply_to": [{"kind": "resume", "id": sent.resume_id}]})
+    # Tones aren't printed, so a sent one can be picked too, and with every use picked the edit is
+    # made in place.
+    response = client.put(url, json={"name": "Tech (earlier)", "rules": [], "apply_to": [
+        {"kind": "resume", "id": sent.resume_id}, {"kind": "resume", "id": other.resume_id}]})
+    assert (response.json()["tone_set_id"], response.json()["rules"]) == (
+        original.tone_set_id, [])
+    # Only one that uses it can be picked.
+    response = client.put(url, json={"name": "Tech (earlier)", "rules": [{"rule_text": "X."}],
+                                     "apply_to": [{"kind": "resume", "id": draft.resume_id}]})
     assert error(response) == (422, "VALIDATION_FAILED", "apply_to")
+
+
+def test_a_picked_sent_resume_switches_to_the_new_tone(client: TestClient, db: Session,
+                                                       account_id: int):
+    original = tone(db, account_id, "Tech", ["Lead with tools."])
+    sent = resume(db, account_id, "Sent", sent=True)
+    draft = resume(db, account_id, "Draft", sent=False)
+    uses(db, original, sent, draft)
+    saved = client.put(f"/api/tone-sets/{original.tone_set_id}", json={
+        "name": "Tech", "rules": [], "earlier_name": "Tech (earlier)",
+        "apply_to": [{"kind": "resume", "id": sent.resume_id}]}).json()
+    assert [(use["name"], use["locked"]) for use in saved["used_by"]] == [("Sent", True)]
+    db.expire_all()
+    assert db.get(Resume, sent.resume_id).tone_set_id == saved["tone_set_id"]
+    assert db.get(Resume, draft.resume_id).tone_set_id == original.tone_set_id
 
 
 def test_editing_a_tone_unchecked_saves_a_new_one_nothing_uses(client: TestClient, db: Session,
@@ -604,6 +625,20 @@ def test_editing_a_rule_a_sent_resume_uses_reaches_each_tone_by_its_own_uses(
     assert db.get(ToneSet, switched).name == "Tech"
     assert tone_rules(switched) == [new_rule, metrics]
     assert db.get(Resume, short.resume_id).tone_set_id == picked_only.tone_set_id
+
+
+def test_editing_a_rule_with_every_use_picked_sent_ones_too_is_in_place(
+        client: TestClient, db: Session, account_id: int):
+    tech = tone(db, account_id, "Tech", ["Lead with tools."])
+    sent = resume(db, account_id, "Sent", sent=True)
+    uses(db, tech, sent)
+    rule = rule_id(db, account_id, "Lead with tools.")
+    body = client.put(f"/api/tone-rules/{rule}", json={
+        "rule_text": "Lead with the tools.",
+        "apply_to": [{"kind": "resume", "id": sent.resume_id}]}).json()
+    assert body["tone_rule_id"] == rule
+    assert rule_texts(client.get(f"/api/tone-sets/{tech.tone_set_id}").json()) == [
+        "Lead with the tools."]
 
 
 def test_deleting_a_rule_takes_it_out_of_every_tone(client: TestClient, db: Session,

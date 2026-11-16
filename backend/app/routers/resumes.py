@@ -214,10 +214,11 @@ def import_and_tailor_resume(body: ImportIn, db: DbSession, account_id: AccountI
 @router.put("/{resume_id}")
 def update_resume(resume_id: int, body: ResumeIn, db: DbSession,
                   account_id: AccountId) -> ResumeDetail:
-    """Replaces the name, header, and tone set. A sent resume can only be renamed, and one for a
-    posting keeps the posting's header."""
+    """Replaces the name, header, and tone set. A sent resume can only be renamed or given another
+    tone, and one for a posting keeps the posting's header."""
     resume = get_owned(db, Resume, resume_id, account_id)
-    refuse_locked_change(resume, doc_info(db, RESUME, [resume])[resume_id], body.model_dump())
+    refuse_locked_change(resume, doc_info(db, RESUME, [resume])[resume_id], body.model_dump(),
+                         "resume")
     refuse_header_change(resume, body.header_id)
     body.name = document_name(db, RESUME, account_id, body.name, doc_id=resume_id)
     check_links(db, body, account_id)

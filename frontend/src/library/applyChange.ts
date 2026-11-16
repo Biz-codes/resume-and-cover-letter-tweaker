@@ -6,9 +6,10 @@ import type { Placement } from './items/itemHost'
 
 // The ones in progress that use the item. Opened from a resume's or cover letter's tree, that one
 // (`here`) gets the change; the choice is for the others. `elsewhere`: whether anything else uses
-// it, sent or not, so a change made only here is saved as a new row.
-export function inProgressUses(usedBy: Use[], where: Placement['where'] | undefined) {
-  const inProgress = usedBy.filter((use) => !use.locked)
+// it, sent or not, so a change made only here is saved as a new row. `sentToo` (a tone's, since
+// tones aren't printed) offers the sent ones as well.
+export function inProgressUses(usedBy: Use[], where: Placement['where'] | undefined, sentToo = false) {
+  const inProgress = sentToo ? usedBy : usedBy.filter((use) => !use.locked)
   const here = inProgress.find((use) => use.kind === where?.kind && use.id === where?.id)
   return { here, others: inProgress.filter((use) => use !== here), elsewhere: usedBy.some((use) => use !== here) }
 }
@@ -56,7 +57,8 @@ export function savedMessage({
     return `Saved as a new version, "${after}", which this ${doc} uses now${others}. Everything else keeps "${before}".`
   }
   if (checked.length > 0) {
-    return `Saved as a new version, "${after}". The ones in progress you checked use it now; everything else keeps "${before}".`
+    const which = checked.some((use) => use.locked) ? 'The ones you checked' : 'The ones in progress you checked'
+    return `Saved as a new version, "${after}". ${which} use it now; everything else keeps "${before}".`
   }
   return `Saved as a new version, "${after}". Everything that used "${before}" still does; pick the new version where you want it.`
 }

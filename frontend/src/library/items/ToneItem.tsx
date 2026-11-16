@@ -2,9 +2,9 @@
 // where saved rules are added (from the library's tone rules, which a tone shares with others) and
 // new ones written, reordered, and removed in the form, each change announced (the list says its
 // own), and saved together with Save. A rule's own text is edited in its dialog (ToneRuleItem),
-// from the Tones page. Saving follows "Changing an item" in docs/FRONTEND_CHECKS.md, so a sent
-// version keeps the tone it was written with, and resumes and cover letters in progress change only
-// if the user picks them. Tone names are unique, so when saving adds a new tone, the form asks what
+// from the Tones page. Saving follows "Changing an item" in docs/FRONTEND_CHECKS.md: resumes and
+// cover letters change only if the user picks them, sent ones too (tagged "sent"), since tones
+// aren't printed. Tone names are unique, so when saving adds a new tone, the form asks what
 // to call the earlier one (which the rest keep), starting from "[name] (earlier)".
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
@@ -24,7 +24,6 @@ import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
 import { useItemData } from './useItemData'
 
-const SENT_NOTE = 'A sent version uses this tone, so saving adds a new one. The sent version keeps this one.'
 const BUILT_IN_TONE_NOTE = "Built in, so it doesn't change. To vary it, make a tone of your own and add its rules."
 
 // A rule in the form: a saved one by its id, or new text, which has a negative id until it's saved.
@@ -126,8 +125,8 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
   const noteId = `${id}-note`
   const errorId = `${id}-error`
   const earlierNoteId = `${id}-earlier-note`
-  const { here, others, elsewhere } = inProgressUses(toneSet.used_by, host.placed?.where)
-  const note = changeNote(here, others, host.placed?.doc, anyLocked(toneSet.used_by) ? SENT_NOTE : undefined, elsewhere)
+  const { here, others, elsewhere } = inProgressUses(toneSet.used_by, host.placed?.where, true)
+  const note = changeNote(here, others, host.placed?.doc, undefined, elsewhere)
   const picked = pickedFor(here, applyTo)
   const splits = savesNewTone(toneSet.used_by, picked)
   // Checking or unchecking one in progress can show or take away the earlier name's field, so it's said.
@@ -227,7 +226,7 @@ function ToneForm({ toneSet, saved }: { toneSet: ToneSet; saved: (Rule & { hidde
         />
         <RuleEditor label={`New rule for ${toneSet.name}`} text={newRule} applyLabel="Add rule" onText={setNewRule} onApply={addRule} />
       </Collapsible>
-      {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
+      {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} sentToo applyTo={applyTo} onChange={setApplyTo} />}
       {splits && (
         <>
           <label>

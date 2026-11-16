@@ -27,7 +27,7 @@ const SHARED: ToneRule = {
   ],
   used_by: [SENT, DRAFT, OTHER],
 }
-const CHOICE = 'Apply this change to which resumes and cover letters in progress?'
+const CHOICE = 'Apply this change to which resumes and cover letters?'
 
 function stub(rule: ToneRule = RULE, extra: Record<string, { status: number; body?: unknown }[]> = {}) {
   return stubApi({ 'GET /api/tone-rules': [{ status: 200, body: [rule] }], ...extra })
@@ -39,6 +39,9 @@ describe('splitTones', () => {
     expect(splitTones(SHARED, [DRAFT]).map((tone) => tone.name)).toEqual(['Tech'])
     expect(splitTones(SHARED, [DRAFT, OTHER]).map((tone) => tone.name)).toEqual(['Tech'])
     expect(splitTones(SHARED, [OTHER]).map((tone) => tone.name)).toEqual([])
+    // A sent one can be picked too, and with every use of Tech picked, it isn't split.
+    expect(splitTones(SHARED, [SENT]).map((tone) => tone.name)).toEqual(['Tech'])
+    expect(splitTones(SHARED, [SENT, DRAFT]).map((tone) => tone.name)).toEqual([])
   })
 })
 
@@ -66,7 +69,15 @@ describe('ToneRuleItem', () => {
     const saved = { ...SHARED, tone_rule_id: 40, rule_text: 'Name the tools.' }
     const fetchMock = stub(SHARED, { 'PUT /api/tone-rules/30': [{ status: 200, body: saved }] })
     const host = await renderItem(<ToneRuleItem id={30} />)
-    expect(screen.getByLabelText('Rule')).toHaveAccessibleDescription(/A sent version's tone lists this rule, so saving adds a new rule\./)
+    expect(screen.getByLabelText('Rule')).toHaveAccessibleDescription(
+      /Saving changes it only in the ones you check below; the rest keep it as it is\./,
+    )
+    // Tones aren't printed, so the sent one is offered too, last, tagged "sent".
+    expect(
+      within(screen.getByRole('group', { name: CHOICE }))
+        .getAllByRole('checkbox')
+        .map((box) => box.parentElement?.textContent),
+    ).toEqual(['Cover letter: Acme letter', 'Resume: Acme resume', 'Resume: Sent resume sent'])
     // Nothing picked yet, so no tone is split.
     expect(screen.queryByRole('group', { name: 'Names for the earlier versions' })).not.toBeInTheDocument()
     fireEvent.click(within(screen.getByRole('group', { name: CHOICE })).getByRole('checkbox', { name: 'Resume: Acme resume' }))
