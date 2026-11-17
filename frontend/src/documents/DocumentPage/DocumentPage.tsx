@@ -10,6 +10,10 @@
 // A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
 // first review is finished; each change saves the draft, and Undo and Redo cover those too. Once
 // it's approved, "Claude's first draft" (FirstDraft) opens it read-only, as it was approved.
+// The side panel (SidePanel) holds the chat, and for a posting's document the job posting too
+// (PostingDetails). It's always on the page, collapsed to a button for each until one is pressed
+// (or a row's "Ask Claude"), then expanded with them as tabs. The posting is offered during
+// Claude's draft and on sent ones too.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toApiError, type ApiError } from '../../shared/api/client'
@@ -36,6 +40,8 @@ import DocumentTree from '../DocumentTree/DocumentTree'
 import DraftTree, { DraftGreeting } from '../DraftTree/DraftTree'
 import FirstDraft from '../FirstDraft/FirstDraft'
 import ChatPanel from '../ChatPanel/ChatPanel'
+import SidePanel, { SIDE_HEADING_ID, openButtonId, sideTabId, type PanelTab, type SideTab } from '../SidePanel/SidePanel'
+import PostingDetails from '../SidePanel/PostingDetails'
 import ProposalCards, { WaitingForYou } from '../ProposalCards/ProposalCards'
 import { chatApi, type Applied, type ChatAbout } from '../../shared/api/chat'
 import HeaderFields from '../../shared/components/HeaderFields'
@@ -56,7 +62,6 @@ const BUTTON_IDS = { copy: 'doc-copy', delete: 'doc-delete', title: 'doc-title' 
 const TONE_ID = 'doc-tone'
 const TONE_ERROR_ID = 'doc-tone-error'
 const TONE_NOTE_ID = 'doc-tone-note'
-const CHAT_BUTTON_ID = 'doc-chat'
 
 type Mode = 'copy' | 'delete' | 'title'
 
@@ -112,10 +117,15 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [hiding, setHiding] = useState(false)
   const [hideError, setHideError] = useState<ApiError | null>(null)
-  // The chat beside the document, while it's open: what the next message is about, the button that
-  // opened it (focus goes back there when it closes), and a count that moves focus into it each
-  // time an Ask Claude button is pressed, even when it's already open.
-  const [chat, setChat] = useState<{ about: ChatAbout; returnTo: string; request: number } | null>(null)
+  // The side panel, while it's expanded: the tab it shows, and the button that expanded it, where
+  // focus goes back when it collapses.
+  const [side, setSide] = useState<{ tab: SideTab; returnTo: string } | null>(null)
+  // The chat in it, once it's been shown: what the next message is about, and a count of the
+  // times "Chat with Claude" or "Ask Claude" opened it (each moves focus to its message box; 0 when
+  // its tab opened it).
+  const [chat, setChat] = useState<{ about: ChatAbout; request: number } | null>(null)
+  // What the chat last said, in the side panel's live region.
+  const [chatSaid, setChatSaid] = useState('')
   // Counts questions asked in an item's dialog, so an open chat panel reads them in.
   const [chatVersion, setChatVersion] = useState(0)
   const focusLater = useFocusLater()
@@ -393,11 +403,25 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     }
   }
 
-  const openChat = (about: ChatAbout, returnTo: string) =>
-    setChat((current) => ({ about, returnTo, request: (current?.request ?? 0) + 1 }))
-  function closeChat() {
-    if (chat) focusLater(chat.returnTo)
+  function openChat(about: ChatAbout, returnTo: string) {
+    setChat((current) => ({ about, request: (current?.request ?? 0) + 1 }))
+    setSide({ tab: 'chat', returnTo })
+  }
+  // Focus goes to its tab, or with no tabs (Claude's draft, when there's no chat), the heading.
+  function openPosting() {
+    setSide({ tab: 'posting', returnTo: openButtonId('posting') })
+    focusLater(doc?.draft ? SIDE_HEADING_ID : sideTabId('posting'))
+  }
+  // A tab keeps focus, so the chat shown from its tab doesn't take it.
+  function selectTab(tab: SideTab) {
+    if (tab === 'chat' && !chat) setChat({ about: wholeDocument, request: 0 })
+    setSide((current) => current && { ...current, tab })
+  }
+  function closePanel() {
+    if (side) focusLater(side.returnTo)
+    setSide(null)
     setChat(null)
+    setChatSaid('')
   }
   // Applying one of Claude's proposals is an ordinary change, kept for Undo and made in turn with
   // the others; the cards announce it themselves.
@@ -432,6 +456,48 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   // A sent one always has a tone; one sent before that rule may have none yet.
   const needsTone = Boolean(doc?.locked && doc.tone_set_id === null)
 
+  // The side panel's tabs: the chat, which comes after Claude's first draft is approved, and the
+  // posting, for a posting's document.
+  const tabs: PanelTab[] = []
+  if (doc && !doc.draft) {
+    tabs.push({
+      key: 'chat',
+      label: 'Chat with Claude',
+      content: chat && (
+                <ChatPanel
+                  kind={kind}
+                  docId={id}
+                  locked={doc.locked}
+                  about={chat.about}
+                  wider={wider(chat.about)}
+                  onAbout={(about) => setChat({ ...chat, about })}
+                  headingId={tabs.length > 1 ? sideTabId('chat') : SIDE_HEADING_ID}
+                  onAnnounce={setChatSaid}
+                  focusRequest={chat.request}
+                  version={chatVersion}
+                  proposals={(message, { update, announce, reply, repliesTo }) => (
+                    <ProposalCards
+                      message={message}
+                      sections={doc.sections}
+                      readOnly={doc.locked}
+                      onApply={applyProposal}
+                      onState={proposalState}
+                      onCheck={(messageId) => chatApi(kind).check(id, messageId)}
+                      onUpdate={update}
+                      announce={announce}
+                      onReply={reply}
+                      repliesTo={repliesTo}
+                    />
+                  )}
+                  waiting={(messages) => <WaitingForYou messages={messages} sections={doc.sections} />}
+                />
+      ),
+    })
+  }
+  if (doc?.job_posting) {
+    tabs.push({ key: 'posting', label: 'Job posting', content: <PostingDetails postingId={doc.job_posting.job_posting_id} /> })
+  }
+
   return (
     <section>
       <p className={styles.backLinks}>
@@ -455,7 +521,20 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
       {!doc && !loadError && <p>Loading…</p>}
 
       {doc && (
-        <div className={chat ? styles.withChat : undefined}>
+        <div className={side ? styles.withPanel : tabs.length > 0 ? styles.withCollapsed : undefined}>
+        {/* First, so its buttons come before the document in focus order, as they do on screen
+            below 1024px; CSS puts it in the right-hand column on large screens. */}
+        {tabs.length > 0 && (
+          <SidePanel
+            tabs={tabs}
+            open={Boolean(side)}
+            selected={side?.tab ?? tabs[0].key}
+            onOpen={(tab) => (tab === 'chat' ? openChat(wholeDocument, openButtonId('chat')) : openPosting())}
+            onSelect={selectTab}
+            onClose={closePanel}
+            announcement={chatSaid}
+          />
+        )}
         <div className={styles.mainColumn}>
           {(doc.locked || doc.hidden) && (
             <p>
@@ -500,12 +579,6 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
-              {/* The chat comes after Claude's first draft is approved. */}
-              {!doc.draft && (
-                <button type="button" id={CHAT_BUTTON_ID} onClick={() => openChat(wholeDocument, CHAT_BUTTON_ID)}>
-                  Chat with Claude
-                </button>
-              )}
               {/* Claude's draft as it was approved, kept to look back on. */}
               {doc.first_draft && <FirstDraft kind={kind} firstDraft={doc.first_draft} />}
               {/* Named for what it makes, since the page's other Copy buttons copy text. Claude's
@@ -724,34 +797,6 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             )}
           </Disclosure>
         </div>
-        {chat && (
-          <ChatPanel
-            kind={kind}
-            docId={id}
-            locked={doc.locked}
-            about={chat.about}
-            wider={wider(chat.about)}
-            onAbout={(about) => setChat({ ...chat, about })}
-            onClose={closeChat}
-            focusRequest={chat.request}
-            version={chatVersion}
-            proposals={(message, { update, announce, reply, repliesTo }) => (
-              <ProposalCards
-                message={message}
-                sections={doc.sections}
-                readOnly={doc.locked}
-                onApply={applyProposal}
-                onState={proposalState}
-                onCheck={(messageId) => chatApi(kind).check(id, messageId)}
-                onUpdate={update}
-                announce={announce}
-                onReply={reply}
-                repliesTo={repliesTo}
-              />
-            )}
-            waiting={(messages) => <WaitingForYou messages={messages} sections={doc.sections} />}
-          />
-        )}
         </div>
       )}
     </section>

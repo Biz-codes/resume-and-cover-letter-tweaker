@@ -40,6 +40,7 @@ from app.models import (
     Skill,
     SkillCategorySkill,
 )
+from app.own_text import kept_flags
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
 from app.routers.document_tree import (
@@ -122,16 +123,23 @@ def _tree(sections) -> list[RestoredSection]:
         for entry in section.entries]) for section in sections]
 
 
+def _flags(change: ProposedChange) -> list[dict] | None:
+    """The writing flags the chat's check found for the proposal's text, which the row it's
+    saved as keeps (none when the check didn't run)."""
+    return kept_flags(getattr(change, "flags", []), getattr(change, "checked", False))
+
+
 def _new_text(db: Session, account_id: int, change: ProposedChange) -> int:
     """Claude's new text as a new library row, listed under where it goes."""
     if change.target == "narrative":
-        row = NarrativeContent(account_id=account_id, content=change.new_text)
+        row = NarrativeContent(account_id=account_id, content=change.new_text,
+                               flags=_flags(change))
         db.add(row)
         db.flush()
         append(db, SectionNarrativeContent, "section_id", change.section_id, "content_id",
                row.content_id)
         return row.content_id
-    row = BulletPoint(account_id=account_id, content=change.new_text)
+    row = BulletPoint(account_id=account_id, content=change.new_text, flags=_flags(change))
     db.add(row)
     db.flush()
     if change.parent_kind == "experience":
@@ -172,10 +180,10 @@ def _reworded(db: Session, account_id: int, change: ProposedChange) -> int:
     if change.target == "narrative":
         original = db.get(NarrativeContent, change.item_id)
         return narrative_content.new_version(db, original, NarrativeIn(content=change.new_text),
-                                             account_id).content_id
+                                             account_id, _flags(change)).content_id
     original = db.get(BulletPoint, change.item_id)
     return bullet_points.new_version(db, original, BulletIn(content=change.new_text),
-                                     account_id).bullet_id
+                                     account_id, _flags(change)).bullet_id
 
 
 def apply(db: Session, kind: Kind, account_id: int, doc: Any, change: ProposedChange) -> None:

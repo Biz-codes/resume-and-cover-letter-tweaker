@@ -395,10 +395,13 @@ def test_the_draft_is_checked_against_the_writing_rules(client: TestClient, db: 
     assert draft["item_flags"] == [{"kind": "bullet", "item_id": ids["tested"], "flags": [
         {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama too."}]}]
     assert db.get(BulletPoint, ids["tested"]).content == "Tested it"
-    # The fixed wording is what approving saves.
+    # The fixed wording is what approving saves, and each kept text keeps what the check found.
     assert finish(client, doc).status_code == 200
-    assert db.scalar(select(func.count()).select_from(NarrativeContent).where(
-        NarrativeContent.content == "I teach classes.")) == 1
+    db.expire_all()
+    assert db.scalar(select(NarrativeContent.flags).where(
+        NarrativeContent.content == "I teach classes.")) == []
+    assert db.scalar(select(BulletPoint.flags).where(BulletPoint.content == "Led a team.")) == [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama."}]
 
 
 def test_a_failed_check_keeps_the_draft_unchecked(client: TestClient, db: Session,

@@ -8,6 +8,7 @@ import BulletItem from './BulletItem'
 
 const BULLET: Bullet = {
   hidden: false,
+  flags: [],
   bullet_id: 10,
   content: 'Shipped it',
   experience: [{ experience_id: 4, role_title: 'Engineer', organization: 'Acme', dates: null }],
@@ -113,5 +114,29 @@ describe('BulletItem', () => {
       content: 'Shipped it twice',
       apply_to: [{ kind: 'resume', id: 3 }, { kind: 'cover_letter', id: 5 }],
     })
+  })
+
+  it('says what the writing check found when its text is saved, and checks unchecked text', async () => {
+    const flag = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
+    const unchecked = { ...BULLET, flags: null }
+    const fetchMock = stubApi({
+      'GET /api/bullet-points': [{ status: 200, body: [unchecked] }, { status: 200, body: [{ ...BULLET, flags: [flag] }] }],
+      'POST /api/bullet-points/10/check': [{ status: 200, body: { ...BULLET, flags: [flag] } }],
+      'PUT /api/bullet-points/10': [{ status: 200, body: { ...BULLET, content: 'Leveraged it', flags: [flag] } }],
+    })
+    const host = await renderItem(<BulletItem id={10} />)
+    expect(screen.getByText('Not checked against your writing rules.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Check writing rules for "Shipped it"' }))
+    await vi.waitFor(() => expect(host.say).toHaveBeenCalledWith('Checked: it breaks 1 writing rule.'))
+    expect(await screen.findByText('Flagged')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url, init]) => url === '/api/bullet-points/10/check' && init?.method === 'POST')).toBe(true)
+    await expectNoA11yViolations()
+
+    fireEvent.change(screen.getByLabelText('Bullet text'), { target: { value: 'Leveraged it' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() =>
+      expect(host.saved).toHaveBeenCalledWith(expect.stringMatching(/ It breaks 1 writing rule, marked Flagged\.$/), { kind: 'bullet', id: 10 }),
+    )
   })
 })

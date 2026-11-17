@@ -28,7 +28,7 @@ from sqlalchemy import ColumnElement, delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
-from app.claude import Claude
+from app.claude import Claude, ClaudeLater
 from app.db import DbSession
 from app.defaults import (
     SECTION_LISTS,
@@ -69,6 +69,7 @@ from app.models import (
     SkillCategory,
     SkillCategorySkill,
 )
+from app.own_text import check_own
 from app.routers.education import EducationIn
 from app.routers.experience import ExperienceIn
 from app.routers.headers import HeaderIn, find_or_add
@@ -580,10 +581,11 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
 
     @router.post("/{doc_id}/sections/{row_id}/written", status_code=status.HTTP_201_CREATED)
     def write_in_section(doc_id: int, row_id: int, body: Written, db: DbSession,
-                         account_id: AccountId):
+                         account_id: AccountId, client: ClaudeLater):
         """A new library item of any kind (narrative content, a bullet, a role, a project, an
         education entry, or a skill category), listed last under the section, and placed last
-        in it here. A skill category's name must be new (DUPLICATE)."""
+        in it here. A skill category's name must be new (DUPLICATE). New narrative content or a
+        bullet is checked against the writing rules (app/own_text.py)."""
         doc = editable(db, doc_id, account_id)
         section_id = _section_row(db, kind, doc_id, row_id)
         if body.kind == "category":
@@ -593,6 +595,8 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         item = library(account_id=account_id, **body.model_dump(exclude={"kind"}))
         db.add(item)
         db.flush()
+        if body.kind in ("narrative", "bullet"):
+            check_own(db, client, account_id, [item])
         item_id = getattr(item, item_column)
         append(db, SECTION_LISTS[body.kind], "section_id", section_id, item_column, item_id)
         db.execute(insert(entry_kinds[body.kind].__table__).values({
@@ -603,9 +607,10 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
     @router.post("/{doc_id}/items/{entry_kind}/{row_id}/written",
                  status_code=status.HTTP_201_CREATED)
     def write_bullet(doc_id: int, entry_kind: Literal["experience", "project"], row_id: int,
-                     body: WrittenBullet, db: DbSession, account_id: AccountId):
+                     body: WrittenBullet, db: DbSession, account_id: AccountId,
+                     client: ClaudeLater):
         """A new bullet, saved to the library, listed last under the role or project, and shown
-        last under it here."""
+        last under it here, checked against the writing rules (app/own_text.py)."""
         doc = editable(db, doc_id, account_id)
         section_row, item_id = _entry_row(db, kind, doc_id, entry_kind, row_id)
         table = kind.bullet.__table__
@@ -613,6 +618,7 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         bullet = BulletPoint(account_id=account_id, content=body.content)
         db.add(bullet)
         db.flush()
+        check_own(db, client, account_id, [bullet])
         link, parent_col = ((ExperienceBulletPoint, "experience_id") if entry_kind == "experience"
                             else (ProjectBulletPoint, "project_id"))
         append(db, link, parent_col, item_id, "bullet_id", bullet.bullet_id)

@@ -12,6 +12,9 @@ docs/FRONTEND_CHECKS.md:
 - Otherwise the new text is saved as a new excerpt, listed right after the original in its
   sections, and only the picked ones switch to it.
 
+Each time its text is saved, it's checked against the writing rules, and what it breaks is kept
+in `flags`, never changed (app/own_text.py); "Check writing rules" runs the check again.
+
 Creating or editing an excerpt can also choose every section that lists it. Those lists only
 drive suggestions, so changing them never makes a new excerpt; when a text edit does, the
 sections chosen apply to the new excerpt, and the original keeps its own.
@@ -23,13 +26,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude, ClaudeLater
 from app.db import DbSession
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, list_beside, set_parents
 from app.models import NarrativeContent, Section, SectionNarrativeContent
+from app.own_text import check_own
 from app.refs import SectionRef, section_refs
 from app.schemas import RequiredText
 from app.usage import NARRATIVE_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
+from app.writing_check import Flag
 
 router = APIRouter(prefix="/api/narrative-content", tags=["narrative content"])
 
@@ -53,6 +59,8 @@ class NarrativeEdit(NarrativeIn):
 class NarrativeOut(NarrativeIn):
     content_id: int
     hidden: bool
+    # The writing rules its text breaks, from the last check; None when it hasn't been checked.
+    flags: list[Flag] | None
     sections: list[SectionRef]
     used_by: list[Use]
 
@@ -62,7 +70,7 @@ def to_out(db: Session, excerpts: list[NarrativeContent]) -> list[NarrativeOut]:
     sections = section_refs(db, SectionNarrativeContent, "content_id", ids)
     used_by = uses(db, NARRATIVE_LINKS, ids)
     return [NarrativeOut(content_id=excerpt.content_id,
-                         hidden=excerpt.hidden, content=excerpt.content,
+                         hidden=excerpt.hidden, content=excerpt.content, flags=excerpt.flags,
                          sections=sections[excerpt.content_id],
                          used_by=used_by[excerpt.content_id])
             for excerpt in excerpts]
@@ -83,9 +91,10 @@ def list_under(db: Session, excerpt: NarrativeContent, section_ids: list[int]) -
 
 
 def new_version(db: Session, original: NarrativeContent, body: NarrativeIn,
-                account_id: int) -> NarrativeContent:
-    """A new excerpt with this text, listed right after the original in its sections."""
-    version = NarrativeContent(account_id=account_id, content=body.content)
+                account_id: int, flags: list | None = None) -> NarrativeContent:
+    """A new excerpt with this text, listed right after the original in its sections, with the
+    writing flags its text was found to have, if any check ran."""
+    version = NarrativeContent(account_id=account_id, content=body.content, flags=flags)
     db.add(version)
     db.flush()
     list_beside(db, SectionNarrativeContent, "section_id", "content_id", original.content_id,
@@ -108,18 +117,20 @@ def get_one(content_id: int, db: DbSession, account_id: AccountId) -> NarrativeO
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_narrative(body: NewNarrative, db: DbSession, account_id: AccountId) -> NarrativeOut:
+def create_narrative(body: NewNarrative, db: DbSession, account_id: AccountId,
+                     client: ClaudeLater) -> NarrativeOut:
     check_sections(db, body.section_ids, account_id)
     excerpt = NarrativeContent(account_id=account_id, content=body.content)
     db.add(excerpt)
     db.flush()
     list_under(db, excerpt, body.section_ids)
+    check_own(db, client, account_id, [excerpt])
     return one_out(db, excerpt)
 
 
 @router.put("/{content_id}")
 def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
-                     account_id: AccountId) -> NarrativeOut:
+                     account_id: AccountId, client: ClaudeLater) -> NarrativeOut:
     """Changes the excerpt's text and sections (see the module docstring for when the text
     is saved as a new excerpt).
 
@@ -138,11 +149,22 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
             saved = new_version(db, excerpt, body, account_id)
             if chosen:
                 switch_unsent(db, NARRATIVE_LINKS, content_id, saved.content_id, only=chosen)
+        check_own(db, client, account_id, [saved])
     if body.section_ids is not None:
         list_under(db, saved, body.section_ids)
     db.flush()
     db.refresh(saved)
     return one_out(db, saved)
+
+
+@router.post("/{content_id}/check")
+def check_narrative(content_id: int, db: DbSession, account_id: AccountId,
+                    client: Claude) -> NarrativeOut:
+    """"Check writing rules": the check alone, on its text as it is. Failing is AI_UNAVAILABLE,
+    and nothing changes."""
+    excerpt = get_owned(db, NarrativeContent, content_id, account_id)
+    check_own(db, client, account_id, [excerpt], keep_unchecked=False)
+    return one_out(db, excerpt)
 
 
 @router.put("/{content_id}/hidden")

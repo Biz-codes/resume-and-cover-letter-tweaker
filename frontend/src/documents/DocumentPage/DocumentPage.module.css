@@ -53,22 +53,50 @@
   margin: 4px 0 8px;
 }
 
-/* With the chat open: beside the document on large screens; below them the chat covers the page,
-   and the document is hidden until "Close chat" (so focus can't move to what's behind it). */
-.with-chat {
+/* With the side panel open (the chat, the posting): beside the document on large screens; below
+   them the panel covers the page, and the document is hidden until it's closed (so focus can't
+   move to what's behind it). */
+.with-panel {
   display: grid;
   gap: 24px;
 }
 
 @media (min-width: 1024px) {
-  .with-chat {
+  .with-panel {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
     align-items: start;
+  }
+
+  /* The panel comes first in the page (so it's first in focus order) but shows on the right. */
+  .with-panel > aside,
+  .with-collapsed > aside {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .with-panel > .main-column,
+  .with-collapsed > .main-column {
+    grid-column: 1;
+    grid-row: 1;
   }
 }
 
 @media (max-width: 1023px) {
-  .with-chat > .main-column {
+  .with-panel > .main-column {
     display: none;
+  }
+}
+
+/* With it collapsed: a narrow column of its buttons beside the document on large screens, and a
+   row of them above it below them (it comes first in the page). */
+.with-collapsed {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .with-collapsed {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
   }
 }

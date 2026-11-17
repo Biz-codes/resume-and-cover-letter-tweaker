@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Bullet } from '../shared/api/bullets'
 import { expectNoA11yViolations } from '../test/axe'
-import { loadedDialog, openItem } from '../test/openCard'
+import { loadedDialog, findCard, openItem } from '../test/openCard'
 import { errorBody, sentBody, stubApi, stubPendingApi, type Reply } from '../test/stubApi'
 import BulletsPage from './BulletsPage'
 import { unsent } from '../test/unsent'
@@ -11,6 +11,7 @@ import { expectNotice } from '../test/notice'
 const SENT = { kind: 'resume' as const, id: 2, name: 'Acme resume', locked: true }
 const SHIPPED: Bullet = {
   hidden: false,
+  flags: [],
   bullet_id: 10,
   content: 'Shipped the new checkout flow to every customer',
   experience: [
@@ -47,6 +48,17 @@ describe('BulletsPage', () => {
     expect(within(card).getByText('Tweaker (Freelance)')).toBeInTheDocument()
     const unlisted = screen.getByRole('heading', { name: 'Not listed anywhere' })
     expect(unlisted.parentElement).toHaveTextContent('Spoke at a conference')
+    await expectNoA11yViolations()
+  })
+
+  it('tags a bullet whose text breaks a writing rule', async () => {
+    const flag = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
+    stub({}, [{ ...SHIPPED, flags: [flag] }, LOOSE])
+    render(<BulletsPage />)
+    // Read in its heading, after the text.
+    const card = await findCard(`${SHIPPED.content} flagged`)
+    expect(within(card).getByText('flagged')).toHaveClass('tag')
+    expect(screen.getAllByText('flagged')).toHaveLength(1)
     await expectNoA11yViolations()
   })
 

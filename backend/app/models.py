@@ -240,6 +240,8 @@ class NarrativeContent(Base):
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     content: Mapped[str] = mapped_column(Text)
     hidden: Mapped[bool] = hidden()
+    # The writing rules its text breaks, from the last check; None when it hasn't been checked.
+    flags: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 
@@ -302,6 +304,8 @@ class BulletPoint(Base):
     account_id: Mapped[int] = mapped_column(fk("account.account_id"))
     content: Mapped[str] = mapped_column(Text)
     hidden: Mapped[bool] = hidden()
+    # The writing rules its text breaks, from the last check; None when it hasn't been checked.
+    flags: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
 

@@ -19,6 +19,7 @@ No prompt caching: the instructions are shorter than the smallest cached prefix.
 import json
 import logging
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Literal
 
@@ -161,13 +162,14 @@ def _tone(db: Session, tone_set_id: int | None) -> list[str]:
     return rule_texts(db, tone_set_id)
 
 
-def check(db: Session, client: anthropic.Anthropic, account_id: int, texts: list[CheckText],
-          *, step: str, posting: str = "", tone_set_id: int | None = None
-          ) -> dict[int, Checked]:
+def check(db: Session, client: anthropic.Anthropic | Callable[[], anthropic.Anthropic],
+          account_id: int, texts: list[CheckText], *, step: str, posting: str = "",
+          tone_set_id: int | None = None) -> dict[int, Checked]:
     """Each text checked against the account's active writing rules and the tone (see the
     module docstring), by key. Claude is asked only when there's something it could find: a
-    found term, a pattern rule, or a tone rule. `posting` is the job description, which tells
-    a technical term from filler. Failures are AI_UNAVAILABLE, as for every Claude request."""
+    found term, a pattern rule, or a tone rule. `client` can be a function that gives one
+    (claude.ClaudeLater), called only then. `posting` is the job description, which tells a
+    technical term from filler. Failures are AI_UNAVAILABLE, as for every Claude request."""
     terms, patterns = _rules(db, account_id)
     tone = _tone(db, tone_set_id)
     texts = [text for text in texts if text.text.strip()]
@@ -190,6 +192,8 @@ def check(db: Session, client: anthropic.Anthropic, account_id: int, texts: list
                f"<skills>\n{json.dumps(skills, ensure_ascii=False)}\n</skills>")
     if posting.strip():
         content += f"\n<posting>\n{posting.strip()}\n</posting>"
+    if not hasattr(client, "beta"):
+        client = client()
     reply = ask(client, step=f"check writing for {step}", system=instructions, content=content,
                 reply=Review, effort="low")
 

@@ -335,7 +335,13 @@ describe('DocumentPage', () => {
       'GET /api/resumes/22/chat': [{ status: 200, body: [] }],
     })
     renderAt('/resumes/22')
-    const chatButton = await screen.findByRole('button', { name: 'Chat with Claude' })
+    // Collapsed beside the document to start, with its button there.
+    const collapsed = await screen.findByRole('complementary', { name: 'Chat with Claude' })
+    const chatButton = within(collapsed).getByRole('button', { name: 'Chat with Claude' })
+    expect(chatButton).toHaveAttribute('aria-expanded', 'false')
+    // Before the document in focus order, as it shows above it on small screens.
+    const copy = screen.getByRole('button', { name: 'Copy to a new base resume' })
+    expect(chatButton.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     fireEvent.click(chatButton)
     const panel = await screen.findByRole('complementary', { name: 'Chat with Claude' })
     expect(within(panel).getByText('About the whole resume')).toBeInTheDocument()
@@ -343,9 +349,9 @@ describe('DocumentPage', () => {
     expect(within(panel).queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument()
     await vi.waitFor(() => expect(within(panel).getByLabelText('Message to Claude')).toHaveFocus())
     await expectNoA11yViolations()
-    fireEvent.click(within(panel).getByRole('button', { name: 'Close chat' }))
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
-    await vi.waitFor(() => expect(chatButton).toHaveFocus())
+    fireEvent.click(within(panel).getByRole('button', { name: 'Collapse chat' }))
+    expect(screen.queryByLabelText('Message to Claude')).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Chat with Claude' })).toHaveFocus())
 
     // From a section's row, about that section, and wider from there.
     fireEvent.click(screen.getByRole('button', { name: 'Sections (1)' }))
@@ -355,8 +361,70 @@ describe('DocumentPage', () => {
     expect(within(opened).getByText('About the Experience section')).toBeInTheDocument()
     fireEvent.click(within(opened).getByRole('button', { name: 'Ask about the whole resume instead' }))
     expect(within(opened).getByText('About the whole resume')).toBeInTheDocument()
-    fireEvent.click(within(opened).getByRole('button', { name: 'Close chat' }))
+    fireEvent.click(within(opened).getByRole('button', { name: 'Collapse chat' }))
     await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Ask Claude about Experience' })).toHaveFocus())
+  })
+
+  it("shows a posting's document's job posting beside it, sharing the panel with the chat as tabs", async () => {
+    const library = ['sections', 'narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
+    const fetchMock = stub(22, resume(22, { name: 'Engineer at Acme', job_posting: posting }), {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      'GET /api/resumes/22/chat': [{ status: 200, body: [] }],
+      'GET /api/job-postings/4': [
+        { status: 200, body: { ...posting, url: 'https://example.com/jobs/4', description: 'Build accessible apps.', contacts: null } },
+      ],
+    })
+    renderAt('/resumes/22')
+    const postingButton = await screen.findByRole('button', { name: 'Job posting' })
+    expect(postingButton).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(postingButton)
+    const panel = await screen.findByRole('complementary', { name: 'Chat with Claude and Job posting' })
+    const postingTab = within(panel).getByRole('tab', { name: 'Job posting' })
+    await vi.waitFor(() => expect(postingTab).toHaveFocus())
+    expect(postingTab).toHaveAttribute('aria-selected', 'true')
+    expect(await within(panel).findByText('Build accessible apps.')).toBeInTheDocument()
+    // The chat isn't read until its tab is shown.
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/resumes/22/chat')).toBe(false)
+    await expectNoA11yViolations()
+
+    // Its tab shows the chat and keeps focus.
+    const chatTab = within(panel).getByRole('tab', { name: 'Chat with Claude' })
+    fireEvent.click(chatTab)
+    chatTab.focus()
+    expect(await within(panel).findByText('No messages yet.')).toBeInTheDocument()
+    expect(within(panel).getByText('About the whole resume')).toBeInTheDocument()
+    expect(chatTab).toHaveFocus()
+    // The posting stays, hidden, and isn't read again.
+    expect(within(panel).getByText('Build accessible apps.')).not.toBeVisible()
+    await expectNoA11yViolations()
+    fireEvent.click(postingTab)
+    expect(within(panel).getByText('Build accessible apps.')).toBeVisible()
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/job-postings/4')).toHaveLength(1)
+
+    // Collapse goes back to the button that expanded it.
+    fireEvent.click(within(panel).getByRole('button', { name: 'Collapse Chat with Claude and Job posting' }))
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Job posting' })).toHaveFocus())
+
+    // "Chat with Claude" opens the same panel on the chat, with focus in its message box.
+    fireEvent.click(screen.getByRole('button', { name: 'Chat with Claude' }))
+    const chatPanel = await screen.findByRole('complementary', { name: 'Chat with Claude and Job posting' })
+    expect(within(chatPanel).getByRole('tab', { name: 'Chat with Claude' })).toHaveAttribute('aria-selected', 'true')
+    await vi.waitFor(() => expect(within(chatPanel).getByLabelText('Message to Claude')).toHaveFocus())
+  })
+
+  it("offers a sent one's job posting", async () => {
+    stub(7, resume(7, { ...SENT, tone_set_id: 2 }))
+    renderAt('/resumes/7')
+    expect(await screen.findByRole('button', { name: 'Job posting' })).toBeInTheDocument()
+  })
+
+  it('has no job posting for a base one', async () => {
+    stub(8, resume(8))
+    renderAt('/resumes/8')
+    await screen.findByRole('button', { name: 'Chat with Claude' })
+    expect(screen.queryByRole('button', { name: 'Job posting' })).not.toBeInTheDocument()
   })
 
   it("applies one of Claude's proposals as an ordinary change, which Undo takes back", async () => {
@@ -755,6 +823,26 @@ describe('DocumentPage', () => {
     expect(sentBody(fetchMock, 'POST /api/cover-letters/14/sign-off/written')).toEqual({ text: 'Warm regards' })
     await vi.waitFor(() => expect(screen.getByRole('combobox', { name: 'Sign-off' })).toHaveValue('9'))
     await expectNoA11yViolations()
+  })
+
+  it("shows the job posting alone while Claude's draft is reviewed, when there's no chat", async () => {
+    const library = ['sections', 'narrative-content', 'skill-categories', 'experience', 'projects', 'bullet-points', 'education']
+    const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
+    const draft = { starting_document: null, starting_reason: 'There are no earlier resumes.', texts: [], sections: [] }
+    stub(5, resume(5, { name: 'Engineer at Acme', job_posting: posting, output: { parts: [], text: '' }, draft }), {
+      ...Object.fromEntries(library.map((path) => [`GET /api/${path}`, [{ status: 200, body: [] }]])),
+      'GET /api/job-postings/4': [{ status: 200, body: { ...posting, url: 'Sam', description: 'Build accessible apps.', contacts: 'Ms. Lee' } }],
+    })
+    renderAt('/resumes/5')
+    fireEvent.click(await screen.findByRole('button', { name: 'Job posting' }))
+    expect(screen.queryByRole('button', { name: 'Chat with Claude' })).not.toBeInTheDocument()
+    const panel = await screen.findByRole('complementary', { name: 'Job posting' })
+    expect(within(panel).queryByRole('tablist')).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(within(panel).getByRole('heading', { name: 'Job posting' })).toHaveFocus())
+    expect(await within(panel).findByText('Ms. Lee')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Collapse job posting' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Job posting' })).toHaveFocus())
   })
 
   it("reviews Claude's draft in place of the tree, with Undo, then approves it", async () => {

@@ -53,6 +53,7 @@ from app.models import (
     SectionNarrativeContent,
     SkillCategorySkill,
 )
+from app.own_text import kept_flags
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
 from app.routers.narrative_content import NarrativeIn
@@ -448,17 +449,19 @@ def in_use(sections: list[DraftSection]) -> set[int]:
 
 
 def _save_text(db: Session, account_id: int, text: ClaudeText,
-               new_sections: dict[int, int]) -> int:
+               new_sections: dict[int, int], checked: bool) -> int:
     """A new library row with Claude's text: right after the original wherever it's listed, or
     for new text, listed under the role, project, or section Claude put it in (`new_sections`:
     the ids Claude's new sections were saved as, by key). New text in a new section the user
-    rejected stands alone."""
+    rejected stands alone. It keeps the writing flags the draft's check found (none when it
+    didn't run: `checked`)."""
+    flags = kept_flags(text.flags, checked)
     if text.kind == "bullet":
         if text.replaces is not None:
             original = db.get(BulletPoint, text.replaces)
             return bullet_points.new_version(db, original, BulletIn(content=text.text),
-                                             account_id).bullet_id
-        row = BulletPoint(account_id=account_id, content=text.text)
+                                             account_id, flags).bullet_id
+        row = BulletPoint(account_id=account_id, content=text.text, flags=flags)
         db.add(row)
         db.flush()
         if text.parent_kind == "experience":
@@ -474,8 +477,8 @@ def _save_text(db: Session, account_id: int, text: ClaudeText,
     if text.replaces is not None:
         original = db.get(NarrativeContent, text.replaces)
         return narrative_content.new_version(db, original, NarrativeIn(content=text.text),
-                                             account_id).content_id
-    row = NarrativeContent(account_id=account_id, content=text.text)
+                                             account_id, flags).content_id
+    row = NarrativeContent(account_id=account_id, content=text.text, flags=flags)
     db.add(row)
     db.flush()
     section_id = (text.section_id if text.section_key is None
@@ -518,7 +521,7 @@ def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        "Only Claude's text you didn't use can be kept for later.", field="keep")
     new_sections = _save_sections(db, account_id, draft)
-    saved = {text.key: _save_text(db, account_id, text, new_sections)
+    saved = {text.key: _save_text(db, account_id, text, new_sections, draft.checked)
              for text in draft.texts if text.key in used or text.key in keep}
 
     # Skills Claude put under a category or project that doesn't list them yet, listed last.

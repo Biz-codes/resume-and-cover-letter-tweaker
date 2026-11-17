@@ -12,6 +12,7 @@ import { expectNotice } from '../test/notice'
 const SENT = { kind: 'cover_letter' as const, id: 2, name: 'Acme letter', locked: true }
 const INTRO: NarrativeContent = {
   hidden: false,
+  flags: [],
   content_id: 10,
   content: 'I build tools that help teachers spend more time with students.',
   sections: [

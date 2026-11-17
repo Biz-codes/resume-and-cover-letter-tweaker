@@ -72,23 +72,24 @@ function stubChat(history: ChatMessage[], replies: (Response | (() => Response))
   return fetchMock
 }
 
+// The side panel's heading, which the page's SidePanel gives it (SidePanel.test.tsx tests the frame).
+const HEADING_ID = 'side-heading'
+
+function Framed(props: Partial<Parameters<typeof ChatPanel>[0]> & Pick<Parameters<typeof ChatPanel>[0], 'onAbout'>) {
+  return (
+    <aside aria-labelledby={HEADING_ID}>
+      <h3 id={HEADING_ID} tabIndex={-1}>
+        Chat with Claude
+      </h3>
+      <ChatPanel kind="resume" docId={5} locked={false} about={DOCUMENT} wider={[]} headingId={HEADING_ID} focusRequest={1} {...props} />
+    </aside>
+  )
+}
+
 function renderPanel(props: Partial<Parameters<typeof ChatPanel>[0]> = {}) {
   const onAbout = vi.fn()
-  const onClose = vi.fn()
-  const view = render(
-    <ChatPanel
-      kind="resume"
-      docId={5}
-      locked={false}
-      about={DOCUMENT}
-      wider={[]}
-      onAbout={onAbout}
-      onClose={onClose}
-      focusRequest={1}
-      {...props}
-    />,
-  )
-  return { onAbout, onClose, view }
+  const view = render(<Framed onAbout={onAbout} {...props} />)
+  return { onAbout, view }
 }
 
 const announced = () => document.querySelector('[aria-live="polite"]')?.textContent
@@ -127,7 +128,6 @@ describe('ChatPanel', () => {
       'Here is a tighter version.',
       'Take a look.',
     ])
-    expect(screen.getByRole('complementary', { name: 'Chat with Claude' })).toBeInTheDocument()
     await vi.waitFor(() => expect(screen.getByLabelText('Message to Claude')).toHaveFocus())
     await expectNoA11yViolations()
   })
@@ -292,26 +292,47 @@ describe('ChatPanel', () => {
 
   it('widens what the message is about, and closes', async () => {
     stubChat([])
-    const { onAbout, onClose } = renderPanel({ about: ROLE, wider: [SECTION, DOCUMENT] })
+    const { onAbout } = renderPanel({ about: ROLE, wider: [SECTION, DOCUMENT] })
     await screen.findByText('No messages yet.')
     expect(screen.getByText('About the role Engineer, Acme in Experience')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Ask about the Experience section instead' }))
     expect(onAbout).toHaveBeenCalledWith(SECTION)
     fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole resume instead' }))
     expect(onAbout).toHaveBeenLastCalledWith(DOCUMENT)
-    fireEvent.click(screen.getByRole('button', { name: 'Close chat' }))
-    expect(onClose).toHaveBeenCalled()
+  })
+
+  it("says what it announces through the side panel when given, with no live region of its own", async () => {
+    const reply = streamed()
+    stubChat([], [reply.response])
+    const onAnnounce = vi.fn()
+    renderPanel({ onAnnounce })
+    await screen.findByText('No messages yet.')
+    expect(document.querySelector('[aria-live="polite"]')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await vi.waitFor(() => expect(onAnnounce).toHaveBeenCalledWith('Claude is replying…'))
+    reply.send({ type: 'text', text: 'Hi.' })
+    reply.send({ type: 'done', messages: [asked(1, 'Hello'), answered(2, 'Hi.')] })
+    await vi.waitFor(() => expect(onAnnounce).toHaveBeenLastCalledWith('Claude: Hi.'))
   })
 
   it('moves focus to the box again each time it is asked to', async () => {
     stubChat([])
     const { view } = renderPanel()
     await vi.waitFor(() => expect(document.getElementById(CHAT_INPUT_ID)).toHaveFocus())
-    screen.getByRole('button', { name: 'Close chat' }).focus()
-    view.rerender(
-      <ChatPanel kind="resume" docId={5} locked={false} about={SECTION} wider={[]} onAbout={vi.fn()} onClose={vi.fn()} focusRequest={2} />,
-    )
+    screen.getByRole('heading', { name: 'Chat with Claude' }).focus()
+    view.rerender(<Framed onAbout={vi.fn()} about={SECTION} focusRequest={2} />)
     await vi.waitFor(() => expect(document.getElementById(CHAT_INPUT_ID)).toHaveFocus())
+  })
+
+  it('keeps focus where it is when its tab shows it', async () => {
+    stubChat([])
+    const heading = () => screen.getByRole('heading', { name: 'Chat with Claude' })
+    const { view } = renderPanel({ focusRequest: 0 })
+    heading().focus()
+    await screen.findByText('No messages yet.')
+    view.rerender(<Framed onAbout={vi.fn()} focusRequest={0} about={SECTION} />)
+    expect(heading()).toHaveFocus()
   })
 
   it("shows a sent one's conversation only, with focus on its heading", async () => {

@@ -50,6 +50,8 @@ export default function BulletsPage() {
         key={bullet.bullet_id}
         title={bullet.content}
         titleClassName="bullet-text"
+        // Its text breaks a writing rule; its dialog says which.
+        tags={bullet.flags?.length ? <span className="tag">flagged</span> : undefined}
         editId={editId('bullet', bullet.bullet_id)}
         editLabel={`View and Edit "${title}"`}
         actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('bullet', bullet.bullet_id, title, () => bulletsApi.setHidden(bullet.bullet_id, false))} />}

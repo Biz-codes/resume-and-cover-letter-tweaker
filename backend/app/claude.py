@@ -12,12 +12,12 @@ timeout, and the app waits for the whole reply.
 """
 
 import logging
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
 import anthropic
-from fastapi import Depends
+from fastapi import Depends, Request
 from pydantic import BaseModel, ValidationError
 
 from app.config import get_settings
@@ -45,6 +45,16 @@ def get_client() -> anthropic.Anthropic:
 
 # Tests swap in a stand-in client through FastAPI's dependency overrides.
 Claude = Annotated[anthropic.Anthropic, Depends(get_client)]
+
+
+def later_client(request: Request) -> Callable[[], anthropic.Anthropic]:
+    """get_client, called only if the request turns out to need Claude: saving the user's own
+    text runs the writing check, which asks Claude only when there's a rule to check, and a save
+    never fails for want of a key. A test's stand-in (its dependency override) is used too."""
+    return request.app.dependency_overrides.get(get_client, get_client)
+
+
+ClaudeLater = Annotated[Callable[[], anthropic.Anthropic], Depends(later_client)]
 
 
 def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str,

@@ -12,6 +12,9 @@ docs/FRONTEND_CHECKS.md:
   every one is picked and no sent version uses the bullet, it's edited in place.
 - Otherwise the new text is saved as a new bullet, listed right after the original wherever
   it's listed, and only the picked ones switch to it.
+
+Each time its text is saved, it's checked against the writing rules, and what it breaks is kept
+in `flags`, never changed (app/own_text.py); "Check writing rules" runs the check again.
 """
 
 from fastapi import APIRouter, status
@@ -20,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.account import AccountId, get_owned
+from app.claude import Claude, ClaudeLater
 from app.db import DbSession
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, list_beside
@@ -31,6 +35,7 @@ from app.models import (
     ProjectBulletPoint,
     SectionBulletPoint,
 )
+from app.own_text import check_own
 from app.refs import (
     ExperienceRef,
     ProjectRef,
@@ -42,6 +47,7 @@ from app.refs import (
 from app.routers.sections import get_section
 from app.schemas import RequiredText
 from app.usage import BULLET_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
+from app.writing_check import Flag
 
 router = APIRouter(prefix="/api/bullet-points", tags=["bullet points"])
 
@@ -70,6 +76,8 @@ class BulletChange(BulletIn):
 class BulletOut(BulletIn):
     bullet_id: int
     hidden: bool
+    # The writing rules its text breaks, from the last check; None when it hasn't been checked.
+    flags: list[Flag] | None
     experience: list[ExperienceRef]
     projects: list[ProjectRef]
     sections: list[SectionRef]
@@ -85,6 +93,7 @@ def to_out(db: Session, bullets: list[BulletPoint], account_id: int) -> list[Bul
     sections = section_refs(db, SectionBulletPoint, "bullet_id", ids)
     used_by = uses(db, BULLET_LINKS, ids)
     return [BulletOut(bullet_id=bullet.bullet_id, hidden=bullet.hidden, content=bullet.content,
+                      flags=bullet.flags,
                       experience=experience[bullet.bullet_id],
                       projects=projects[bullet.bullet_id], sections=sections[bullet.bullet_id],
                       used_by=used_by[bullet.bullet_id])
@@ -96,10 +105,11 @@ def one_out(db: Session, bullet: BulletPoint, account_id: int) -> BulletOut:
 
 
 def new_version(db: Session, original: BulletPoint, body: BulletIn,
-                account_id: int) -> BulletPoint:
+                account_id: int, flags: list | None = None) -> BulletPoint:
     """A new bullet with this text, listed right after the original under every role,
-    project, and section that lists it."""
-    version = BulletPoint(account_id=account_id, content=body.content)
+    project, and section that lists it, with the writing flags its text was found to have, if
+    any check ran."""
+    version = BulletPoint(account_id=account_id, content=body.content, flags=flags)
     db.add(version)
     db.flush()
     for link, parent_col in BULLET_LISTS:
@@ -121,7 +131,8 @@ def get_one(bullet_id: int, db: DbSession, account_id: AccountId) -> BulletOut:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_bullet(body: NewBullet, db: DbSession, account_id: AccountId) -> BulletOut:
+def create_bullet(body: NewBullet, db: DbSession, account_id: AccountId,
+                  client: ClaudeLater) -> BulletOut:
     if body.experience_id is not None:
         get_owned(db, Experience, body.experience_id, account_id)
     if body.project_id is not None:
@@ -135,12 +146,13 @@ def create_bullet(body: NewBullet, db: DbSession, account_id: AccountId) -> Bull
         parent_id = getattr(body, parent_col)
         if parent_id is not None:
             append(db, link, parent_col, parent_id, "bullet_id", bullet.bullet_id)
+    check_own(db, client, account_id, [bullet])
     return one_out(db, bullet, account_id)
 
 
 @router.put("/{bullet_id}")
 def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
-                  account_id: AccountId) -> BulletOut:
+                  account_id: AccountId, client: ClaudeLater) -> BulletOut:
     """Changes the bullet's text (see the module docstring for when that's a new bullet).
 
     The response's bullet_id differs from the one in the url when a new bullet was saved.
@@ -152,14 +164,25 @@ def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
         uses(db, BULLET_LINKS, [bullet_id])[bullet_id], body.apply_to)
     if in_place:
         bullet.content = body.content
-        db.flush()
+        check_own(db, client, account_id, [bullet])
         db.refresh(bullet)
         return one_out(db, bullet, account_id)
 
     replacement = new_version(db, bullet, BulletIn(content=body.content), account_id)
     if chosen:
         switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id, only=chosen)
+    check_own(db, client, account_id, [replacement])
     return one_out(db, replacement, account_id)
+
+
+@router.post("/{bullet_id}/check")
+def check_bullet(bullet_id: int, db: DbSession, account_id: AccountId,
+                 client: Claude) -> BulletOut:
+    """"Check writing rules": the check alone, on its text as it is. Failing is AI_UNAVAILABLE,
+    and nothing changes."""
+    bullet = get_owned(db, BulletPoint, bullet_id, account_id)
+    check_own(db, client, account_id, [bullet], keep_unchecked=False)
+    return one_out(db, bullet, account_id)
 
 
 @router.put("/{bullet_id}/hidden")

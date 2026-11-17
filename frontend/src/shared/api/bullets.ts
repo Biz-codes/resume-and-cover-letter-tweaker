@@ -1,5 +1,6 @@
 // Bullet points. See backend/app/routers/bullet_points.py.
 import { api } from './client'
+import type { WritingFlag } from './documents'
 import { refs, type Use } from './usage'
 
 export interface Bullet {
@@ -7,6 +8,9 @@ export interface Bullet {
   hidden: boolean
   bullet_id: number
   content: string
+  // The writing rules its text breaks, from the check each save runs (never changed); null when
+  // it hasn't been checked.
+  flags: WritingFlag[] | null
   experience: { experience_id: number; role_title: string; organization: string; dates: string | null }[]
   projects: { project_id: number; project_title: string; done_for: string | null }[]
   sections: { id: number; title: string }[]
@@ -30,6 +34,8 @@ export const bulletsApi = {
   // with a new id, which the picked ones switch to (FRONTEND_CHECKS.md, "Changing an item").
   update: (id: number, content: string, applyTo: Use[]) =>
     api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: refs(applyTo) }),
+  // "Check writing rules": the check alone, on its text as it is. AI_UNAVAILABLE changes nothing.
+  check: (id: number) => api.post<Bullet>(`/bullet-points/${id}/check`, {}),
   setHidden: (id: number, hidden: boolean) => api.put<Bullet>(`/bullet-points/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/bullet-points/${id}`),
 }

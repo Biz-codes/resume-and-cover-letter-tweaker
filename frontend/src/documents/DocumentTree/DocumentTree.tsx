@@ -14,7 +14,8 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import { docsApi, KINDS, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection } from '../../shared/api/documents'
+import { docsApi, KINDS, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection, type WritingFlag } from '../../shared/api/documents'
+import { flagsNote } from '../../shared/flagsNote'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import AddContent from '../AddContent'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
@@ -193,8 +194,10 @@ function EntryChildren({
   const bulletActions = (item: ListItem<number>) => {
     const row = entry.bullets.find((bullet) => bullet.item_id === item.id)
     return (
-      row &&
-      editRow(
+      row && (
+      <>
+      <FlaggedBadge flags={row.flags} />
+      {editRow(
         `bullet-${parentKind}-${row.row_id}`,
         `${item.label ?? item.name} under ${name} in ${sectionTitle}`,
         { kind: 'bullet', id: row.item_id, title: shortBullet(row.text) },
@@ -207,6 +210,8 @@ function EntryChildren({
           parent_kind: parentKind,
           parent_id: entry.item_id,
         },
+      )}
+      </>
       )
     )
   }
@@ -381,7 +386,8 @@ function SectionBody({
   library: Library | null
   saved: (request: Promise<DocDetail>) => Promise<void>
   // Without a notice, the caller gives its own.
-  written: (request: Promise<DocDetail>, notice: string) => Promise<void>
+  // `flagsOf` finds a new text's writing flags in the returned document, for the notice.
+  written: (request: Promise<DocDetail>, notice: string, flagsOf?: (next: DocDetail) => WritingFlag[] | null | undefined) => Promise<void>
   // Reads the library again, after a change that adds to its lists.
   reloadLibrary: () => void
   onNotice: (notice: string) => void
@@ -414,7 +420,10 @@ function SectionBody({
     if (!entry) return null
     const name = itemName(entry.kind, entry.values)
     const shown = opens(entry.kind) ? name : `"${shortBullet(name)}"`
-    return editRow(
+    return (
+      <>
+      <FlaggedBadge flags={entry.flags} />
+      {editRow(
       `${entry.kind}-${entry.row_id}`,
       `${item.label ?? item.name} in ${section.title}`,
       { kind: entry.kind, id: entry.item_id, title: opens(entry.kind) ? name : shortBullet(name) },
@@ -425,6 +434,8 @@ function SectionBody({
         kind: entry.kind,
         item_id: entry.item_id,
       },
+    )}
+      </>
     )
   }
 
@@ -453,6 +464,10 @@ function SectionBody({
                 written(
                   api.write(doc.id, section.row_id, item),
                   `Added the new ${KIND_NAMES[item.kind].lower}. It's saved in your library too.`,
+                  // Placed last in the section; only text is checked.
+                  item.kind === 'narrative' || item.kind === 'bullet'
+                    ? (next) => next.sections.find((placed) => placed.row_id === section.row_id)?.entries.at(-1)?.flags
+                    : undefined,
                 )
               }
             />
@@ -488,7 +503,16 @@ function SectionBody({
                 )
               }
               onWriteBullet={(content) =>
-                written(api.writeBullet(doc.id, parent, entry.row_id, content), "Added the new bullet. It's saved in your library too.")
+                written(
+                  api.writeBullet(doc.id, parent, entry.row_id, content),
+                  "Added the new bullet. It's saved in your library too.",
+                  // Shown last under the role or project.
+                  (next) =>
+                    next.sections
+                      .flatMap((placed) => placed.entries)
+                      .find((placed) => placed.kind === entry.kind && placed.row_id === entry.row_id)
+                      ?.bullets.at(-1)?.flags,
+                )
               }
               editRow={editRow}
               sectionTitle={section.title}
@@ -555,9 +579,11 @@ export default function DocumentTree({
   const saved = async (request: Promise<DocDetail>) => onChange(await request)
 
   // Writing adds to the library too, so its lists are read again.
-  async function written(request: Promise<DocDetail>, notice: string) {
-    onChange(await request)
-    onNotice(notice)
+  // `flagsOf` finds the new text's writing flags in the document it returns, for the notice.
+  async function written(request: Promise<DocDetail>, notice: string, flagsOf?: (next: DocDetail) => WritingFlag[] | null | undefined) {
+    const next = await request
+    onChange(next)
+    onNotice(notice + (flagsOf ? flagsNote(flagsOf(next)) : ''))
     void load()
   }
 
@@ -674,4 +700,9 @@ export default function DocumentTree({
       {dialog}
     </>
   )
+}
+
+// A row whose text breaks a writing rule; its View and Edit says which.
+function FlaggedBadge({ flags }: { flags?: WritingFlag[] | null }) {
+  return flags?.length ? <span className="badge badge-flagged">Flagged</span> : null
 }

@@ -21,6 +21,7 @@ const ROLE: Experience = {
 }
 const SHIPPED: Bullet = {
   hidden: false,
+  flags: [],
   bullet_id: 10,
   content: 'Shipped it',
   experience: [{ experience_id: 4, role_title: 'Engineer', organization: 'Acme', dates: null }],

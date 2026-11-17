@@ -79,6 +79,8 @@ export default function NarrativeContentPage() {
         key={excerpt.content_id}
         title={excerpt.content}
         titleClassName="bullet-text"
+        // Its text breaks a writing rule; its dialog says which.
+        tags={excerpt.flags?.length ? <span className="tag">flagged</span> : undefined}
         editId={editId('narrative', excerpt.content_id)}
         editLabel={`View and Edit "${title}"`}
         actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('narrative', excerpt.content_id, title, () => narrativeApi.setHidden(excerpt.content_id, false))} />}

@@ -38,6 +38,7 @@ const GIG: Experience = {
 }
 const bullet = (ref: { bullet_id: number; content: string }): Bullet => ({
   hidden: false,
+  flags: [],
   ...ref,
   experience: [],
   projects: [],

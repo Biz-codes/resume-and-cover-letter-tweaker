@@ -1,0 +1,76 @@
+/* The panel beside the document (the chat, and for a posting's document, the posting). On large
+   screens it's a column beside the tree that stays in view while the page scrolls; below them it
+   covers the page (DocumentPage.module.css hides the document while it's open), and Close goes
+   back to it. Colors come from index.css. */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--page);
+}
+
+@media (min-width: 1024px) {
+  .panel {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+
+.collapsed {
+  padding: 8px;
+}
+
+/* Collapsed: its buttons, stacked in a narrow column beside the document, or in a row above it. */
+.openButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 1024px) {
+  .openButtons {
+    flex-direction: column;
+  }
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.top h3 {
+  margin: 0;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The shown tab is bold and underlined by a bar, not told apart by color alone; the bar's color
+   is the outline's, which meets 3:1 against the page. */
+.tab {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--outline);
+  font-weight: 600;
+}
+
+.tabPanel {
+  margin-top: 12px;
+}

@@ -52,6 +52,9 @@ export interface TreeChild {
   item_id: number
   position: number
   text: string
+  // A bullet's writing flags, from the last check of its text; null when it hasn't been checked,
+  // and for a skill.
+  flags?: WritingFlag[] | null
 }
 
 // An item placed directly in a section. row_id is its row in this document, which the calls
@@ -64,6 +67,8 @@ export interface TreeEntry {
   // The library values it prints: content, category_name, role_title, organization, location,
   // dates, project_title, done_for, url, degree, institution, details, or graduation.
   values: Record<string, string | null>
+  // Narrative content's or a bullet's writing flags, as for TreeChild; null for other kinds.
+  flags?: WritingFlag[] | null
   skills: TreeChild[]
   bullets: TreeChild[]
 }

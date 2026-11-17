@@ -119,6 +119,9 @@ class Child(BaseModel):
     item_id: int
     position: int
     text: str
+    # A bullet's writing flags, from the last check of its text (app/own_text.py); None when it
+    # hasn't been checked, and for a skill.
+    flags: list[dict[str, Any]] | None = None
 
 
 class Entry(BaseModel):
@@ -129,6 +132,8 @@ class Entry(BaseModel):
     item_id: int
     position: int
     values: dict[str, str | None]
+    # Narrative content's or a bullet's writing flags, as for Child; None for other kinds.
+    flags: list[dict[str, Any]] | None = None
     skills: list[Child] = []
     bullets: list[Child] = []
 
@@ -204,12 +209,31 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
             entries[(parent_kind, parent_row)].skills.append(
                 Child(row_id=row_id, item_id=skill_id, position=position, text=name))
 
+    _add_flags(db, list(entries.values()), [child for _, child in nested_bullets])
     for entry in entries.values():
         entry.skills.sort(key=lambda child: child.position)
         entry.bullets.sort(key=lambda child: child.position)
     for section in sections:
         section.entries.sort(key=lambda entry: entry.position)
     return sections
+
+
+def _add_flags(db: Session, entries: list[Entry], bullets: list[Child]) -> None:
+    """Each narrative content's and bullet's writing flags, read in one query per kind."""
+    narrative_ids = {entry.item_id for entry in entries if entry.kind == "narrative"}
+    bullet_ids = ({entry.item_id for entry in entries if entry.kind == "bullet"}
+                  | {child.item_id for child in bullets})
+    narrative = dict(db.execute(select(NarrativeContent.content_id, NarrativeContent.flags)
+                                .where(NarrativeContent.content_id.in_(narrative_ids))).all())
+    bullet = dict(db.execute(select(BulletPoint.bullet_id, BulletPoint.flags)
+                             .where(BulletPoint.bullet_id.in_(bullet_ids))).all())
+    for entry in entries:
+        if entry.kind == "narrative":
+            entry.flags = narrative.get(entry.item_id)
+        elif entry.kind == "bullet":
+            entry.flags = bullet.get(entry.item_id)
+    for child in bullets:
+        child.flags = bullet.get(child.item_id)
 
 
 def standalone_bullets(kind: Kind) -> ColumnElement[bool]:

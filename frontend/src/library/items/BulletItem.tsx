@@ -1,7 +1,10 @@
 // A bullet's dialog: edit it (following "Changing an item" in docs/FRONTEND_CHECKS.md: sent
 // versions never change, and resumes and cover letters in progress change only if the user picks
 // them) or delete it. The roles, projects, and sections that list it open in the same dialog.
+// Saving checks its text against the writing rules (never changing it): what it breaks shows under
+// the form (OwnTextFlags), and the notice says so.
 import { useState } from 'react'
+import { flagsNote } from '../../shared/flagsNote'
 import { bulletsApi, shortBullet, type Bullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { experienceLabel } from '../../shared/api/experience'
@@ -14,6 +17,7 @@ import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyCha
 import NameList from '../NameList'
 import UsedBy from '../UsedBy'
 import DialogChat from './DialogChat'
+import OwnTextFlags from './OwnTextFlags'
 import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
@@ -44,7 +48,9 @@ export default function BulletItem({ id }: { id: number }) {
       doc: host.placed?.doc,
       checked: applyTo,
     })
-    await host.saved(message, { kind: 'bullet', id: saved.bullet_id })
+    // What the check on the saved text found, unless the text didn't change.
+    const note = saved.content !== original.content || saved.bullet_id !== original.bullet_id ? flagsNote(saved.flags) : ''
+    await host.saved(message + note, { kind: 'bullet', id: saved.bullet_id })
   }
 
 
@@ -83,6 +89,15 @@ export default function BulletItem({ id }: { id: number }) {
         >
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </NameForm>
+        <OwnTextFlags
+          name={label}
+          flags={bullet.flags}
+          onCheck={async () => {
+            const checked = await bulletsApi.check(bullet.bullet_id)
+            await load()
+            return checked.flags
+          }}
+        />
         <DialogChat field="content" value={typed ?? bullet.content} />
         </>
       }

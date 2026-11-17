@@ -1,6 +1,7 @@
 // Narrative content: excerpts of text, from one sentence to a full paragraph, that summaries and
 // cover letter paragraphs are built from. See backend/app/routers/narrative_content.py.
 import { api } from './client'
+import type { WritingFlag } from './documents'
 import { refs, type Use } from './usage'
 
 export interface NarrativeContent {
@@ -8,6 +9,9 @@ export interface NarrativeContent {
   hidden: boolean
   content_id: number
   content: string
+  // The writing rules its text breaks, from the check each save runs (never changed); null when
+  // it hasn't been checked.
+  flags: WritingFlag[] | null
   sections: { id: number; title: string }[]
   used_by: Use[]
 }
@@ -27,6 +31,8 @@ export const narrativeApi = {
       section_ids: sectionIds,
       apply_to: refs(applyTo),
     }),
+  // "Check writing rules": the check alone, on its text as it is. AI_UNAVAILABLE changes nothing.
+  check: (id: number) => api.post<NarrativeContent>(`/narrative-content/${id}/check`, {}),
   setHidden: (id: number, hidden: boolean) => api.put<NarrativeContent>(`/narrative-content/${id}/hidden`, { hidden }),
   delete: (id: number) => api.delete(`/narrative-content/${id}`),
 }

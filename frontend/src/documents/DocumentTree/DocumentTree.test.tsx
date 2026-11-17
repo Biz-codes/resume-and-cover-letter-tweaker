@@ -358,6 +358,52 @@ describe('DocumentTree', () => {
     )
   })
 
+  it('marks a row whose text breaks a writing rule, and says so for new text', async () => {
+    const flag = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
+    const [summary, experience] = DOC.sections
+    const flagged: DocDetail = {
+      ...DOC,
+      sections: [
+        { ...summary, entries: [{ ...summary.entries[0], flags: [flag] }] },
+        { ...experience, entries: [{ ...experience.entries[0], bullets: [{ ...experience.entries[0].bullets[0], flags: [flag] }] }, experience.entries[1]] },
+      ],
+    }
+    const written = {
+      ...flagged,
+      sections: [
+        flagged.sections[0],
+        {
+          ...flagged.sections[1],
+          entries: [
+            {
+              ...flagged.sections[1].entries[0],
+              bullets: [...flagged.sections[1].entries[0].bullets, { row_id: 402, item_id: 9, position: 2, text: 'Leveraged it.', flags: [flag] }],
+            },
+            flagged.sections[1].entries[1],
+          ],
+        },
+      ],
+    }
+    stub({ 'POST /api/resumes/1/items/experience/300/written': [{ status: 201, body: written }] }, 2)
+    const { onNotice } = renderTree(flagged)
+    await expand('Summary')
+    const summaryRow = (await screen.findByRole('button', { name: /^View and Edit .*Engineer with 4 years.* in Summary$/ })).closest('li')!
+    expect(within(summaryRow).getByText('Flagged')).toBeInTheDocument()
+    await openExperience()
+    const bulletRow = screen.getByRole('button', { name: 'View and Edit "Led the redesign." under Engineer, Acme in Experience' }).closest('li')!
+    expect(within(bulletRow).getByText('Flagged')).toBeInTheDocument()
+    // A role isn't text, so its own row has no badge (its bullet's row does).
+    const roleActions = screen.getByRole('button', { name: 'View and Edit Role: Engineer, Acme in Experience' }).parentElement!
+    expect(within(roleActions).queryByText('Flagged')).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'New bullet for Engineer, Acme' }))
+    fireEvent.change(screen.getByLabelText('New bullet for Engineer, Acme'), { target: { value: 'Leveraged it.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add bullet' }))
+    await vi.waitFor(() =>
+      expect(onNotice).toHaveBeenCalledWith("Added the new bullet. It's saved in your library too. It breaks 1 writing rule, marked Flagged."),
+    )
+  })
+
   it("saves a change to the library item from its dialog, reads the document again, and returns to the row", async () => {
     const edited = { ...LIBRARY['bullet-points'][0] as object, content: 'Led the whole redesign.' }
     const fetchMock = stub(

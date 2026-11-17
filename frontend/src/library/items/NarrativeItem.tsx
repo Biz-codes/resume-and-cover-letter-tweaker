@@ -1,7 +1,10 @@
 // An excerpt of narrative content's dialog: edit its text and the sections that list it
 // (following "Changing an item" in docs/FRONTEND_CHECKS.md: sent versions never change, and
 // resumes and cover letters in progress change only if the user picks them), or delete it.
+// Saving checks its text against the writing rules (never changing it): what it breaks shows under
+// the form (OwnTextFlags), and the notice says so.
 import { useState } from 'react'
+import { flagsNote } from '../../shared/flagsNote'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { narrativeApi, type NarrativeContent } from '../../shared/api/narrativeContent'
@@ -14,6 +17,7 @@ import ApplyChoice from '../ApplyChoice'
 import { changeNote, inProgressUses, pickedFor, savedMessage } from '../applyChange'
 import UsedBy from '../UsedBy'
 import DialogChat from './DialogChat'
+import OwnTextFlags from './OwnTextFlags'
 import { useItemHost } from './itemHost'
 import ItemLoading from './ItemLoading'
 import ItemParts from './ItemParts'
@@ -51,7 +55,9 @@ export default function NarrativeItem({ id }: { id: number }) {
       doc: host.placed?.doc,
       checked: applyTo,
     })
-    await host.saved(message, { kind: 'narrative', id: saved.content_id })
+    // What the check on the saved text found, unless the text didn't change.
+    const note = saved.content !== original.content || saved.content_id !== original.content_id ? flagsNote(saved.flags) : ''
+    await host.saved(message + note, { kind: 'narrative', id: saved.content_id })
   }
 
 
@@ -97,6 +103,15 @@ export default function NarrativeItem({ id }: { id: number }) {
           />
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
+        <OwnTextFlags
+          name={label}
+          flags={excerpt.flags}
+          onCheck={async () => {
+            const checked = await narrativeApi.check(excerpt.content_id)
+            await load()
+            return checked.flags
+          }}
+        />
         <DialogChat field="content" value={typed ?? excerpt.content} />
         </>
       }

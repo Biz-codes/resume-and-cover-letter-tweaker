@@ -1,5 +1,6 @@
 // The chat with Claude beside a resume or cover letter (docs/APP_FLOW.md, "Working with Claude at
-// every level"). One conversation per document, kept in the database and read again when the page
+// every level"), shown in the page's side panel (SidePanel), which holds its heading and Close, and
+// for a posting's document shares it with the posting as tabs. One conversation per document, kept in the database and read again when the page
 // opens. Each message says what it's about (the document, a section, or an item), which the page
 // sets from the "Ask Claude" button that opened the panel, and which can be widened to the section
 // or the whole document.
@@ -83,7 +84,8 @@ export default function ChatPanel({
   about,
   wider,
   onAbout,
-  onClose,
+  headingId,
+  onAnnounce,
   focusRequest,
   version = 0,
   proposals,
@@ -98,8 +100,12 @@ export default function ChatPanel({
   // What it can be widened to (the section, then the whole document), nearest first.
   wider: ChatAbout[]
   onAbout: (about: ChatAbout) => void
-  onClose: () => void
-  // Changes each time "Ask Claude" opens the panel, which moves focus to the message box.
+  // The side panel's heading (or the chat's tab), where focus goes when a sent one's chat opens.
+  headingId: string
+  // Where its announcements go (the side panel's live region, outside its tabs), in place of its own.
+  onAnnounce?: (text: string) => void
+  // Changes each time "Chat with Claude" or "Ask Claude" opens it, which moves focus to the message
+  // box; 0 when it opened from its tab, which keeps focus.
   focusRequest: number
   // Changes when a question was asked from an item's dialog, so the conversation is read again.
   version?: number
@@ -129,9 +135,10 @@ export default function ChatPanel({
   const [sendError, setSendError] = useState<ApiError | null>(null)
   // The proposal the next message replies to.
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null)
-  const [announcement, setAnnouncement] = useState('')
+  const [ownAnnouncement, setOwnAnnouncement] = useState('')
+  // In the side panel, said outside its tabs (so it's heard while the posting's tab shows).
+  const setAnnouncement = onAnnounce ?? setOwnAnnouncement
   const focusLater = useFocusLater()
-  const headingId = useId()
   const errorId = useId()
   const replyId = useId()
 
@@ -149,7 +156,7 @@ export default function ChatPanel({
   }, [load, version])
 
   useEffect(() => {
-    focusLater(locked ? headingId : CHAT_INPUT_ID)
+    if (focusRequest) focusLater(locked ? headingId : CHAT_INPUT_ID)
   }, [focusRequest, focusLater, locked, headingId])
 
   async function send() {
@@ -254,15 +261,7 @@ export default function ChatPanel({
   }
 
   return (
-    <aside className={styles.panel} aria-labelledby={headingId}>
-      <div className={styles.top}>
-        <h3 id={headingId} tabIndex={-1}>
-          Chat with Claude
-        </h3>
-        <button type="button" onClick={onClose}>
-          Close chat
-        </button>
-      </div>
+    <>
       {conversation}
       {/* Above the message box, where the user is after a reply, since the conversation above
           scrolls out of view as it grows. */}
@@ -320,9 +319,11 @@ export default function ChatPanel({
         </form>
       )}
       {/* A plain live region rather than role="status", so the page's notices stay in AlertDialog. */}
-      <p aria-live="polite" className="visually-hidden">
-        {announcement}
-      </p>
-    </aside>
+      {!onAnnounce && (
+        <p aria-live="polite" className="visually-hidden">
+          {ownAnnouncement}
+        </p>
+      )}
+    </>
   )
 }

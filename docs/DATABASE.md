@@ -246,6 +246,7 @@ Note: titles are unique in the account, ignoring capitals and counting the built
 | account_id | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                     |
 | content    | TEXT      | NOT NULL                                                  | text of one sentence up to a paragraph                   |
 | hidden     | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the narrative content is hidden from new choices |
+| flags      | JSONB     |                                                           | writing rules its text breaks, from the last check       |
 | created_at | TIMESTAMP | DEFAULT NOW()                                             | date/time narrative content added to db                  |
 | updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time narrative content last updated                 |
 
@@ -254,6 +255,8 @@ Note: each row (an "excerpt" in the app) holds anything from one sentence to a f
 Note: editing an excerpt's text follows the same rules as every library item: resumes and cover letters in progress switch to the edited excerpt only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original in its sections (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: a rewording of Claude's that the user keeps is saved as a new row, listed under the same sections as the original, and the original is never overwritten. Only the current resume or cover letter switches to the new row (see "Rewordings" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
+Note: `flags` holds the writing rules the text breaks, from the check that runs each time its text is saved (see "Writing rules" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)): each with the rule, its kind (`term` or `pattern`), the words, and why. `[]` when it was checked and breaks none; empty when it hasn't been checked (saved before the check existed, read from the user's own file, or the check failed). The check covers the account's writing rules only, not a tone, since one item can be in documents with different tones. It never changes the text. Claude's kept wordings take the flags their draft or chat check found.
 
 ### skill_category
 | Column        | Type         | Constraints                                      | Description                                           |
@@ -334,6 +337,7 @@ Note: each version of a project is its own row, like a role's versions. A versio
 | account_id | INTEGER   | NOT NULL REFERENCES account(account_id) ON DELETE CASCADE | id of owning account                                |
 | content    | TEXT      | NOT NULL                                                  | text of bullet point                                |
 | hidden     | BOOLEAN   | NOT NULL DEFAULT FALSE                                    | whether the bullet point is hidden from new choices |
+| flags      | JSONB     |                                                           | writing rules its text breaks, from the last check  |
 | created_at | TIMESTAMP | DEFAULT NOW()                                             | date/time bullet point added to db                  |
 | updated_at | TIMESTAMP | DEFAULT NOW()                                             | date/time bullet point last updated                 |
 
@@ -342,6 +346,8 @@ Note: a bullet is listed under roles (`experience_bullet_point`), projects (`pro
 Note: editing a bullet's text follows the same rules as every library item: resumes and cover letters in progress switch to the edited bullet only if the user picks them, and sent ones never do. Unless every one in progress is picked and no sent version uses it, the edit is saved as a new row, listed right after the original (see "Changing an item" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
 
 Note: a rewording of Claude's that the user keeps is saved as a new row, listed under every role, project, and section that lists the original, and the original is never overwritten. Only the current resume or cover letter switches to the new bullet (see "Rewordings" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md)).
+
+Note: `flags` works as for `narrative_content`.
 
 ### education
 | Column       | Type         | Constraints                                               | Description                                                              |
