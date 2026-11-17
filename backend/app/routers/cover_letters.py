@@ -39,6 +39,7 @@ from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, Matcher, ReadIn, read_document, save_item, save_items
 from app.models import CoverLetter, Header, JobPosting, SignOff, ToneSet
+from app.page_fit import LETTER_PAGES, PageFit, fit
 from app.plain_text import Output, letter_output
 from app.routers.chat import add_chat_routes
 from app.routers.document_tree import add_tree_routes, fill_document, restore
@@ -88,6 +89,8 @@ class LetterOut(LetterIn, DocInfo):
 class LetterDetail(LetterOut):
     sections: list[SectionTree]
     output: Output
+    # Whether it fits on one page (app/page_fit.py).
+    fit: PageFit
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
     # The draft as it was approved, kept to look back on (app/drafts.py, snapshot).
@@ -112,7 +115,7 @@ def detail(db: Session, letter: CoverLetter) -> LetterDetail:
     output = letter_output(header, sections, letter.addressee,
                            sign_off.text if sign_off else None, letter.signature_name)
     return LetterDetail(**to_out(db, [letter])[0].model_dump(), sections=sections,
-                        output=output, draft=letter.draft,
+                        output=output, fit=fit(output, LETTER_PAGES), draft=letter.draft,
                         first_draft=letter.first_draft)
 
 

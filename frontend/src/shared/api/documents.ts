@@ -222,11 +222,28 @@ export function textsInUse(sections: DraftSection[]) {
   return keys
 }
 
+// Whether a resume fits on two pages with no section split across the break, or a cover letter
+// on one (backend/app/page_fit.py), estimated from average formatting.
+export interface PageFit {
+  limit: number
+  // About how many pages it takes, to one decimal.
+  pages: number
+  fits: boolean
+  // The part that starts each page after the first.
+  page_starts: string[]
+  // Parts too long for a single page, which would have to split.
+  too_long: string[]
+  // Lines left on the last page, or lines over the limit (negative).
+  spare_lines: number
+}
+
 export interface DocDetail extends Doc {
   // Its sections in order, each with its items in order.
   sections: TreeSection[]
   // The document as plain text, in parts (header, each section, greeting, sign-off).
   output: { parts: OutputPart[]; text: string }
+  // Absent from older test fixtures; the page shows no estimate then.
+  fit?: PageFit
   draft: Draft | null
   // Claude's draft as it was approved, kept to look back on; absent or null for one not started
   // with Claude, or approved before it was kept.

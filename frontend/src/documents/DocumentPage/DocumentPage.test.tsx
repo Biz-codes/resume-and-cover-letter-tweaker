@@ -414,6 +414,14 @@ describe('DocumentPage', () => {
     await vi.waitFor(() => expect(within(chatPanel).getByLabelText('Message to Claude')).toHaveFocus())
   })
 
+  it('says whether it fits on its pages', async () => {
+    stub(9, resume(9, { fit: { limit: 2, pages: 2.2, fits: false, page_starts: ['Projects'], too_long: [], spare_lines: -10 } }))
+    renderAt('/resumes/9')
+    expect(await screen.findByText("Doesn't fit on 2 pages.")).toBeInTheDocument()
+    expect(screen.getByText(/About 2.2 pages, 10 lines over/)).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
   it("offers a sent one's job posting", async () => {
     stub(7, resume(7, { ...SENT, tone_set_id: 2 }))
     renderAt('/resumes/7')

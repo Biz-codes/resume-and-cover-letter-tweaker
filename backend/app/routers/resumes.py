@@ -40,6 +40,7 @@ from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, ReadIn, read_document, save_items
 from app.models import Header, Resume, ToneSet
+from app.page_fit import RESUME_PAGES, PageFit, fit
 from app.plain_text import Output, resume_output
 from app.routers.chat import add_chat_routes
 from app.routers.document_tree import add_tree_routes, fill_document, restore
@@ -88,6 +89,8 @@ class ResumeOut(ResumeIn, DocInfo):
 class ResumeDetail(ResumeOut):
     sections: list[SectionTree]
     output: Output
+    # Whether it fits on two pages with no section split across the break (app/page_fit.py).
+    fit: PageFit
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
     # The draft as it was approved, kept to look back on (app/drafts.py, snapshot).
@@ -104,8 +107,9 @@ def to_out(db: Session, resumes: list[Resume]) -> list[ResumeOut]:
 def detail(db: Session, resume: Resume) -> ResumeDetail:
     header = db.get(Header, resume.header_id) if resume.header_id else None
     sections = load_tree(db, RESUME, resume.resume_id)
+    output = resume_output(header, sections)
     return ResumeDetail(**to_out(db, [resume])[0].model_dump(), sections=sections,
-                        output=resume_output(header, sections), draft=resume.draft,
+                        output=output, fit=fit(output, RESUME_PAGES), draft=resume.draft,
                         first_draft=resume.first_draft)
 
 
