@@ -139,4 +139,12 @@ describe('BulletItem', () => {
       expect(host.saved).toHaveBeenCalledWith(expect.stringMatching(/ It breaks 1 writing rule, marked Flagged\.$/), { kind: 'bullet', id: 10 }),
     )
   })
+
+  it('leaves text only in sent versions out of the writing check', async () => {
+    stubApi({ 'GET /api/bullet-points': [{ status: 200, body: [{ ...BULLET, flags: null, used_by: [SENT] }] }] })
+    await renderItem(<BulletItem id={10} />)
+    expect(screen.queryByText('Not checked against your writing rules.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Check writing rules/ })).not.toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
 })

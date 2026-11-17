@@ -9,7 +9,7 @@ import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { narrativeApi, type NarrativeContent } from '../../shared/api/narrativeContent'
 import { sectionsApi } from '../../shared/api/sections'
-import { anyLocked, type Use } from '../../shared/api/usage'
+import { anyLocked, onlySent, type Use } from '../../shared/api/usage'
 import Checklist from '../../shared/components/Checklist'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import FieldsForm from '../../shared/components/FieldsForm'
@@ -103,7 +103,7 @@ export default function NarrativeItem({ id }: { id: number }) {
           />
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </FieldsForm>
-        <OwnTextFlags
+        {!onlySent(excerpt.used_by) && <OwnTextFlags
           name={label}
           flags={excerpt.flags}
           onCheck={async () => {
@@ -111,7 +111,7 @@ export default function NarrativeItem({ id }: { id: number }) {
             await load()
             return checked.flags
           }}
-        />
+        />}
         <DialogChat field="content" value={typed ?? excerpt.content} />
         </>
       }

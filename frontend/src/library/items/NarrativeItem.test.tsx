@@ -108,4 +108,24 @@ describe('NarrativeItem', () => {
     await renderItem(<NarrativeItem id={12} />)
     expect(screen.queryByRole('group', { name: CHOICE })).not.toBeInTheDocument()
   })
+
+  it('says when its text has not been checked', async () => {
+    stubApi({
+      'GET /api/narrative-content': [{ status: 200, body: [{ ...INTRO, flags: null }] }],
+      'GET /api/sections': [{ status: 200, body: SECTIONS }],
+    })
+    await renderItem(<NarrativeItem id={12} />)
+    expect(screen.getByText('Not checked against your writing rules.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
+  it('leaves text only in sent versions out of the writing check', async () => {
+    stubApi({
+      'GET /api/narrative-content': [{ status: 200, body: [{ ...INTRO, flags: null, used_by: [SENT] }] }],
+      'GET /api/sections': [{ status: 200, body: SECTIONS }],
+    })
+    await renderItem(<NarrativeItem id={12} />)
+    expect(screen.queryByText('Not checked against your writing rules.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Check writing rules/ })).not.toBeInTheDocument()
+  })
 })

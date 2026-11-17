@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { bulletsApi, shortBullet, type Bullet } from '../shared/api/bullets'
 import { toApiError, type ApiError } from '../shared/api/client'
-import { PAGE_HEADING_ID } from '../shared/hooks/useFocusLater'
+import { isUnchecked, onlySent } from '../shared/api/usage'
+import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
 import { useItemDialogs } from './items/ItemDialogs'
 import { editId } from './items/itemHost'
@@ -14,6 +15,7 @@ import LibraryCard from './LibraryCard'
 import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
+import CheckUnchecked from './CheckUnchecked'
 
 const isListed = (bullet: Bullet) => bullet.experience.length + bullet.projects.length + bullet.sections.length > 0
 
@@ -21,6 +23,7 @@ export default function BulletsPage() {
   const [bullets, setBullets] = useState<Bullet[] | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const focusLater = useFocusLater()
   usePageTitle('Bullet points')
 
   const load = useCallback(
@@ -50,8 +53,8 @@ export default function BulletsPage() {
         key={bullet.bullet_id}
         title={bullet.content}
         titleClassName="bullet-text"
-        // Its text breaks a writing rule; its dialog says which.
-        tags={bullet.flags?.length ? <span className="tag">flagged</span> : undefined}
+        // Its text breaks a writing rule; its dialog says which. Not for text only in sent versions.
+        tags={bullet.flags?.length && !onlySent(bullet.used_by) ? <span className="tag">flagged</span> : undefined}
         editId={editId('bullet', bullet.bullet_id)}
         editLabel={`View and Edit "${title}"`}
         actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('bullet', bullet.bullet_id, title, () => bulletsApi.setHidden(bullet.bullet_id, false))} />}
@@ -77,6 +80,16 @@ export default function BulletsPage() {
       </p>
       <p className="muted">{SORT_NOTE}</p>
       <AlertDialog message={notice} onClose={() => setNotice(null)} />
+      <CheckUnchecked
+        count={(bullets ?? []).filter(isUnchecked).length}
+        noun={['bullet point', 'bullet points']}
+        onCheck={bulletsApi.checkUnchecked}
+        onDone={async (said) => {
+          await load()
+          setNotice(said)
+          focusLater(PAGE_HEADING_ID)
+        }}
+      />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

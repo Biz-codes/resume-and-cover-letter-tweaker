@@ -70,6 +70,18 @@ describe('NarrativeContentPage', () => {
     await expectNoA11yViolations()
   })
 
+  it('checks every unchecked excerpt at once, leaving out ones only in sent versions', async () => {
+    stub(
+      { 'POST /api/narrative-content/check-unchecked': [{ status: 200, body: { checked: 1, flagged: 0 } }] },
+      [{ ...INTRO, flags: null }, { ...LOOSE, flags: null }],
+    )
+    render(<NarrativeContentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Check writing rules for 1 excerpt' }))
+    await expectNotice('Checked 1 excerpt: none break your writing rules.')
+    expect(screen.getByRole('heading', { name: 'Narrative content' })).toHaveFocus()
+    await expectNoA11yViolations()
+  })
+
   it('warns that editing an excerpt a sent version uses saves a new version', async () => {
     const saved = { ...INTRO, content_id: 12, content: 'I build tools.', used_by: [] }
     const fetchMock = stub({ 'PUT /api/narrative-content/10': [{ status: 200, body: saved }] })

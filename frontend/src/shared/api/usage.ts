@@ -21,3 +21,10 @@ export const pathOf = (use: Use) =>
 export const refs = (uses: Use[]) => uses.map(({ kind, id }) => ({ kind, id }))
 
 export const anyLocked = (uses: Use[]) => uses.some((use) => use.locked)
+
+// Used, and only by sent versions: its text went out as it is, so it isn't held to the writing
+// rules (no flags, no "Not checked" note). Once it's in a version still being worked on, it is.
+export const onlySent = (uses: Use[]) => uses.length > 0 && uses.every((use) => use.locked)
+
+// Not checked against the writing rules yet, and not only in sent versions (so worth checking).
+export const isUnchecked = (item: { flags: unknown[] | null; used_by: Use[] }) => item.flags === null && !onlySent(item.used_by)

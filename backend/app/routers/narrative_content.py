@@ -31,7 +31,7 @@ from app.db import DbSession
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import check_ids, list_beside, set_parents
 from app.models import NarrativeContent, Section, SectionNarrativeContent
-from app.own_text import check_own
+from app.own_text import CheckedAll, check_own, check_unchecked
 from app.refs import SectionRef, section_refs
 from app.schemas import RequiredText
 from app.usage import NARRATIVE_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
@@ -155,6 +155,13 @@ def update_narrative(content_id: int, body: NarrativeEdit, db: DbSession,
     db.flush()
     db.refresh(saved)
     return one_out(db, saved)
+
+
+@router.post("/check-unchecked")
+def check_unchecked_narrative(db: DbSession, account_id: AccountId, client: Claude) -> CheckedAll:
+    """"Check writing rules" on the library page: every unchecked excerpt, except text used only
+    by sent versions. Failing is AI_UNAVAILABLE, and nothing changes."""
+    return check_unchecked(db, client, account_id, NarrativeContent, NARRATIVE_LINKS)
 
 
 @router.post("/{content_id}/check")

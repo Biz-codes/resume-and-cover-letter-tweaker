@@ -7,6 +7,7 @@ import { shortBullet } from '../shared/api/bullets'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { narrativeApi, type NarrativeContent } from '../shared/api/narrativeContent'
 import { sectionsApi, type Section } from '../shared/api/sections'
+import { isUnchecked, onlySent } from '../shared/api/usage'
 import Checklist from '../shared/components/Checklist'
 import FieldsForm from '../shared/components/FieldsForm'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -20,6 +21,7 @@ import { SORT_NOTE, sortByName } from '../shared/sortByName'
 import { useUnhide } from './useUnhide'
 import { offered } from '../shared/offered'
 import AlertDialog from '../shared/components/Dialog/AlertDialog'
+import CheckUnchecked from './CheckUnchecked'
 
 // The New excerpt button, where focus returns when its form closes.
 const NEW_EXCERPT_ID = 'new-excerpt'
@@ -79,8 +81,8 @@ export default function NarrativeContentPage() {
         key={excerpt.content_id}
         title={excerpt.content}
         titleClassName="bullet-text"
-        // Its text breaks a writing rule; its dialog says which.
-        tags={excerpt.flags?.length ? <span className="tag">flagged</span> : undefined}
+        // Its text breaks a writing rule; its dialog says which. Not for text only in sent versions.
+        tags={excerpt.flags?.length && !onlySent(excerpt.used_by) ? <span className="tag">flagged</span> : undefined}
         editId={editId('narrative', excerpt.content_id)}
         editLabel={`View and Edit "${title}"`}
         actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('narrative', excerpt.content_id, title, () => narrativeApi.setHidden(excerpt.content_id, false))} />}
@@ -116,6 +118,16 @@ export default function NarrativeContentPage() {
       </p>
       <p className="muted">{SORT_NOTE}</p>
       <AlertDialog message={notice} onClose={() => setNotice(null)} />
+      <CheckUnchecked
+        count={(excerpts ?? []).filter(isUnchecked).length}
+        noun={['excerpt', 'excerpts']}
+        onCheck={narrativeApi.checkUnchecked}
+        onDone={async (said) => {
+          await load()
+          setNotice(said)
+          focusLater(PAGE_HEADING_ID)
+        }}
+      />
       {loadError && (
         <div role="alert">
           <p>{loadError.message}</p>

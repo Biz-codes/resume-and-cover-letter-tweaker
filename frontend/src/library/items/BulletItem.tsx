@@ -9,7 +9,7 @@ import { bulletsApi, shortBullet, type Bullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { experienceLabel } from '../../shared/api/experience'
 import { projectLabel } from '../../shared/api/projects'
-import { anyLocked, type Use } from '../../shared/api/usage'
+import { anyLocked, onlySent, type Use } from '../../shared/api/usage'
 import ConfirmDelete from '../../shared/components/ConfirmDelete'
 import NameForm from '../../shared/components/NameForm/NameForm'
 import ApplyChoice from '../ApplyChoice'
@@ -89,7 +89,7 @@ export default function BulletItem({ id }: { id: number }) {
         >
           {others.length > 0 && <ApplyChoice uses={others} others={Boolean(here)} applyTo={applyTo} onChange={setApplyTo} />}
         </NameForm>
-        <OwnTextFlags
+        {!onlySent(bullet.used_by) && <OwnTextFlags
           name={label}
           flags={bullet.flags}
           onCheck={async () => {
@@ -97,7 +97,7 @@ export default function BulletItem({ id }: { id: number }) {
             await load()
             return checked.flags
           }}
-        />
+        />}
         <DialogChat field="content" value={typed ?? bullet.content} />
         </>
       }

@@ -157,3 +157,48 @@ def test_text_written_in_a_document_is_checked_and_its_rows_show_flags(
         FLAG | {"quote": "leveraged"}]
     # Other kinds have none.
     assert shown["sections"][0]["entries"][0]["flags"] is None
+
+
+def test_checking_everything_unchecked_skips_text_only_in_sent_versions(
+        client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    rule(db, account_id)
+    filler(claude)
+    unchecked = add(db, BulletPoint(account_id=account_id, content="Leveraged React."))
+    done = add(db, BulletPoint(account_id=account_id, content="Leveraged Vue.", flags=[]))
+    # Only in a sent resume: it went out as it is, so it's left alone.
+    job = role(db, account_id, [], section_id=EXPERIENCE_SECTION_ID)
+    show_job(db, resume(db, account_id, "Sent", sent=True), job, ["Leveraged it once."])
+    sent_only = db.query(BulletPoint).filter_by(content="Leveraged it once.").one()
+
+    response = client.post("/api/bullet-points/check-unchecked")
+    assert response.status_code == 200, response.json()
+    assert response.json() == {"checked": 1, "flagged": 1}
+    db.expire_all()
+    assert db.get(BulletPoint, unchecked.bullet_id).flags == [FLAG]
+    assert db.get(BulletPoint, done.bullet_id).flags == []
+    assert db.get(BulletPoint, sent_only.bullet_id).flags is None
+    [request] = claude.calls
+    assert "Leveraged it once." not in request["messages"][0]["content"]
+
+    # Nothing left to check asks Claude nothing.
+    assert client.post("/api/bullet-points/check-unchecked").json() == {"checked": 0,
+                                                                         "flagged": 0}
+    assert len(claude.calls) == 1
+
+
+def test_checking_everything_goes_in_batches_and_a_failure_changes_nothing(
+        client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    rule(db, account_id)
+    for index in range(25):
+        add(db, NarrativeContent(account_id=account_id, content=f"I leveraged app {index}."))
+    assert client.post("/api/narrative-content/check-unchecked").json() == {"checked": 25,
+                                                                             "flagged": 0}
+    assert len(claude.calls) == 2
+
+    db.query(NarrativeContent).update({NarrativeContent.flags: None})
+    db.flush()
+    broken(claude)
+    response = client.post("/api/narrative-content/check-unchecked")
+    assert error(response) == (503, "AI_UNAVAILABLE", None)
+    db.expire_all()
+    assert all(row.flags is None for row in db.query(NarrativeContent))

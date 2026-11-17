@@ -35,7 +35,7 @@ from app.models import (
     ProjectBulletPoint,
     SectionBulletPoint,
 )
-from app.own_text import check_own
+from app.own_text import CheckedAll, check_own, check_unchecked
 from app.refs import (
     ExperienceRef,
     ProjectRef,
@@ -173,6 +173,13 @@ def update_bullet(bullet_id: int, body: BulletChange, db: DbSession,
         switch_unsent(db, BULLET_LINKS, bullet_id, replacement.bullet_id, only=chosen)
     check_own(db, client, account_id, [replacement])
     return one_out(db, replacement, account_id)
+
+
+@router.post("/check-unchecked")
+def check_unchecked_bullets(db: DbSession, account_id: AccountId, client: Claude) -> CheckedAll:
+    """"Check writing rules" on the library page: every unchecked bullet text, except text used
+    only by sent versions. Failing is AI_UNAVAILABLE, and nothing changes."""
+    return check_unchecked(db, client, account_id, BulletPoint, BULLET_LINKS)
 
 
 @router.post("/{bullet_id}/check")

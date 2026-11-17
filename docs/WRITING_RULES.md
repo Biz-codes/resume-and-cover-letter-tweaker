@@ -34,7 +34,7 @@ The database is seeded with the user's existing resumes and cover letters (and c
   - **Real term:** it leaves the word alone.
 
 ### How the app checks
-Built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's draft of a posting's document and the changes Claude proposes in the chat are checked (Claude's text fixed, then flagged; library items only flagged), and so is the user's own text each time a bullet or narrative content is saved (flagged only, against the writing rules, not a tone, and kept with the item until new wording is saved).
+Built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's draft of a posting's document and the changes Claude proposes in the chat are checked (Claude's text fixed, then flagged; library items only flagged), and so is the user's own text each time a bullet or narrative content is saved (flagged only, against the writing rules, not a tone, and kept with the item until new wording is saved). Text that was only ever submitted (in sent versions) isn't held to the rules or marked.
 - **Terms are found in code:** whole words, ignoring capitals, including a single word's usual endings ("leveraged", "spearheading") and a hyphen written as a space ("results driven"). Finding one only makes it a candidate.
 - **Claude judges the rest** in one quick check: whether each found term is filler or a real term (the test above), the patterns, and the document's tone.
 - **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. Whatever still breaks a rule is shown with the rule and why, and the user decides.

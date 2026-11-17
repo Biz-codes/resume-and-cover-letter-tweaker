@@ -118,6 +118,13 @@ export interface DraftSection {
 
 // A writing rule some text breaks (backend/app/writing_check.py): the rule as written, the words
 // that break it, and why.
+// What "Check writing rules" on a library page found: how many unchecked texts it checked, and
+// how many of them break a rule.
+export interface CheckedAll {
+  checked: number
+  flagged: number
+}
+
 export interface WritingFlag {
   kind: 'term' | 'pattern' | 'tone'
   rule: string

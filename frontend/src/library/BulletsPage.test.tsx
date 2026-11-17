@@ -51,14 +51,34 @@ describe('BulletsPage', () => {
     await expectNoA11yViolations()
   })
 
-  it('tags a bullet whose text breaks a writing rule', async () => {
+  it('tags a bullet whose text breaks a writing rule, unless it is only in sent versions', async () => {
     const flag = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
-    stub({}, [{ ...SHIPPED, flags: [flag] }, LOOSE])
+    stub({}, [{ ...SHIPPED, flags: [flag] }, { ...LOOSE, flags: [flag] }])
     render(<BulletsPage />)
     // Read in its heading, after the text.
-    const card = await findCard(`${SHIPPED.content} flagged`)
+    const card = await findCard(`${LOOSE.content} flagged`)
     expect(within(card).getByText('flagged')).toHaveClass('tag')
+    // SHIPPED is only in a sent resume, so it isn't held to the rules.
     expect(screen.getAllByText('flagged')).toHaveLength(1)
+    await expectNoA11yViolations()
+  })
+
+  it('checks every unchecked bullet at once, leaving out ones only in sent versions', async () => {
+    const flag = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
+    stubApi({
+      'GET /api/bullet-points': [
+        { status: 200, body: [{ ...SHIPPED, flags: null }, { ...LOOSE, flags: null }] },
+        { status: 200, body: [{ ...SHIPPED, flags: null }, { ...LOOSE, flags: [flag] }] },
+      ],
+      'POST /api/bullet-points/check-unchecked': [{ status: 200, body: { checked: 1, flagged: 1 } }],
+    })
+    render(<BulletsPage />)
+    // SHIPPED is only in a sent resume, so only LOOSE counts.
+    fireEvent.click(await screen.findByRole('button', { name: 'Check writing rules for 1 bullet point' }))
+    await expectNotice('Checked 1 bullet point: 1 breaks a writing rule, tagged flagged.')
+    expect(screen.queryByRole('button', { name: /^Check writing rules for/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Bullet points' })).toHaveFocus()
+    expect(await findCard(`${LOOSE.content} flagged`)).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 
