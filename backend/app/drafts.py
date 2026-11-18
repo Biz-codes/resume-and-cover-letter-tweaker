@@ -25,9 +25,10 @@ under a category or project that doesn't list it yet is listed there in the libr
 page. Any of Claude's
 texts the user didn't use is kept in the library the same way only if the user asks. Claude's
 new sections the draft still has are added to the library first (or the saved one with the same
-title is used). Before that, the draft as it was approved is kept to look back on (snapshot, a
-FirstDraft in the document's `first_draft`): every row the user kept, with its name or text as it
-is then, so later edits to the document or the library don't change it.
+title is used). While it's reviewed, the page estimates whether the draft as the user has it
+fits on its pages (draft_fit). Before finishing, the draft as it was approved is kept to look
+back on (snapshot, a FirstDraft in the document's `first_draft`): every row the user kept, with
+its name or text as it is then, so later edits to the document or the library don't change it.
 """
 
 import logging
@@ -38,7 +39,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.documents import EntryKind, Kind, SectionTree, load_tree
+from app.documents import LIBRARY, Child, Entry, EntryKind, Kind, SectionTree, load_tree
 from app.errors import AppError, ErrorCode
 from app.library import append
 from app.models import (
@@ -54,6 +55,8 @@ from app.models import (
     SkillCategorySkill,
 )
 from app.own_text import kept_flags
+from app.page_fit import PageFit, fit, limit_of
+from app.plain_text import document_output
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
 from app.routers.narrative_content import NarrativeIn
@@ -544,6 +547,55 @@ def finish(db: Session, account_id: int, draft: Draft, keep: list[int]) -> list[
          "bullet_ids": [placed_id(bullet.bullet_id, bullet.text_key, bullet.use_original)
                         for bullet in entry.bullets]}
         for entry in section.entries]} for section in draft.sections]
+
+
+def draft_tree(draft: Draft, library: Library) -> list[SectionTree]:
+    """The draft as the user has it now, as a tree the plain-text output reads: Claude's wording
+    where it's in use, else the library's. Row ids mean nothing here; it's only for its page
+    estimate (draft_fit)."""
+    texts = {text.key: text.text for text in draft.texts}
+    titles = {new.key: new.title for new in draft.new_sections}
+
+    def text(kind: str, item_id: int | None, key: int | None, use_original: bool) -> str:
+        if key is not None and not use_original and key in texts:
+            return texts[key]
+        return (library.text(kind, item_id) or "") if item_id is not None else ""
+
+    def values(entry: DraftEntry) -> dict[str, str | None]:
+        if entry.kind in ("narrative", "bullet"):
+            return {"content": text(entry.kind, entry.item_id, entry.text_key,
+                                    entry.use_original)}
+        item = library.items[entry.kind].get(entry.item_id, {})
+        if entry.kind == "category":
+            return {"category_name": item.get("name")}
+        return {name: item.get(name) for name in LIBRARY[entry.kind][2]}
+
+    return [SectionTree(
+        row_id=0, section_id=section.section_id or 0,
+        title=(titles.get(section.new_key, "") if section.section_id is None
+               else library.sections.get(section.section_id, "")),
+        entries=[Entry(
+            kind=entry.kind, row_id=0, item_id=entry.item_id or 0, position=position,
+            values=values(entry),
+            skills=[Child(row_id=0, item_id=skill_id, position=index,
+                          text=library.items["skill"].get(skill_id, {}).get("name", ""))
+                    for index, skill_id in enumerate(entry.skill_ids)],
+            bullets=[Child(row_id=0, item_id=bullet.bullet_id or 0, position=index,
+                           text=text("bullet", bullet.bullet_id, bullet.text_key,
+                                     bullet.use_original))
+                     for index, bullet in enumerate(entry.bullets)])
+            for position, entry in enumerate(section.entries)])
+        for section in draft.sections]
+
+
+def draft_fit(db: Session, kind: Kind, doc: Any) -> PageFit:
+    """Whether Claude's draft fits on its pages as the user has it now, with the document's
+    header (and a letter's sign-off) and the greeting in use (app/page_fit.py)."""
+    draft = current_draft(doc)
+    sections = draft_tree(draft, load_library(db, doc.account_id))
+    greeting = draft.greeting
+    addressee = greeting.addressee if greeting and not greeting.use_default else None
+    return fit(document_output(db, kind, doc, sections, addressee), limit_of(kind))
 
 
 def _item_name(library: Library, kind: str, item_id: int) -> str:

@@ -35,7 +35,7 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
-from app.drafts import Draft, FirstDraft, start_draft
+from app.drafts import Draft, FirstDraft, draft_fit, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, ReadIn, read_document, save_items
@@ -89,7 +89,8 @@ class ResumeOut(ResumeIn, DocInfo):
 class ResumeDetail(ResumeOut):
     sections: list[SectionTree]
     output: Output
-    # Whether it fits on two pages with no section split across the break (app/page_fit.py).
+    # Whether it fits on two pages with no section split across the break (app/page_fit.py),
+    # or during Claude's draft, whether the draft as the user has it does (drafts.draft_fit).
     fit: PageFit
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
@@ -108,8 +109,10 @@ def detail(db: Session, resume: Resume) -> ResumeDetail:
     header = db.get(Header, resume.header_id) if resume.header_id else None
     sections = load_tree(db, RESUME, resume.resume_id)
     output = resume_output(header, sections)
+    estimate = (draft_fit(db, RESUME, resume) if resume.draft is not None
+                else fit(output, RESUME_PAGES))
     return ResumeDetail(**to_out(db, [resume])[0].model_dump(), sections=sections,
-                        output=output, fit=fit(output, RESUME_PAGES), draft=resume.draft,
+                        output=output, fit=estimate, draft=resume.draft,
                         first_draft=resume.first_draft)
 
 

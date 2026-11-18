@@ -10,7 +10,8 @@
 // A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
 // first review is finished; each change saves the draft, and Undo and Redo cover those too. Once
 // it's approved, "Claude's first draft" (FirstDraft) opens it read-only, as it was approved.
-// Under its title, whether it fits on its pages (PageFitNote).
+// Under its title, whether it fits on its pages (PageFitNote), or during Claude's draft, whether
+// the draft as the user has it does.
 // The side panel (SidePanel) holds the chat, and for a posting's document the job posting too
 // (PostingDetails). It's always on the page, collapsed to a button for each until one is pressed
 // (or a row's "Ask Claude"), then expanded with them as tabs. The posting is offered during
@@ -550,8 +551,11 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             </p>
           )}
           <EditNote singular={singular} sent={doc.locked} draft={Boolean(doc.draft)} />
-          {/* Not while Claude's draft is reviewed, when the document itself is still empty. */}
-          {doc.fit && !doc.draft && doc.output.parts.length > 0 && <PageFitNote fit={doc.fit} />}
+          {/* During Claude's draft, the draft's own estimate (the document itself is still empty). */}
+          {doc.fit &&
+            (doc.draft
+              ? doc.draft.sections.length > 0 && <PageFitNote fit={doc.fit} draft />
+              : doc.output.parts.length > 0 && <PageFitNote fit={doc.fit} />)}
 
           {mode === 'copy' && copyNameFor !== null && (
             <NameForm

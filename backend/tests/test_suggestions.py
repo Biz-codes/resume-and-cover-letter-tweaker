@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.claude import get_client
+from app.documents import RESUME
 from app.drafts import StartingDocument, to_draft
 from app.main import app
 from app.models import (
@@ -22,6 +23,7 @@ from app.models import (
     SUMMARY_SECTION_ID,
     Account,
     BulletPoint,
+    Header,
     JobPosting,
     NarrativeContent,
     Resume,
@@ -31,6 +33,8 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
+from app.page_fit import budget_text, part_lines
+from app.plain_text import header_text
 from app.suggestions import (
     LetterSection,
     LetterSuggestion,
@@ -299,6 +303,29 @@ def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, 
     assert "synergy" not in instructions
     assert request["messages"][0]["content"].endswith(
         "Tone for this document:\n- Name the tools.")
+
+
+def test_claude_is_told_the_page_budget(client: TestClient, db: Session, account_id: int,
+                                        claude: FakeMessages):
+    job = role(db, account_id, ["Shipped it", "Tested it"], section_id=EXPERIENCE_SECTION_ID)
+    earlier = resume(db, account_id, "Tech base", sent=True)
+    show_job(db, earlier, job, ["Shipped it", "Tested it"])
+    response = tailor(client, db, account_id)
+    assert response.status_code == 201
+    [request] = claude.calls
+    instructions, data = request["system"]
+    assert budget_text(RESUME) in instructions["text"]
+    assert '("pages")' in instructions["text"]
+    # Each earlier resume says what it takes, as its own page says.
+    [document] = json.loads(data["text"].split("<documents>\n")[1].split("\n</documents>")[0])
+    shown = client.get(f"/api/resumes/{earlier.resume_id}").json()["fit"]
+    assert (document["pages"], document["fits"]) == (shown["pages"], shown["fits"])
+    # The title, the role's line, and its two bullets.
+    assert [section["lines"] for section in document["sections"]] == [4]
+    # And what this resume's header leaves for its sections.
+    printed = db.get(Header, response.json()["header_id"])
+    lines = part_lines(header_text(printed), header=True)
+    assert f"Its header takes {lines} lines of its pages" in request["messages"][0]["content"]
 
 
 def test_a_cover_letter_is_tailored_as_a_letter(client: TestClient, db: Session,

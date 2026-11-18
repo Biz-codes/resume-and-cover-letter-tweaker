@@ -25,6 +25,15 @@ describe('PageFitNote', () => {
     await expectNoA11yViolations()
   })
 
+  it("says it's Claude's draft during the review", async () => {
+    const { container, rerender } = render(<PageFitNote fit={FITS} draft />)
+    expect(container).toHaveTextContent('This draft fits on 2 pages. About 1.8 pages.')
+    expect(screen.getByText('This draft fits on 2 pages.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+    rerender(<PageFitNote fit={{ ...FITS, fits: false, pages: 2.1, spare_lines: -4 }} draft />)
+    expect(container).toHaveTextContent("This draft doesn't fit on 2 pages. About 2.1 pages, 4 lines over.")
+  })
+
   it('names a section too long for one page', () => {
     const { container } = render(<PageFitNote fit={{ ...FITS, fits: false, too_long: ['Experience'] }} />)
     expect(container).toHaveTextContent('Experience is too long for one page, so it would split across the break.')

@@ -34,7 +34,7 @@ from app.documents import (
     refuse_locked_change,
     refuse_sent_delete,
 )
-from app.drafts import Draft, FirstDraft, start_draft
+from app.drafts import Draft, FirstDraft, draft_fit, start_draft
 from app.errors import AppError, ErrorCode
 from app.hiding import HiddenIn, set_hidden
 from app.imports import Imported, ImportIn, Matcher, ReadIn, read_document, save_item, save_items
@@ -89,7 +89,8 @@ class LetterOut(LetterIn, DocInfo):
 class LetterDetail(LetterOut):
     sections: list[SectionTree]
     output: Output
-    # Whether it fits on one page (app/page_fit.py).
+    # Whether it fits on one page (app/page_fit.py), or during Claude's draft, whether the draft
+    # as the user has it does (drafts.draft_fit).
     fit: PageFit
     # Claude's draft, until its first review is finished (app/drafts.py).
     draft: Draft | None
@@ -114,8 +115,10 @@ def detail(db: Session, letter: CoverLetter) -> LetterDetail:
     sections = load_tree(db, COVER_LETTER, letter.letter_id)
     output = letter_output(header, sections, letter.addressee,
                            sign_off.text if sign_off else None, letter.signature_name)
+    estimate = (draft_fit(db, COVER_LETTER, letter) if letter.draft is not None
+                else fit(output, LETTER_PAGES))
     return LetterDetail(**to_out(db, [letter])[0].model_dump(), sections=sections,
-                        output=output, fit=fit(output, LETTER_PAGES), draft=letter.draft,
+                        output=output, fit=estimate, draft=letter.draft,
                         first_draft=letter.first_draft)
 
 

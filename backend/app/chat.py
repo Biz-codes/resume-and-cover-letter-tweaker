@@ -15,7 +15,8 @@ reply is kept with those proposals unchecked, and recheck runs the check alone l
 
 The history only grows. Each turn's content blocks are saved exactly as Claude saw or wrote
 them (the user's: the results of Claude's last proposals, what the message is about, the
-document, and the posting's other document (its resume or cover letter), each when it changed
+document with its page estimate (app/page_fit.py, with the page budget in the instructions),
+and the posting's other document (its resume or cover letter), each when it changed
 since Claude last saw it, the proposal it replies to (its card's Reply), if any, then the text;
 Claude's: its thinking,
 reply, and tool calls), and every request replays them unchanged. That keeps the conversation
@@ -40,6 +41,8 @@ from app.claude import converse
 from app.documents import EntryKind, Kind, SectionTree, doc_info, load_tree
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole, JobPosting
+from app.page_fit import budget_text, fit, fit_json, limit_of, lines_used, section_lines
+from app.plain_text import document_output
 from app.suggestions import (
     Library,
     companion,
@@ -187,6 +190,16 @@ something in the library first: propose the change instead.
 each was shown, and whether they applied or dismissed it. A message that answers one of your \
 proposals, from any earlier reply, names it in <replying_to> tags; it's still in the state \
 it was in, so propose a new change if they want a different one.{letter}
+- Each <document> comes with its page estimate in <page_fit> tags: about how many pages it \
+takes ("pages", of "limit"), whether it fits ("fits"), the lines left on its last page or how \
+many it's over ("spare_lines", negative when over), the section starting each page after the \
+first ("page_starts"), any section too long for one page ("too_long"), and the lines the \
+header and anything else outside the sections take ("lines_outside_sections"). Each section in \
+<document> says how many lines it takes ("lines"). When a change you propose would add lines \
+the {doc} doesn't have room for, say so in your reply and propose what to trim with it. When \
+it doesn't fit and they ask for something else, mention it once.
+
+{budget}
 
 {companion} It comes in a message when it changed since you last saw it; the latest one is \
 current.
@@ -223,9 +236,11 @@ def history(db: Session, kind: Kind, doc_id: int) -> list[ChatMessage]:
                            .order_by(ChatMessage.message_id)))
 
 
-def document_json(sections: list[SectionTree]) -> list[dict[str, Any]]:
-    """The document as Claude reads it: each section, then each item with what it prints."""
-    return [{"section_id": section.section_id, "title": section.title, "entries": [
+def document_json(kind: Kind, sections: list[SectionTree]) -> list[dict[str, Any]]:
+    """The document as Claude reads it: each section with how many lines it takes, then each
+    item with what it prints."""
+    return [{"section_id": section.section_id, "title": section.title,
+             "lines": section_lines(kind, section), "entries": [
         {"kind": entry.kind, "item_id": entry.item_id,
          **{name: value for name, value in entry.values.items() if value},
          **({"skills": [{"id": child.item_id, "name": child.text} for child in entry.skills]}
@@ -233,6 +248,17 @@ def document_json(sections: list[SectionTree]) -> list[dict[str, Any]]:
          **({"bullets": [{"id": child.item_id, "text": child.text} for child in entry.bullets]}
             if entry.kind in ("experience", "project") else {})}
         for entry in section.entries]} for section in sections]
+
+
+def document_text(db: Session, kind: Kind, doc: Any, sections: list[SectionTree]) -> str:
+    """The document in its tags, then its page estimate (app/page_fit.py) in <page_fit> tags.
+    Sent as one block, so it's sent again whenever either changes (a header edit changes the
+    estimate alone)."""
+    estimate = fit(document_output(db, kind, doc, sections), limit_of(kind))
+    outside = lines_used(document_output(db, kind, doc, []))
+    return (f"<document>\n{json.dumps(document_json(kind, sections), ensure_ascii=False)}"
+            f"\n</document>\n<page_fit>\n"
+            f"{json.dumps(fit_json(estimate, outside), ensure_ascii=False)}\n</page_fit>")
 
 
 # What's in the document, to check what a message is about and what Claude proposes.
@@ -554,7 +580,8 @@ def _system(db: Session, kind: Kind, account_id: int, doc: Any,
     instructions = INSTRUCTIONS.format(doc=one, rules=rules_text(db, account_id),
                                        exceptions=TECHNICAL_EXCEPTIONS,
                                        letter=LETTER_NOTE if kind.prefix == "cover_letter" else "",
-                                       companion=companion_instructions(kind))
+                                       companion=companion_instructions(kind),
+                                       budget=budget_text(kind))
     posting = db.get(JobPosting, doc.job_posting_id) if doc.job_posting_id else None
     if posting is None:
         about = f"This is a base {one}, an ongoing starting point not made for one posting."
@@ -675,8 +702,7 @@ def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
         placed = Placed(sections)
         library = load_library(db, account_id)
         turns = history(db, kind, doc_id)
-        document = (f"<document>\n{json.dumps(document_json(sections), ensure_ascii=False)}"
-                    "\n</document>")
+        document = document_text(db, kind, doc, sections)
         new_turn = [*tool_results(turns[-1] if turns else None)]
         if document != _last_sent(turns, "<document>"):
             new_turn.append({"type": "text", "text": document})

@@ -22,6 +22,7 @@ from app.models import (
     BulletPoint,
     CoverLetter,
     ExperienceBulletPoint,
+    Header,
     JobPosting,
     NarrativeContent,
     Resume,
@@ -31,6 +32,8 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
+from app.page_fit import LINES_PER_PAGE, part_lines
+from app.plain_text import header_text
 from app.suggestions import Suggestion
 from app.writing_check import Issue, Review, Reviewed
 from tests.test_experience_projects_bullets import bullet, listed, role, show_job
@@ -125,6 +128,43 @@ def test_review_changes_only_the_draft(client: TestClient, db: Session, account_
     assert body["sections"] == []
     db.expire_all()
     assert db.scalars(select(NarrativeContent.content)).all() == ["I build tools."]
+
+
+def test_the_page_estimates_the_draft_as_the_user_has_it(client: TestClient, db: Session,
+                                                         account_id: int, claude: FakeMessages):
+    doc, ids, keys = started(client, db, account_id, claude)
+    summary, experience = doc["draft"]["sections"]
+    whole = doc["fit"]["spare_lines"]
+    # The draft's own estimate, not the empty resume's (its header alone): a blank line, Summary
+    # (its title and one paragraph), a blank line, and Experience (its title, the role, and
+    # three bullets).
+    printed = part_lines(header_text(db.get(Header, doc["header_id"])), header=True)
+    assert whole == 2 * LINES_PER_PAGE - printed - 1 - 2 - 1 - 5
+    # Rejecting the new bullet saves a line.
+    role_entry = experience["entries"][0]
+    shorter = put_draft(client, doc, [summary, experience | {"entries": [
+        role_entry | {"bullets": role_entry["bullets"][:2]}]}]).json()
+    assert shorter["fit"]["spare_lines"] == whole + 1
+    # Taking out Experience leaves the role's line, its bullets, the title, and a blank line.
+    assert put_draft(client, doc, [summary]).json()["fit"]["spare_lines"] == whole + 6
+    # Once it's approved, the document's own estimate is what the draft's was.
+    put_draft(client, doc, [summary, experience])
+    finished = finish(client, doc).json()
+    assert finished["fit"] == doc["fit"]
+
+
+def test_a_letter_drafts_estimate_uses_the_greeting_in_use(client: TestClient, db: Session,
+                                                           account_id: int,
+                                                           claude: FakeMessages):
+    doc, keys = started_letter(client, db, account_id, claude)
+    assert doc["fit"]["limit"] == 1
+    sections = doc["draft"]["sections"]
+    # Claude's greeting ("Dear Jordan Rivera,") and the usual one each take a line.
+    usual = put_draft(client, doc, sections, use_default_greeting=True).json()
+    assert usual["fit"] == doc["fit"]
+    # Rejecting the new paragraph (one line) saves it and the blank line before it.
+    shorter = put_draft(client, doc, sections[1:]).json()
+    assert shorter["fit"]["spare_lines"] == doc["fit"]["spare_lines"] + 2
 
 
 def test_review_refuses_what_claude_couldnt_have_suggested(client: TestClient, db: Session,

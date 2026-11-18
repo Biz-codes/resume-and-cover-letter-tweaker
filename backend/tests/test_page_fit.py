@@ -1,10 +1,20 @@
 """The page fit estimate (app/page_fit.py): a resume on two pages with no section split across
-the break, and a cover letter on one."""
+the break, and a cover letter on one. What tailoring, the chat, and the draft do with it is
+tested with them (tests/test_suggestions.py, test_chat.py, and test_drafts.py)."""
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.page_fit import CHARS_PER_LINE, LINES_PER_PAGE, fit, part_lines
+from app.documents import COVER_LETTER, RESUME
+from app.page_fit import (
+    BULLET_INDENT,
+    CHARS_PER_LINE,
+    LINES_PER_PAGE,
+    budget_text,
+    fit,
+    lines_used,
+    part_lines,
+)
 from app.plain_text import Output, OutputPart
 from tests.test_sections_skills import resume
 
@@ -64,3 +74,21 @@ def test_each_document_says_whether_it_fits(client: TestClient, db: Session, acc
     assert body["fit"] | {"pages": 0} == {"limit": 2, "pages": 0, "fits": True,
                                          "page_starts": [], "too_long": [],
                                          "spare_lines": body["fit"]["spare_lines"]}
+
+
+def test_claude_is_told_the_budget_from_the_same_constants():
+    told = budget_text(RESUME)
+    assert told.startswith(f"Page budget: the resume should fit on 2 pages, of {LINES_PER_PAGE} "
+                           f"lines each. A line holds about {CHARS_PER_LINE} characters, and a "
+                           f"bullet's text about {CHARS_PER_LINE - BULLET_INDENT}")
+    assert "no section is ever split" in told
+    letter = budget_text(COVER_LETTER)
+    assert "the cover letter should fit on 1 page," in letter and "the greeting" in letter
+
+
+def test_lines_used_counts_every_part_and_the_gaps_between_them():
+    # The header's name counts twice: 2 + 1, a blank line, then 2.
+    assert lines_used(Output(parts=[OutputPart(label="Header", text="Sam\nEngineer"),
+                                    OutputPart(label="Summary", text="Summary\nI build."),
+                                    OutputPart(label="Empty", text="")], text="")) == 6
+    assert lines_used(Output(parts=[], text="")) == 0

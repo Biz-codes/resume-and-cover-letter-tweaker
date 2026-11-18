@@ -4,10 +4,13 @@ The output comes in parts (the header, each section, and a cover letter's greeti
 closing), so the page can offer a copy button for each one as well as for the whole document.
 """
 
-from pydantic import BaseModel
+from typing import Any
 
-from app.documents import Entry, SectionTree
-from app.models import Header
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.documents import Entry, Kind, SectionTree
+from app.models import Header, SignOff
 
 
 class OutputPart(BaseModel):
@@ -71,6 +74,14 @@ def _output(parts: list[OutputPart]) -> Output:
     return Output(parts=parts, text="\n\n".join(part.text for part in parts if part.text))
 
 
+def section_text(kind: Kind, section: SectionTree) -> str:
+    """A section as it prints: a resume's with its title, a cover letter's paragraph without."""
+    body = section_body(section)
+    if kind.prefix == "cover_letter":
+        return body
+    return f"{section.title}\n{body}" if body else section.title
+
+
 def resume_output(header: Header | None, sections: list[SectionTree]) -> Output:
     """The header, then each section's title and content."""
     parts = [OutputPart(label="Header", text=header_text(header))] if header else []
@@ -79,6 +90,18 @@ def resume_output(header: Header | None, sections: list[SectionTree]) -> Output:
         parts.append(OutputPart(label=section.title,
                                 text=f"{section.title}\n{body}" if body else section.title))
     return _output(parts)
+
+
+def document_output(db: Session, kind: Kind, doc: Any, sections: list[SectionTree],
+                    addressee: str | None = None) -> Output:
+    """The document's output with these sections, its own header, and for a cover letter its
+    own greeting and sign-off, or `addressee` in place of its greeting (Claude's, in a draft)."""
+    header = db.get(Header, doc.header_id) if doc.header_id else None
+    if kind.prefix == "resume":
+        return resume_output(header, sections)
+    sign_off = db.get(SignOff, doc.sign_off_id) if doc.sign_off_id else None
+    return letter_output(header, sections, addressee or doc.addressee,
+                         sign_off.text if sign_off else None, doc.signature_name)
 
 
 def letter_output(header: Header | None, sections: list[SectionTree], addressee: str | None,

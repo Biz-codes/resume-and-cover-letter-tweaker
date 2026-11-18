@@ -422,6 +422,33 @@ describe('DocumentPage', () => {
     await expectNoA11yViolations()
   })
 
+  describe("Claude's draft's estimate", () => {
+    const posting = { job_posting_id: 4, organization: 'Acme', role_title: 'Engineer' }
+    const fit = { limit: 2, pages: 2.1, fits: false, page_starts: ['Experience'], too_long: [], spare_lines: -4 }
+    const drafted = (sections: object[]) =>
+      resume(5, {
+        job_posting: posting,
+        output: { parts: [], text: '' },
+        fit,
+        draft: { starting_document: null, starting_reason: 'None earlier.', texts: [], sections },
+      })
+
+    it('says whether the draft fits', async () => {
+      stub(5, drafted([{ section_id: 1, reason: 'Short.', entries: [{ kind: 'narrative', item_id: 6, reason: 'Fits.' }] }]))
+      renderAt('/resumes/5')
+      expect(await screen.findByText("This draft doesn't fit on 2 pages.")).toBeInTheDocument()
+      expect(screen.getByText(/About 2.1 pages, 4 lines over/)).toBeInTheDocument()
+      await expectNoA11yViolations()
+    })
+
+    it('says nothing for an empty draft', async () => {
+      stub(5, drafted([]))
+      renderAt('/resumes/5')
+      await screen.findByText(/Below is Claude's draft/)
+      expect(screen.queryByText(/This draft/)).not.toBeInTheDocument()
+    })
+  })
+
   it("offers a sent one's job posting", async () => {
     stub(7, resume(7, { ...SENT, tone_set_id: 2 }))
     renderAt('/resumes/7')

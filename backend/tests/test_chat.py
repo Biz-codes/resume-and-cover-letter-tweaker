@@ -32,8 +32,11 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
+from app.page_fit import budget_text, part_lines
+from app.plain_text import header_text
 from app.suggestions import load_library
 from app.writing_check import Issue, Review, Reviewed
+from tests.test_documents import header
 from tests.test_experience_projects_bullets import bullet, role, show_job
 from tests.test_sections_skills import add, category, error, resume
 
@@ -422,6 +425,35 @@ def test_sends_the_postings_other_document_when_it_changed(client: TestClient, d
         "<cover_letter_for_this_posting>\nI like your tools.\n</cover_letter_for_this_posting>"]
     # Unchanged, so not sent again.
     assert others(claude.calls[2]) == []
+
+
+def test_the_document_comes_with_its_page_estimate(client: TestClient, db: Session,
+                                                   account_id: int, claude: FakeChat):
+    doc, _ = setup_resume(db, account_id)
+    printed = header(db, account_id)
+    doc.header_id = printed.header_id
+    db.flush()
+    claude.answer("Fine.")
+    send(client, doc)
+    [request] = claude.calls
+    instructions = request["system"][0]["text"]
+    assert budget_text(RESUME) in instructions and '("lines_outside_sections")' in instructions
+    document = request["messages"][0]["content"][0]["text"]
+    sections = json.loads(document.split("<document>\n")[1].split("\n</document>")[0])
+    # The title, the role's line, and its two bullets.
+    assert [section["lines"] for section in sections] == [4]
+    estimate = json.loads(document.split("<page_fit>\n")[1].split("\n</page_fit>")[0])
+    shown = client.get(f"/api/resumes/{doc.resume_id}").json()["fit"]
+    assert estimate == shown | {
+        "lines_outside_sections": part_lines(header_text(printed), header=True)}
+
+    # A header edit changes only the estimate, and that sends the document again.
+    printed.headline = None
+    db.flush()
+    claude.answer("Fine.")
+    send(client, doc)
+    again = claude.calls[1]["messages"][-1]["content"][0]["text"]
+    assert again.startswith("<document>") and again != document
 
 
 DRAMA = "em dashes used for drama"

@@ -67,7 +67,8 @@ from app.models import (
     WritingRule,
     WritingRuleKind,
 )
-from app.plain_text import letter_output, resume_output
+from app.page_fit import budget_text, fit, limit_of, lines_used, section_lines
+from app.plain_text import document_output, letter_output, resume_output
 from app.tones import rule_texts, rules_of, visible
 from app.writing_check import TECHNICAL_EXCEPTIONS
 
@@ -193,6 +194,11 @@ where that clearly helps; stay close to the starting point.
 emphasize what it asks for, where that's accurate. Change as little as you can. Never add a \
 skill, tool, result, number, or duty the library doesn't support, and never change facts.
 4. {new_text}
+5. Keep it within its page budget (below). Each earlier {doc} in <documents> says about how \
+many pages it takes ("pages") and whether it fits ("fits"), and each of its sections how many \
+lines it takes ("lines"), so you can tell what your choices add or save.
+
+{budget}
 
 How to answer:
 - Use only ids from the library. Any kind of item can go in any section. A skill category's or \
@@ -383,13 +389,17 @@ def documents_json(db: Session, kind: Kind, account_id: int, doc_id: int,
         if not sections:
             continue
         posting = info[this_id].job_posting
+        estimate = fit(document_output(db, kind, doc, sections), limit_of(kind))
         found.append({
             "id": this_id,
             "name": doc.name,
             "made_for": f"{posting.role_title} at {posting.organization}" if posting else None,
             "sent": info[this_id].locked,
             "tone": tones.get(doc.tone_set_id),
+            "pages": estimate.pages,
+            "fits": estimate.fits,
             "sections": [{"section_id": section.section_id, "title": section.title,
+                          "lines": section_lines(kind, section),
                           "entries": [{"kind": entry.kind, "item_id": entry.item_id,
                                        "skill_ids": [child.item_id for child in entry.skills],
                                        "bullet_ids": [child.item_id for child in entry.bullets]}
@@ -494,6 +504,15 @@ def _words(kind: Kind) -> tuple[str, str]:
     return ("resume", "resumes") if kind.prefix == "resume" else ("cover letter", "cover letters")
 
 
+def outside_sections(db: Session, kind: Kind, doc: Any) -> str:
+    """What this document's page budget has to spare for its sections: the lines its header
+    (and a letter's greeting and sign-off) take, which the sections share the pages with."""
+    lines = lines_used(document_output(db, kind, doc, []))
+    what = ("Its header, greeting, and sign-off take" if kind.prefix == "cover_letter"
+            else "Its header takes")
+    return f"{what} {lines} lines of its pages, with the blank lines between them."
+
+
 def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
             doc: Any, start_from: int | None = None,
             pick_tone: bool = False) -> tuple[Suggestion, PickedTone | None]:
@@ -520,7 +539,8 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
     instructions = INSTRUCTIONS.format(
         doc=one, docs=many, rules=rules_text(db, account_id), exceptions=TECHNICAL_EXCEPTIONS,
         new_text=LETTER_NEW_TEXT if letter else RESUME_NEW_TEXT,
-        kind_notes=LETTER_NOTES if letter else "", companion=companion_instructions(kind))
+        kind_notes=LETTER_NOTES if letter else "", companion=companion_instructions(kind),
+        budget=budget_text(kind))
     data = (f"<library>\n{json.dumps(library_json(library), ensure_ascii=False)}\n</library>\n"
             f"<documents>\n{json.dumps(documents, ensure_ascii=False)}\n</documents>")
     if start_from == doc_id:
@@ -536,9 +556,9 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
     other = f"\n{other}" if other else ""
     contacts = (f"\n<contacts>\n{posting.contacts.strip()}\n</contacts>"
                 if letter and (posting.contacts or "").strip() else "")
-    content = (f"Tailor a new {one} for this posting.{start}\n<posting>\n"
-               f"Organization: {posting.organization}\nRole: {posting.role_title}\n\n"
-               f"{posting.description}\n</posting>{contacts}{other}")
+    content = (f"Tailor a new {one} for this posting.{start} {outside_sections(db, kind, doc)}"
+               f"\n<posting>\nOrganization: {posting.organization}\nRole: {posting.role_title}"
+               f"\n\n{posting.description}\n</posting>{contacts}{other}")
     tones = offered_tones(db, account_id) if pick_tone else []
     if pick_tone:
         content += pick_tone_text(db, tones, one, many)
