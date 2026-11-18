@@ -28,7 +28,9 @@ import Collapsible from '../../library/Collapsible/Collapsible'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import styles from './ProposalCards.module.css'
 
-function Card({
+// One card, also shown for a posting's review's fixes (frontend/src/postings/FinalReview), which
+// have Undo on an applied card (`onUndo`) and no Reply.
+export function ProposalCard({
   proposal,
   title,
   singular,
@@ -36,7 +38,8 @@ function Card({
   onApply,
   onState,
   onReply,
-  replies,
+  onUndo,
+  replies = [],
 }: {
   proposal: Proposal
   title: string
@@ -45,9 +48,11 @@ function Card({
   readOnly: boolean
   onApply: () => Promise<void>
   onState: (state: 'pending' | 'dismissed') => Promise<void>
-  onReply: () => void
+  onReply?: () => void
+  // Takes back an applied one, when it can be.
+  onUndo?: () => Promise<void>
   // The user's messages that replied to it, by id, oldest first.
-  replies: number[]
+  replies?: number[]
 }) {
   const focusLater = useFocusLater()
   const [busy, setBusy] = useState(false)
@@ -146,9 +151,16 @@ function Card({
               Restore
             </button>
           )}
-          <button type="button" aria-label={`Reply: ${title}`} onClick={onReply}>
-            Reply
-          </button>
+          {proposal.state === 'applied' && onUndo && (
+            <button type="button" aria-label={`Undo: ${title}`} aria-disabled={busy} onClick={() => void run(onUndo)}>
+              Undo
+            </button>
+          )}
+          {onReply && (
+            <button type="button" aria-label={`Reply: ${title}`} onClick={onReply}>
+              Reply
+            </button>
+          )}
         </div>
       )}
       {/* Shown in a sent document's read-only chat too, since it only moves around it. */}
@@ -274,7 +286,7 @@ export default function ProposalCards({
         const title = describe(proposal, sections)
         return (
           <li key={proposal.id} id={cardId(proposal)} tabIndex={-1} className={styles.card}>
-            <Card
+            <ProposalCard
               proposal={proposal}
               title={title}
               singular={singular}

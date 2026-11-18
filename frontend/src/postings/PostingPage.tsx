@@ -4,8 +4,8 @@
 // file or text (StartVersion), and named
 // for the posting. A new posting picks its header first, from the suggestion, with that section
 // open, since its versions use it; once picked, the section starts closed. Once the posting is applied to, its versions are
-// a record of what was sent, so no new ones start here. Below them, its tracking: the dates,
-// contacts, and interviews.
+// a record of what was sent, so no new ones start here. Below them, "Review together" (FinalReview),
+// then its tracking: the dates, contacts, and interviews.
 // See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
 // docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
@@ -28,6 +28,7 @@ import ConfirmDelete from '../shared/components/ConfirmDelete'
 import Disclosure from '../shared/components/Disclosure/Disclosure'
 import FieldsForm from '../shared/components/FieldsForm'
 import HeaderFields from '../shared/components/HeaderFields'
+import FinalReview, { reviewedNotice } from './FinalReview'
 import Interviews from './Interviews'
 import StartVersion, { type StartChoice } from './StartVersion'
 import Tracking from './Tracking'
@@ -344,6 +345,15 @@ export function PostingPage({ id }: { id: number }) {
               </div>
             )
           })}
+
+          <FinalReview
+            posting={posting}
+            onReviewed={(updated) => {
+              setPosting(updated)
+              setNotice(reviewedNotice(updated))
+            }}
+            onChanged={setPosting}
+          />
 
           <Disclosure title="Application tracking" heading={3}>
             <Tracking posting={posting} onSave={saveTracking} />

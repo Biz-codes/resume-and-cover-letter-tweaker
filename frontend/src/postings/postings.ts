@@ -4,6 +4,7 @@
 import type { Field } from '../shared/components/FieldsForm'
 import { api } from '../shared/api/client'
 import type { HeaderFields } from '../shared/api/headers'
+import type { Proposal } from '../shared/api/chat'
 import type { Use } from '../shared/api/usage'
 
 export interface PostingFields {
@@ -41,6 +42,51 @@ export interface PostingDetail extends Posting {
   interviews: Interview[]
   // The organization's other postings, which an interview can also cover.
   same_organization: PostingRef[]
+  // The latest review of its resume and cover letter together, or none yet.
+  final_review: FinalReview | null
+}
+
+export type ReviewedDoc = 'resume' | 'cover_letter'
+
+// One of the posting's key skills or requirements, and which document covers it.
+export interface Coverage {
+  term: string
+  covered_by: ReviewedDoc | 'both' | 'neither'
+  // A section and a few words of the text, or "" when neither covers it.
+  where: string
+}
+
+export type FindingKind = 'keyword' | 'repeated' | 'inconsistent' | 'writing'
+
+export interface Finding {
+  id: string
+  kind: FindingKind
+  // The document or documents it's in.
+  documents: ReviewedDoc[]
+  // The section and a few words of the text.
+  where: string
+  why: string
+  // Each a change to one document, like the chat's proposals.
+  fixes: Fix[]
+}
+
+export interface Fix {
+  document: ReviewedDoc
+  // Its `page` says whether it would take the document past its pages, while it's waiting.
+  proposal: Proposal
+  // Applied, and its document is still as the fix left it, so Undo can put it back.
+  can_undo: boolean
+}
+
+// The posting's resume and cover letter reviewed together (backend/app/final_review.py).
+export interface FinalReview {
+  keywords: Coverage[]
+  findings: Finding[]
+  // False when the writing check on the fixes couldn't run.
+  checked: boolean
+  reviewed_at: string
+  // Either document changed since it ran.
+  out_of_date: boolean
 }
 
 export interface TrackingFields {
@@ -115,6 +161,18 @@ export const postingsApi = {
   update: (id: number, fields: PostingFields) => api.put<PostingDetail>(`/job-postings/${id}`, fields),
   // The posting and all its resumes and cover letters point at the saved header with exactly
   // these values, or a new one. An applied posting returns VERSION_LOCKED.
+  // Reviews its resume and cover letter together, replacing the last review. VALIDATION_FAILED
+  // when neither has anything in it, or one is still in Claude's first draft; VERSION_LOCKED
+  // once it's applied to.
+  review: (id: number) => api.post<PostingDetail>(`/job-postings/${id}/review`),
+  // One of the review's fixes, made to its document (checked again against it as it is now),
+  // and how many of its other fixes for the same content went stale.
+  applyFix: (id: number, fixId: string) =>
+    api.post<{ posting: PostingDetail; stale: number }>(`/job-postings/${id}/review/fixes/${fixId}/apply`),
+  // Puts its document back as it was before the fix, while it's still as the fix left it.
+  undoFix: (id: number, fixId: string) => api.post<PostingDetail>(`/job-postings/${id}/review/fixes/${fixId}/undo`),
+  setFixState: (id: number, fixId: string, state: 'pending' | 'dismissed') =>
+    api.put<PostingDetail>(`/job-postings/${id}/review/fixes/${fixId}`, { state }),
   setHeader: (id: number, fields: HeaderFields) => api.put<PostingDetail>(`/job-postings/${id}/header`, fields),
   // Replaces the dates and contacts, at any time. An applied date locks the posting's versions,
   // and clearing it unlocks them.

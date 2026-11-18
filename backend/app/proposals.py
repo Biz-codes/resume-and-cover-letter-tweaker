@@ -72,7 +72,7 @@ def find_proposal(message: ChatMessage, proposal_id: str) -> tuple[int, Proposal
     raise AppError(ErrorCode.NOT_FOUND)
 
 
-def _content(proposal: dict[str, Any]) -> tuple[Any, ...] | None:
+def content_key(proposal: dict[str, Any]) -> tuple[Any, ...] | None:
     """What a proposal changes: the section, or the item in its place; none for new text."""
     if proposal.get("item_id", 0) == 0 and proposal.get("target") != "section":
         return None
@@ -85,7 +85,7 @@ def mark_stale(turns: list[ChatMessage], message: ChatMessage,
     """Sets aside the pending proposals for the same content as the one at `index` in `message`
     that came before it, in the conversation `turns` (in order). Returns the other messages that
     changed, and how many proposals went stale in all."""
-    key = _content(message.proposals[index])
+    key = content_key(message.proposals[index])
     if key is None:
         return [], 0
     changed: list[ChatMessage] = []
@@ -95,7 +95,7 @@ def mark_stale(turns: list[ChatMessage], message: ChatMessage,
             continue
         stale = [at for at, stored in enumerate(turn.proposals or [])
                  if (turn.message_id < message.message_id or at < index)
-                 and stored.get("state") == "pending" and _content(stored) == key]
+                 and stored.get("state") == "pending" and content_key(stored) == key]
         if not stale:
             continue
         for at in stale:
@@ -119,7 +119,7 @@ def _at(items: list[Any], item: Any, position: int) -> None:
     items.insert(index, item)
 
 
-def _tree(sections) -> list[RestoredSection]:
+def tree_of(sections) -> list[RestoredSection]:
     return [RestoredSection(section_id=section.section_id, entries=[
         PlacedEntry(kind=entry.kind, item_id=entry.item_id,
                     skill_ids=[child.item_id for child in entry.skills],
@@ -199,7 +199,7 @@ def apply(db: Session, kind: Kind, account_id: int, doc: Any, change: ProposedCh
     if why:
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        f"This change doesn't fit the document as it is now: {why}.")
-    tree = _tree(sections)
+    tree = tree_of(sections)
     action, target = change.action, change.target
     added: tuple[int, str, int] | None = None
     new_section: int | None = None

@@ -26,6 +26,7 @@ const POSTING: PostingDetail = {
   contacts: null,
   interviews: [],
   same_organization: [COACH],
+  final_review: null,
 }
 const FIRST = { interview_id: 1, interview_on: '2026-10-05', notes: 'First round', also_for: [COACH] }
 const WITH_ONE = { ...POSTING, interviews: [FIRST] }

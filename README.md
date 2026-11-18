@@ -13,6 +13,8 @@ A web app that tailors your resume and cover letter to each job posting, using a
 | ![The new posting form, filled in by Claude from a pasted job description](docs/images/posting-read.png) | ![Claude's draft resume, each row badged Original, Library, or Claude, with its reason open](docs/images/draft-review.png) |
 | **Keeping or discarding Claude's unused text** | **One bullet, reused across resumes** |
 | ![The dialog listing Claude's text the draft didn't use, each with a checkbox to keep it](docs/images/approve-dialog.png) | ![A bullet's dialog, its "Used by" list showing the base resume and two tailored ones](docs/images/used-by.png) |
+| **Reviewing before applying** | |
+| ![A posting's "Review together": the keywords each document covers, and a finding with a fix to apply](docs/images/review-together.png) | |
 -->
 
 The walkthrough uses made-up demo data (`db/seed_demo.sql`), never real applications.
@@ -37,7 +39,7 @@ The goal of this app is to streamline the resume and cover letter writing proces
 The app and AI do most of the heavy lifting. You keep final control over what goes into every resume and cover letter.
 
 ## Basics
-Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and the user's existing resumes and cover letters (PDF, Word, or pasted text) into the library, drafts a tailored resume or cover letter for the user to review, and chats about any part of it, proposing changes the user applies or dismisses. A public demo is planned.
+Status: in progress. The content library, building resumes and cover letters, and tracking applications work. Claude reads job postings and the user's existing resumes and cover letters (PDF, Word, or pasted text) into the library, drafts a tailored resume or cover letter for the user to review, and chats about any part of it, proposing changes the user applies or dismisses. The app estimates whether each resume fits on two pages and each cover letter on one, and Claude keeps to that budget. Before applying, "Review together" has Claude read a posting's resume and cover letter side by side: which of the posting's keywords each one covers, and any repeated wording, inconsistencies between them, or breaks of the writing rules. A public demo is planned.
 
 Input: URL of a job posting (or none, when working on a base resume)
 Output: plain text for a resume and cover letter tailored to that posting, ready to copy and paste
@@ -55,7 +57,7 @@ It runs locally for now, on macOS with [Homebrew](https://brew.sh) (the scripts 
 - Python 3.14
 - Node 24, through [nvm](https://github.com/nvm-sh/nvm) (`.nvmrc` names the version)
 - PostgreSQL 18, on port 5433
-- An Anthropic API key from [console.anthropic.com](https://console.anthropic.com), for the Claude features (reading postings and resumes, tailoring, and the chat). API usage is billed separately from a Claude.ai subscription. Everything else works without one.
+- An Anthropic API key from [console.anthropic.com](https://console.anthropic.com), for the Claude features (reading postings and resumes, tailoring, the chat, and reviewing a posting's resume and cover letter together). API usage is billed separately from a Claude.ai subscription. Everything else works without one.
 
 **1. Postgres.** Install it, set it to port 5433, and create the app's database and the one the tests use:
 ```sh

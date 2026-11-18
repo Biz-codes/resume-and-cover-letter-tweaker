@@ -24,6 +24,7 @@ const POSTING: PostingDetail = {
   contacts: null,
   interviews: [],
   same_organization: [],
+  final_review: null,
 }
 const APPLIED = { ...POSTING, applied_on: '2026-10-01', locked: true, rejected_on: '2026-10-20', contacts: 'Pat Lee\npat@example.com' }
 

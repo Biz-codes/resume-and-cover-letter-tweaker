@@ -10,6 +10,7 @@ it with create. Its interviews are added and changed in app/routers/interviews.p
 
 import re
 from datetime import date, datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel
@@ -21,7 +22,14 @@ from app.claude import Claude
 from app.db import DbSession
 from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
-from app.final_review import FinalReviewOut, review, review_out
+from app.final_review import (
+    FinalReviewOut,
+    apply_fix,
+    review,
+    review_out,
+    set_fix_state,
+    undo_fix,
+)
 from app.hiding import HiddenIn, set_hidden
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.posting_reader import PostingDraft, read_posting
@@ -273,6 +281,38 @@ def review_together(posting_id: int, db: DbSession, account_id: AccountId,
     posting in place of the last one (app/final_review.py). Returns the posting."""
     posting = get_owned(db, JobPosting, posting_id, account_id)
     review(db, client, account_id, posting)
+    return refreshed(db, posting)
+
+
+class FixStateIn(BaseModel):
+    state: Literal["pending", "dismissed"]
+
+
+@router.post("/{posting_id}/review/fixes/{fix_id}/apply")
+def apply_review_fix(posting_id: int, fix_id: str, db: DbSession,
+                     account_id: AccountId) -> dict[str, Any]:
+    """Make one of the review's fixes to its document (app/final_review.py, apply_fix).
+    Returns the posting and how many of the review's other fixes went stale."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    stale = apply_fix(db, account_id, posting, fix_id)
+    return {"posting": refreshed(db, posting), "stale": stale}
+
+
+@router.post("/{posting_id}/review/fixes/{fix_id}/undo")
+def undo_review_fix(posting_id: int, fix_id: str, db: DbSession,
+                    account_id: AccountId) -> PostingDetail:
+    """Put the fix's document back as it was before the fix (undo_fix)."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    undo_fix(db, account_id, posting, fix_id)
+    return refreshed(db, posting)
+
+
+@router.put("/{posting_id}/review/fixes/{fix_id}")
+def set_review_fix_state(posting_id: int, fix_id: str, body: FixStateIn, db: DbSession,
+                         account_id: AccountId) -> PostingDetail:
+    """Dismiss one of the review's fixes, or take that back (set_fix_state)."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    set_fix_state(posting, fix_id, body.state)
     return refreshed(db, posting)
 
 

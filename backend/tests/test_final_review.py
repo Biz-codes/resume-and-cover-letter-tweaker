@@ -3,6 +3,7 @@ docs/FRONTEND_CHECKS.md, "Reviewing a posting's resume and cover letter together
 stand-in for Claude."""
 
 from collections.abc import Iterator
+from datetime import date
 from types import SimpleNamespace
 
 import anthropic
@@ -11,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app import page_fit
 from app.chat import ProposedChange
 from app.claude import get_client
 from app.final_review import Coverage, Finding, Review, ReviewFix
@@ -188,3 +190,122 @@ def test_the_fixes_text_is_checked_against_the_writing_rules(client: TestClient,
     assert review["checked"] is True
     # The library isn't changed by a review.
     assert db.get(BulletPoint, ids["Shipped it"]).content == "Shipped it"
+
+
+def fixes_of(body: dict) -> dict[str, dict]:
+    """The review's fixes by id, from a posting's detail."""
+    return {fix["proposal"]["id"]: fix for finding in body["final_review"]["findings"]
+            for fix in finding["fixes"]}
+
+
+def fix_url(doc, fix_id: str) -> str:
+    return f"{review_url(doc)}/fixes/{fix_id}"
+
+
+def letter_sentences(client: TestClient, letter) -> list[str]:
+    body = client.get(f"/api/cover-letters/{letter.letter_id}").json()
+    return [entry["values"]["content"] for section in body["sections"]
+            for entry in section["entries"]]
+
+
+def test_applying_a_fix_keeps_the_review_current_and_undo_takes_it_back(
+        client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    doc, letter, ids = posting_with_both(client, db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    sentence = ("cover_letter", "reword", "narrative", SUMMARY_SECTION_ID, ids["sentence"])
+    claude.reply = Review(keywords=[], findings=[
+        Finding(kind="repeated", documents=["cover_letter"], where="Summary", why="Twice.",
+                fixes=[fix(*sentence, new_text="I ship weekly."),
+                       fix(*sentence, new_text="I ship daily.")]),
+        Finding(kind="writing", documents=["resume"], where="Experience", why="Vague.",
+                fixes=[fix("resume", "remove", "bullet", EXPERIENCE_SECTION_ID,
+                           ids["Tested it"], **job)])])
+    client.post(review_url(doc))
+
+    response = client.post(f"{fix_url(doc, 'finding_1_fix_1')}/apply")
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["stale"] == 1
+    fixes = fixes_of(body["posting"])
+    applied = fixes["finding_1_fix_1"]
+    assert (applied["proposal"]["state"], applied["can_undo"]) == ("applied", True)
+    assert fixes["finding_1_fix_2"]["proposal"]["state"] == "stale"
+    # Its own fix doesn't make the review out of date.
+    assert body["posting"]["final_review"]["out_of_date"] is False
+    assert letter_sentences(client, letter) == ["I ship weekly."]
+    # Applied once only.
+    assert error(client.post(f"{fix_url(doc, 'finding_1_fix_1')}/apply"))[:2] == (
+        422, "VALIDATION_FAILED")
+
+    # Undo puts the letter back, and the fix back to waiting; the review is still current.
+    undone = client.post(f"{fix_url(doc, 'finding_1_fix_1')}/undo").json()
+    assert letter_sentences(client, letter) == ["I shipped it."]
+    assert fixes_of(undone)["finding_1_fix_1"]["proposal"]["state"] == "pending"
+    assert fixes_of(undone)["finding_1_fix_1"]["can_undo"] is False
+    assert undone["final_review"]["out_of_date"] is False
+
+    # Once its document changes some other way, it can't be undone here, and the review is out
+    # of date.
+    client.post(f"{fix_url(doc, 'finding_2_fix_1')}/apply")
+    db.execute(ResumeBulletPoint.__table__.delete().where(
+        ResumeBulletPoint.bullet_id == ids["Shipped it"]))
+    db.flush()
+    shown = client.get(f"/api/job-postings/{doc.job_posting_id}").json()
+    assert fixes_of(shown)["finding_2_fix_1"]["can_undo"] is False
+    assert shown["final_review"]["out_of_date"] is True
+    assert error(client.post(f"{fix_url(doc, 'finding_2_fix_1')}/undo"))[:2] == (
+        422, "VALIDATION_FAILED")
+
+
+def test_dismissing_and_restoring_a_fix(client: TestClient, db: Session, account_id: int,
+                                        claude: FakeMessages):
+    doc, letter, ids = posting_with_both(client, db, account_id)
+    sentence = ("cover_letter", "reword", "narrative", SUMMARY_SECTION_ID, ids["sentence"])
+    claude.reply = Review(keywords=[], findings=[Finding(
+        kind="repeated", documents=["cover_letter"], where="Summary", why="Twice.",
+        fixes=[fix(*sentence, new_text="I ship weekly."), fix(*sentence, new_text="I ship.")])])
+    client.post(review_url(doc))
+    dismissed = client.put(fix_url(doc, "finding_1_fix_2"), json={"state": "dismissed"}).json()
+    assert fixes_of(dismissed)["finding_1_fix_2"]["proposal"]["state"] == "dismissed"
+    restored = client.put(fix_url(doc, "finding_1_fix_2"), json={"state": "pending"}).json()
+    assert fixes_of(restored)["finding_1_fix_2"]["proposal"]["state"] == "pending"
+    # A dismissed one isn't set aside, and an applied one is undone, not dismissed.
+    client.post(f"{fix_url(doc, 'finding_1_fix_1')}/apply")
+    assert error(client.put(fix_url(doc, "finding_1_fix_1"), json={"state": "dismissed"}))[:2] \
+        == (422, "VALIDATION_FAILED")
+    # A stale one can be restored, not dismissed.
+    assert error(client.put(fix_url(doc, "finding_1_fix_2"), json={"state": "dismissed"}))[:2] \
+        == (422, "VALIDATION_FAILED")
+    assert client.put(fix_url(doc, "finding_1_fix_2"), json={"state": "pending"}).status_code == 200
+    # One that isn't in the review.
+    assert error(client.post(f"{fix_url(doc, 'finding_9_fix_1')}/apply"))[:2] == (
+        404, "NOT_FOUND")
+
+    # Nothing changes once the posting is applied to.
+    db.get(JobPosting, doc.job_posting_id).applied_on = date(2026, 11, 18)
+    db.flush()
+    assert error(client.post(f"{fix_url(doc, 'finding_1_fix_2')}/apply"))[:2] == (
+        409, "VERSION_LOCKED")
+    assert error(client.put(fix_url(doc, "finding_1_fix_2"), json={"state": "dismissed"}))[:2] \
+        == (409, "VERSION_LOCKED")
+    shown = client.get(f"/api/job-postings/{doc.job_posting_id}").json()
+    assert fixes_of(shown)["finding_1_fix_1"]["can_undo"] is False
+
+
+def test_a_waiting_fix_that_wouldnt_fit_is_marked(client: TestClient, db: Session,
+                                                  account_id: int, claude: FakeMessages,
+                                                  monkeypatch: pytest.MonkeyPatch):
+    # One page of six lines; Experience takes four.
+    monkeypatch.setattr(page_fit, "LINES_PER_PAGE", 6)
+    monkeypatch.setattr(page_fit, "RESUME_PAGES", 1)
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    claude.reply = Review(keywords=[], findings=[Finding(
+        kind="keyword", documents=["resume"], where="Experience", why="Missing.", fixes=[
+            fix("resume", "add", "bullet", EXPERIENCE_SECTION_ID, new_text="Mentored. " * 30,
+                **job),
+            fix("resume", "add", "bullet", EXPERIENCE_SECTION_ID, ids["Led a team"], **job)])])
+    fixes = fixes_of(client.post(review_url(doc)).json())
+    assert fixes["finding_1_fix_1"]["proposal"]["page"] == {
+        "limit": 1, "pages": 1.2, "over_lines": 1, "too_long": ["Experience"]}
+    assert fixes["finding_1_fix_2"]["proposal"]["page"] is None

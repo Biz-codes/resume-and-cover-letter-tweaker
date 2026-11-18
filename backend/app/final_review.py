@@ -12,6 +12,9 @@ document's tone (check_proposals). A fix that can't be used is left out and logg
 
 The review is kept with the posting (`final_review`), replacing the last, with a fingerprint of
 each document's printed text and tone, so the page can say it's out of date once either changes.
+Each fix can be applied to its document as a chat card is (app/proposals.py), undone while the
+document is still as the fix left it, dismissed, or restored; the review's own fixes keep it
+current.
 
 Prompt caching: the instructions and writing rules, then the library, come first and are cached;
 the posting and the two documents come last.
@@ -31,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.chat import (
     Placed,
     Proposal,
+    ProposalOut,
     ProposedChange,
     before_text,
     check_change,
@@ -43,8 +47,11 @@ from app.errors import AppError, ErrorCode
 from app.models import JobPosting
 from app.page_fit import fit, fit_json, limit_of, lines_used
 from app.plain_text import document_output
+from app.proposals import apply, content_key, page_marks, tree_of
+from app.routers.document_tree import RestoredSection, restore
 from app.suggestions import library_json, load_library, rules_text
 from app.tones import rule_texts
+from app.usage import touch
 from app.writing_check import TECHNICAL_EXCEPTIONS
 
 logger = logging.getLogger(__name__)
@@ -92,6 +99,10 @@ class Review(BaseModel):
 class StoredFix(BaseModel):
     document: DocName
     proposal: Proposal
+    # Once it's applied: the document's tree just before, which Undo puts back, and the
+    # document's fingerprint just after, so Undo only runs while it's still as the fix left it.
+    undo: list[RestoredSection] | None = None
+    after: str | None = None
 
 
 class StoredFinding(BaseModel):
@@ -114,8 +125,32 @@ class FinalReview(BaseModel):
     reviewed_at: datetime
 
 
-class FinalReviewOut(FinalReview):
-    # Either document changed (or was started or deleted) since the review ran.
+# As the page shows it: each fix still waiting with its page mark, and whether an applied one
+# can be undone; none of what's kept for Undo or the fingerprints.
+
+
+class FixOut(BaseModel):
+    document: DocName
+    proposal: ProposalOut
+    can_undo: bool
+
+
+class FindingOut(BaseModel):
+    id: str
+    kind: FindingKind
+    documents: list[DocName]
+    where: str
+    why: str
+    fixes: list[FixOut]
+
+
+class FinalReviewOut(BaseModel):
+    keywords: list[Coverage]
+    findings: list[FindingOut]
+    checked: bool
+    reviewed_at: datetime
+    # Either document changed (or was started or deleted) since the review ran, other than by
+    # the review's own fixes.
     out_of_date: bool
 
 
@@ -193,12 +228,147 @@ def fingerprints(db: Session, posting: JobPosting) -> dict[str, str | None]:
 
 
 def review_out(db: Session, posting: JobPosting) -> FinalReviewOut | None:
-    """The posting's last review, and whether it's out of date."""
+    """The posting's last review, whether it's out of date, each waiting fix's page mark
+    (app/proposals.py, against its document as it is now), and which applied fixes can be
+    undone."""
     if posting.final_review is None:
         return None
-    review = FinalReview.model_validate(posting.final_review)
-    return FinalReviewOut(**review.model_dump(),
-                          out_of_date=review.fingerprints != fingerprints(db, posting))
+    kept = FinalReview.model_validate(posting.final_review)
+    current = fingerprints(db, posting)
+    docs = posting_documents(db, posting)
+    marks = {name: page_marks(db, KINDS[name], posting.account_id, doc)
+             for name, doc in docs.items()}
+
+    def shown(fix: StoredFix) -> FixOut:
+        mark = marks.get(fix.document)
+        return FixOut(
+            document=fix.document,
+            proposal=ProposalOut(**fix.proposal.model_dump(),
+                                 page=mark(fix.proposal) if mark else None),
+            can_undo=(posting.applied_on is None and fix.proposal.state == "applied"
+                      and fix.undo is not None and fix.after == current.get(fix.document)))
+
+    return FinalReviewOut(
+        keywords=kept.keywords, checked=kept.checked, reviewed_at=kept.reviewed_at,
+        findings=[FindingOut(**finding.model_dump(exclude={"fixes"}),
+                             fixes=[shown(fix) for fix in finding.fixes])
+                  for finding in kept.findings],
+        out_of_date=kept.fingerprints != current)
+
+
+# Applying, undoing, dismissing, and restoring a fix (docs/FRONTEND_CHECKS.md, "Reviewing a
+# posting's resume and cover letter together"). Each saves the review in place of the last.
+
+
+def _kept(posting: JobPosting) -> FinalReview:
+    if posting.final_review is None:
+        raise AppError(ErrorCode.NOT_FOUND)
+    return FinalReview.model_validate(posting.final_review)
+
+
+def _find_fix(kept: FinalReview, fix_id: str) -> StoredFix:
+    for finding in kept.findings:
+        for fix in finding.fixes:
+            if fix.proposal.id == fix_id:
+                return fix
+    raise AppError(ErrorCode.NOT_FOUND)
+
+
+def _open_document(db: Session, posting: JobPosting, fix: StoredFix) -> tuple[Kind, Any]:
+    """The fix's document, which it can still change: VERSION_LOCKED once the posting is
+    applied to, and VALIDATION_FAILED when the posting no longer has it or it's in Claude's
+    first draft."""
+    if posting.applied_on is not None:
+        raise AppError(ErrorCode.VERSION_LOCKED)
+    word = fix.document.replace("_", " ")
+    doc = posting_documents(db, posting).get(fix.document)
+    if doc is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED, f"This posting no longer has its {word}.")
+    if doc.draft is not None:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"Approve Claude's first draft of the {word} first.")
+    return KINDS[fix.document], doc
+
+
+def _changed_by_fix(kept: FinalReview, name: str, before: str, after: str) -> None:
+    """The review's own fixes don't make it out of date: when it was current for this
+    document before the fix, it's current after."""
+    if kept.fingerprints.get(name) == before:
+        kept.fingerprints[name] = after
+
+
+def _save(posting: JobPosting, kept: FinalReview) -> None:
+    posting.final_review = kept.model_dump(mode="json")
+
+
+def apply_fix(db: Session, account_id: int, posting: JobPosting, fix_id: str) -> int:
+    """Make the fix's change to its document, as Apply on a chat card does (app/proposals.py,
+    apply: checked again against the document as it is now), keeping the way back, and set
+    aside the review's other waiting fixes for the same content in that document (stale).
+    Returns how many went stale."""
+    kept = _kept(posting)
+    fix = _find_fix(kept, fix_id)
+    if fix.proposal.state != "pending":
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"That change was already {fix.proposal.state}.")
+    kind, doc = _open_document(db, posting, fix)
+    doc_id = getattr(doc, kind.doc_id)
+    before = fingerprint(db, kind, doc)
+    undo = tree_of(load_tree(db, kind, doc_id))
+    apply(db, kind, account_id, doc, fix.proposal)
+    db.flush()
+    after = fingerprint(db, kind, doc)
+    fix.proposal.state, fix.undo, fix.after = "applied", undo, after
+    _changed_by_fix(kept, fix.document, before, after)
+    key = content_key(fix.proposal.model_dump())
+    stale = 0
+    for finding in kept.findings:
+        for other in finding.fixes:
+            if (other is not fix and other.document == fix.document and key is not None
+                    and other.proposal.state == "pending"
+                    and content_key(other.proposal.model_dump()) == key):
+                other.proposal.state = "stale"
+                stale += 1
+    _save(posting, kept)
+    return stale
+
+
+def undo_fix(db: Session, account_id: int, posting: JobPosting, fix_id: str) -> None:
+    """Put the fix's document back as it was just before the fix, while it's still as the fix
+    left it (VALIDATION_FAILED otherwise, since that would undo other changes too), and the fix
+    back to waiting. The library rows a fix saved stay, as with the page's Undo."""
+    kept = _kept(posting)
+    fix = _find_fix(kept, fix_id)
+    if fix.proposal.state != "applied" or fix.undo is None:
+        raise AppError(ErrorCode.VALIDATION_FAILED, "That change isn't applied from here.")
+    kind, doc = _open_document(db, posting, fix)
+    doc_id = getattr(doc, kind.doc_id)
+    before = fingerprint(db, kind, doc)
+    if before != fix.after:
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"The {fix.document.replace('_', ' ')} changed since this fix, so it "
+                       "can't be undone here. Change it on its own page instead.")
+    restore(db, kind, doc_id, fix.undo, account_id)
+    touch(db, kind.doc, {doc_id})
+    db.flush()
+    _changed_by_fix(kept, fix.document, before, fingerprint(db, kind, doc))
+    fix.proposal.state, fix.undo, fix.after = "pending", None, None
+    _save(posting, kept)
+
+
+def set_fix_state(posting: JobPosting, fix_id: str, state: Literal["pending", "dismissed"]) -> None:
+    """Dismiss a fix, or take that back (pending), as for a chat card: an applied one is
+    undone instead, and a stale one can be restored, not dismissed (VALIDATION_FAILED)."""
+    if posting.applied_on is not None:
+        raise AppError(ErrorCode.VERSION_LOCKED)
+    kept = _kept(posting)
+    fix = _find_fix(kept, fix_id)
+    if fix.proposal.state == "applied" or (fix.proposal.state == "stale"
+                                           and state == "dismissed"):
+        raise AppError(ErrorCode.VALIDATION_FAILED,
+                       f"That change was already {fix.proposal.state}.")
+    fix.proposal.state = state
+    _save(posting, kept)
 
 
 def _document_text(db: Session, name: str, kind: Kind, doc: Any) -> str:

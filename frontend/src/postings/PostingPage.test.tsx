@@ -31,6 +31,7 @@ const POSTING = {
   contacts: null,
   interviews: [],
   same_organization: [],
+  final_review: null,
 }
 // Nothing started for it yet.
 const EMPTY = { ...POSTING, versions: [] }
@@ -97,6 +98,24 @@ function renderPage(state?: unknown) {
 }
 
 describe('PostingPage', () => {
+  it('reviews its resume and cover letter together, saying what it found', async () => {
+    const review = {
+      keywords: [{ term: 'Debate', covered_by: 'resume', where: 'Experience: Coached debate' }],
+      findings: [{ id: 'finding_1', kind: 'repeated', documents: ['cover_letter'], where: 'Intro', why: 'Says it twice.', fixes: [] }],
+      checked: true,
+      reviewed_at: '2026-11-18T12:00:00Z',
+      out_of_date: false,
+    }
+    stub(POSTING, { 'POST /api/job-postings/9/review': [{ status: 200, body: { ...POSTING, final_review: review } }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Review together' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review now' }))
+    await expectNotice('Reviewed the resume and cover letter together. 1 finding below.')
+    expect(screen.getByRole('list', { name: 'Repeated wording' })).toHaveTextContent('Says it twice.')
+    expect(screen.getByRole('button', { name: 'Review again' })).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
   it('starts a new posting by picking its header from the suggestion', async () => {
     const fetchMock = stub(NEW, { 'PUT /api/job-postings/9/header': [{ status: 200, body: EMPTY }] }, [SAM])
     renderPage({ notice: 'Saved the posting. Next, create a header.' })
