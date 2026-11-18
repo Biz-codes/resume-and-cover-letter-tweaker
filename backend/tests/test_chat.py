@@ -15,7 +15,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.chat import PROPOSE_TOOL, Placed, ProposedChange, check_change
+from app.chat import (
+    PROPOSE_TOOL,
+    Placed,
+    ProposedChange,
+    apply_library_changes,
+    check_change,
+    library_changes,
+)
 from app.claude import get_client
 from app.documents import RESUME, load_tree
 from app.main import app
@@ -167,15 +174,21 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
     [request] = claude.calls
     assert (request["model"], request["output_config"], request["tools"]) == (
         "claude-opus-5-5", {"effort": "medium"}, [json.loads(json.dumps(PROPOSE_TOOL))])
-    instructions, library, posting = request["system"]
+    instructions, posting = request["system"]
     assert "propose_change" in instructions["text"] and "Never say a change is made" in \
         instructions["text"]
     assert '("leveraged RxJS"), is technical language' in instructions["text"]
     assert 'never by id ("bullet 79")' in instructions["text"]
-    assert library["cache_control"] == posting["cache_control"] == {"type": "ephemeral"}
+    # The system prompt holds no library (it changes during a conversation), and the prompt and
+    # the conversation are cached for an hour, since messages are often minutes apart.
+    assert "<library>\n" not in "".join(block["text"] for block in request["system"])
+    assert posting["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert "<posting>\nOrganization: Acme" in posting["text"]
     [turn] = request["messages"]
-    document, about, text = turn["content"]
+    library, document, about, text = turn["content"]
+    # The first message brings the whole library.
+    assert library["text"].startswith("<library>\n")
+    assert json.loads(library["text"].split("\n")[1])["roles"][0]["id"] == ids["job"]
     assert document["text"].startswith("<document>")
     assert json.loads(document["text"].split("\n")[1])[0]["entries"][0]["bullets"] == [
         {"id": ids["Shipped it"], "text": "Shipped it"},
@@ -184,7 +197,7 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
                              f'{ids["job"]} in section "Experience" (id 3)</about>')
     # Only the newest block is marked, so the history before it is read from the cache.
     assert text == {"type": "text", "text": "Tighten the first bullet.",
-                    "cache_control": {"type": "ephemeral"}}
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"}}
 
 
 def test_the_next_message_replays_the_history_and_says_what_became_of_each_proposal(
@@ -293,7 +306,7 @@ def test_an_item_dialogs_unsaved_text_goes_with_the_message(client: TestClient, 
     send(client, doc, about={"level": "item", "section_id": EXPERIENCE_SECTION_ID,
                              "kind": "experience", "item_id": ids["job"],
                              "unsaved": {"role_title": "Senior Engineer"}})
-    about = claude.calls[0]["messages"][0]["content"][1]["text"]
+    about = claude.calls[0]["messages"][0]["content"][2]["text"]
     assert about == (f'<about>experience {ids["job"]} in section "Experience" (id 3)</about>\n'
                      '<unsaved>The person is editing it, with these values not saved yet: '
                      '{"role_title": "Senior Engineer"}</unsaved>')
@@ -438,7 +451,7 @@ def test_the_document_comes_with_its_page_estimate(client: TestClient, db: Sessi
     [request] = claude.calls
     instructions = request["system"][0]["text"]
     assert budget_text(RESUME) in instructions and '("lines_outside_sections")' in instructions
-    document = request["messages"][0]["content"][0]["text"]
+    document = request["messages"][0]["content"][1]["text"]
     sections = json.loads(document.split("<document>\n")[1].split("\n</document>")[0])
     # The title, the role's line, and its two bullets.
     assert [section["lines"] for section in sections] == [4]
@@ -583,3 +596,53 @@ def test_no_rules_means_no_check(client: TestClient, db: Session, account_id: in
     # Nothing to find, so Claude is asked only for the reply.
     assert len(claude.calls) == 1
     assert (proposal["checked"], proposal["flags"]) == (True, [])
+
+
+def test_the_library_is_sent_once_then_only_what_changed(client: TestClient, db: Session,
+                                                         account_id: int, claude: FakeChat):
+    """The library is in the messages, not the system prompt, so a change to it is appended to
+    the conversation instead of rewriting the cached prompt before it."""
+    doc, ids = setup_resume(db, account_id)
+    claude.answer("Hi.")
+    send(client, doc)
+    first = claude.calls[0]
+
+    # A bullet reworded in place, one hidden, and a new one.
+    db.get(BulletPoint, ids["Shipped it"]).content = "Shipped it weekly"
+    db.get(BulletPoint, ids["Tested it"]).hidden = True
+    new = add(db, BulletPoint(account_id=account_id, content="Mentored two"))
+    db.flush()
+    claude.answer("Noted.")
+    send(client, doc, "And now?")
+    second = claude.calls[1]
+    # The system prompt and the earlier turn are exactly as they were.
+    assert second["system"] == first["system"]
+    earlier = first["messages"][0]["content"]
+    earlier[-1].pop("cache_control")
+    assert second["messages"][0]["content"] == earlier
+    [changes] = [block["text"] for block in second["messages"][-1]["content"]
+                 if block.get("text", "").startswith("<library_changes>")]
+    sent = json.loads(changes.split("\n")[1])
+    assert {item["id"]: item["text"] for item in sent["bullets"]["changed"]} == {
+        ids["Shipped it"]: "Shipped it weekly", new.bullet_id: "Mentored two"}
+    assert sent["bullets"]["removed"] == [ids["Tested it"]]
+    # The role lists only its visible bullets, so it changed too.
+    assert [role["id"] for role in sent["roles"]["changed"]] == [ids["job"]]
+
+    # Nothing changed since, so nothing is sent about it.
+    claude.answer("Sure.")
+    send(client, doc, "Thanks.")
+    assert not any(block.get("text", "").startswith(("<library>", "<library_changes>"))
+                   for block in claude.calls[2]["messages"][-1]["content"])
+
+
+def test_library_changes_add_up_to_the_library_as_it_is():
+    before = {"bullets": [{"id": 1, "text": "A"}, {"id": 2, "text": "B"}], "skills": []}
+    after = {"bullets": [{"id": 1, "text": "A2"}, {"id": 3, "text": "C"}], "skills": [
+        {"id": 9, "name": "Go"}]}
+    changes = library_changes(before, after)
+    assert changes == {"bullets": {"changed": [{"id": 1, "text": "A2"}, {"id": 3, "text": "C"}],
+                                   "removed": [2]},
+                       "skills": {"changed": [{"id": 9, "name": "Go"}], "removed": []}}
+    assert library_changes(apply_library_changes(before, changes), after) == {}
+    assert library_changes(after, after) == {}
