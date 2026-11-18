@@ -1,7 +1,7 @@
 // The chat with Claude beside a resume or cover letter (docs/APP_FLOW.md, "Working with Claude at
-// every level"), shown in the page's side panel (SidePanel), which holds its heading and Close, and
-// for a posting's document shares it with the posting as tabs. One conversation per document, kept in the database and read again when the page
-// opens. Each message says what it's about (the document, a section, or an item), which the page
+// every level"), shown in the page's side panel (SidePanel), which holds its heading and Collapse,
+// and for a posting's document shares it with the posting as tabs. One conversation per document,
+// kept in the database and read again when the page opens. Each message says what it's about (the document, a section, or an item), which the page
 // sets from the "Ask Claude" button that opened the panel, and which can be widened to the section
 // or the whole document.
 //

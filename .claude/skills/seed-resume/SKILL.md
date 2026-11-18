@@ -87,7 +87,7 @@ Cover letters use the same join tables as resumes, with the `cover_letter_` pref
 - **Experience** → `experience` (`role_title`, `organization`, `location`, `dates` as displayed; any role, paid or volunteer), plus one `bullet_point` per bullet.
 - **Projects** → `project` (`project_title`, `done_for` if the resume names who it was for, `url`, `dates`), plus its skills and bullets. `add_project` takes `done_for` as its last argument.
 - **Education** → `education` (`degree` with field of study, `institution`, `details`, `graduation` with honors).
-- **Resume:** one `resume` row with the `name` and `header_id` (plus `job_posting_id` for a sent resume). Then the join rows (`resume_section`, `resume_experience`, `resume_bullet_point`, etc.) that reproduce the original's sections and order, using `position`. Join rows are always new, even when every item they point to is reused.
+- **Resume:** one `resume` row with the `name` and `header_id` (plus `job_posting_id` for a sent resume, and its `tone_set_id`: ask which tone it was written in, since a sent one always has one; see "Renaming and the tone" in `docs/FRONTEND_CHECKS.md`). Then the join rows (`resume_section`, `resume_experience`, `resume_bullet_point`, etc.) that reproduce the original's sections and order, using `position`. Join rows are always new, even when every item they point to is reused.
 
 ## Rules
 

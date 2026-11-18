@@ -230,7 +230,7 @@ export function textsInUse(sections: DraftSection[]) {
 }
 
 // Whether a resume fits on two pages with no section split across the break, or a cover letter
-// on one (backend/app/page_fit.py), estimated from average formatting.
+// on one (backend/app/page_fit.py), estimated from the user's usual formatting.
 export interface PageFit {
   limit: number
   // About how many pages it takes, to one decimal.

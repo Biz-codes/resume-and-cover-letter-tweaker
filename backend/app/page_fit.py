@@ -1,8 +1,8 @@
 """Whether a resume fits on two pages, and a cover letter on one (docs/APP_FLOW.md, "Fitting on
 the page"; phase 5 step 4 in docs/BUILD_PLAN.md).
 
-An estimate from average formatting, since the app doesn't lay out the printed page: the
-constants below stand for a typical font, size, and margins on a Letter page. Each part of the
+An estimate, since the app doesn't lay out the printed page: the constants below stand for the
+user's formatting (Calibri 11 with 0.5" margins on a Letter page). Each part of the
 plain-text output (app/plain_text.py: the header, then each section, or a letter's greeting,
 paragraphs, and sign-off) takes its lines wrapped at CHARS_PER_LINE, plus a blank line before it.
 Parts are placed in order, and one that doesn't fit in what's left of a page starts the next

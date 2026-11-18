@@ -1,5 +1,5 @@
-"""Claude's suggestion for a new tone, from a job posting (docs/APP_FLOW.md, "Tones";
-docs/FRONTEND_CHECKS.md, "Claude's suggested tone").
+"""Claude's suggestion for a new tone, from a job posting ("Claude's suggested tone" in
+docs/APP_FLOW.md and docs/FRONTEND_CHECKS.md).
 
 Offered beside the Tone picker on a posting's Start form. Claude reads the posting (its word
 choices, the role, and how the organization describes itself) and the person's earlier resumes
