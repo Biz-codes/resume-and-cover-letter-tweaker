@@ -125,6 +125,8 @@ class JobPosting(Base):
     rejected_on: Mapped[date | None] = mapped_column(Date)
     hired_on: Mapped[date | None] = mapped_column(Date)
     contacts: Mapped[str | None] = mapped_column(Text)
+    # The latest review of its resume and cover letter together (app/final_review.py).
+    final_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     hidden: Mapped[bool] = hidden()
     created_at: Mapped[datetime | None] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()

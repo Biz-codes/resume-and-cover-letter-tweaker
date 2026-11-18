@@ -428,7 +428,7 @@ def check_change(change: ProposedChange, library: Library, placed: Placed) -> st
     return None
 
 
-def _before(change: ProposedChange, library: Library, placed: Placed) -> str:
+def before_text(change: ProposedChange, library: Library, placed: Placed) -> str:
     """What the change replaces or moves, as it reads now."""
     if change.target == "section":
         return (placed.sections[change.section_id].title if change.section_id in placed.sections
@@ -462,7 +462,7 @@ def proposals_of(content: list[Any], library: Library,
             left_out[block["id"]] = why
             continue
         change.new_text = change.new_text.strip()
-        shown.append(Proposal(id=block["id"], before=_before(change, library, placed),
+        shown.append(Proposal(id=block["id"], before=before_text(change, library, placed),
                               **change.model_dump()))
     return shown, left_out
 

@@ -21,6 +21,7 @@ from app.claude import Claude
 from app.db import DbSession
 from app.documents import PostingRef, latest_header_id
 from app.errors import AppError, ErrorCode
+from app.final_review import FinalReviewOut, review, review_out
 from app.hiding import HiddenIn, set_hidden
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.posting_reader import PostingDraft, read_posting
@@ -86,6 +87,8 @@ class PostingDetail(PostingOut):
     suggested_header: HeaderIn | None
     # Interviews no other posting is linked to, which deleting the posting deletes too.
     lone_interviews: int
+    # The latest review of its resume and cover letter together (app/final_review.py).
+    final_review: FinalReviewOut | None
 
 
 FIELDS = list(PostingIn.model_fields)
@@ -186,7 +189,8 @@ def detail(db: Session, posting: JobPosting) -> PostingDetail:
         interviews=interviews(db, posting.job_posting_id),
         same_organization=same_organization(db, posting),
         suggested_header=None if posting.header_id else suggested_header(db, posting),
-        lone_interviews=len(lone_interviews(db, posting.job_posting_id)))
+        lone_interviews=len(lone_interviews(db, posting.job_posting_id)),
+        final_review=review_out(db, posting))
 
 
 def refreshed(db: Session, posting: JobPosting) -> PostingDetail:
@@ -259,6 +263,16 @@ def set_tracking(posting_id: int, body: TrackingIn, db: DbSession,
                                "one.", "applied_on")
     for name, value in body.model_dump().items():
         setattr(posting, name, value)
+    return refreshed(db, posting)
+
+
+@router.post("/{posting_id}/review")
+def review_together(posting_id: int, db: DbSession, account_id: AccountId,
+                    client: Claude) -> PostingDetail:
+    """Review the posting's resume and cover letter together, keeping the review with the
+    posting in place of the last one (app/final_review.py). Returns the posting."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    review(db, client, account_id, posting)
     return refreshed(db, posting)
 
 

@@ -84,6 +84,7 @@ Note: headers are library items with versions, like roles, and identical headers
 | rejected_on    | DATE         |                                                           | date the application was turned down            |
 | hired_on       | DATE         |                                                           | date the user was hired                         |
 | contacts       | TEXT         |                                                           | people for this posting and how to reach them   |
+| final_review   | JSONB        |                                                           | latest review of its resume and letter together |
 | hidden         | BOOLEAN      | NOT NULL DEFAULT FALSE                                    | whether the posting is hidden from new choices  |
 | created_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting added to db               |
 | updated_at     | TIMESTAMP    | DEFAULT NOW()                                             | date/time job posting last updated              |
@@ -101,6 +102,8 @@ Note: `contacts` is free-form text for the people connected to the posting, such
 Note: recording `applied_on` locks the posting's resumes and cover letters: they're a record of what was sent. The app refuses changes to them (`VERSION_LOCKED`) except their names and tones, and editing a library item they use saves a new row instead of changing the original. Clearing the date unlocks them. See "Sent versions are locked" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
 Note: `header_id` is the header the user chose for this posting, right after creating it. Every resume and cover letter for the posting uses it: changing it changes theirs, and they can't pick another (`VALIDATION_FAILED`). Once `applied_on` is set it's locked with them (`VERSION_LOCKED`). It uses `ON DELETE SET NULL`, so deleting a header never deletes a posting.
+
+Note: `final_review` is the latest "Review together" of the posting's resume and cover letter (`POST /api/job-postings/{id}/review`, `backend/app/final_review.py`): the posting's keywords with which of the two covers each, the findings (repeated wording, inconsistencies between them, writing rules they break, and keywords they miss), each with its fixes as proposals like the chat's, and a fingerprint of each document's printed text and tone when it ran, so the page can say it's out of date once either changes. Each review replaces the last, and nothing copies it. A review needs at least one of the two with something in it (`VALIDATION_FAILED`), and a posting with `applied_on` set gets no new one (`VERSION_LOCKED`), though its last one is still shown.
 
 Note: a new resume or cover letter for a posting needs the posting to have a header (`VALIDATION_FAILED` otherwise), and a posting with `applied_on` set gets no new ones (`VERSION_LOCKED`). See "Starting a version for a posting" in [FRONTEND_CHECKS.md](FRONTEND_CHECKS.md).
 
