@@ -10,9 +10,12 @@ from app.page_fit import (
     BULLET_INDENT,
     CHARS_PER_LINE,
     LINES_PER_PAGE,
+    PageFit,
+    PageMark,
     budget_text,
     fit,
     lines_used,
+    page_mark,
     part_lines,
 )
 from app.plain_text import Output, OutputPart
@@ -92,3 +95,21 @@ def test_lines_used_counts_every_part_and_the_gaps_between_them():
                                     OutputPart(label="Summary", text="Summary\nI build."),
                                     OutputPart(label="Empty", text="")], text="")) == 6
     assert lines_used(Output(parts=[], text="")) == 0
+
+
+def test_a_change_is_marked_only_when_it_takes_the_document_past_its_pages():
+    def estimate(spare: int, too_long: tuple[str, ...] = ()) -> PageFit:
+        return PageFit(limit=2, pages=2.0, fits=spare >= 0 and not too_long, page_starts=[],
+                       too_long=list(too_long), spare_lines=spare)
+
+    # Over by three lines after it, from within the pages.
+    assert page_mark(estimate(2), estimate(-3)) == PageMark(limit=2, pages=2.0, over_lines=3,
+                                                            too_long=[])
+    # Further over than before.
+    assert page_mark(estimate(-1), estimate(-3)).over_lines == 3
+    # Still within the pages, or less over than before: not marked.
+    assert page_mark(estimate(5), estimate(1)) is None
+    assert page_mark(estimate(-5), estimate(-3)) is None
+    # A section it makes too long for a page, even with lines to spare.
+    assert page_mark(estimate(9), estimate(4, ("Experience",))).too_long == ["Experience"]
+    assert page_mark(estimate(9, ("Experience",)), estimate(9, ("Experience",))) is None

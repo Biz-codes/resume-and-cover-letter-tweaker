@@ -3,10 +3,12 @@ docs/FRONTEND_CHECKS.md, "Chat with Claude")."""
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import page_fit
 from app.chat import Proposal
 from app.models import (
     EXPERIENCE_SECTION_ID,
@@ -299,3 +301,61 @@ def test_any_skill_or_a_new_one_goes_under_a_category_or_project(client: TestCli
     # A skill the library already has, by name, isn't saved again, and a name must fit.
     assert error(apply(client, doc, message, "toolu_4"))[:2] == (422, "VALIDATION_FAILED")
     assert error(apply(client, doc, message, "toolu_5"))[:2] == (422, "VALIDATION_FAILED")
+
+
+def test_waiting_proposals_that_wouldnt_fit_are_marked(client: TestClient, db: Session,
+                                                       account_id: int,
+                                                       monkeypatch: pytest.MonkeyPatch):
+    """Marked against the document as it is each time the chat is read, never stored, and only
+    when the change is what takes it past its pages (app/page_fit.py, page_mark)."""
+    # One page of six lines; the resume's Experience takes four (its title, the role, and two
+    # bullets), and has no header.
+    monkeypatch.setattr(page_fit, "LINES_PER_PAGE", 6)
+    monkeypatch.setattr(page_fit, "RESUME_PAGES", 1)
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    message = proposed(
+        db, account_id, doc,
+        # One more line still fits.
+        change("add", "bullet", EXPERIENCE_SECTION_ID, ids["Led a team"], **job),
+        # Three more lines make Experience too long for a page, and one line over.
+        change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="Mentored. " * 30, **job),
+        change("remove", "bullet", EXPERIENCE_SECTION_ID, ids["Tested it"], **job))
+    marks = {p["id"]: p["page"] for p in client.get(
+        f"/api/resumes/{doc.resume_id}/chat").json()[1]["proposals"]}
+    assert marks == {"toolu_1": None, "toolu_3": None, "toolu_2": {
+        "limit": 1, "pages": 1.2, "over_lines": 1, "too_long": ["Experience"]}}
+    # Estimating changed nothing.
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(BulletPoint)) == 3
+    assert client.get(f"/api/resumes/{doc.resume_id}").json()["fit"]["fits"]
+
+    # Once the resume is already too long, a trim and a rewording of the same length aren't
+    # marked: they don't take it past its pages.
+    monkeypatch.setattr(page_fit, "LINES_PER_PAGE", 3)
+    later = proposed(db, account_id, doc,
+                     change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+                            new_text="Shipped.", **job))
+    chat = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
+    assert chat[1]["proposals"][2]["page"] is None
+    assert chat[3]["proposals"][0]["page"] is None
+
+    # Applied or dismissed ones aren't marked, and each response marks as of then.
+    monkeypatch.setattr(page_fit, "LINES_PER_PAGE", 6)
+    body = apply(client, doc, message, "toolu_1").json()
+    assert [p["page"] for p in body["message"]["proposals"]][:2] == [None, {
+        "limit": 1, "pages": 1.3, "over_lines": 2, "too_long": ["Experience"]}]
+    dismissed = client.put(url(doc, later), json={"state": "dismissed"}).json()
+    assert dismissed["proposals"][0]["page"] is None
+
+
+def test_a_sent_documents_chat_is_never_marked(client: TestClient, db: Session,
+                                               account_id: int,
+                                               monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(page_fit, "LINES_PER_PAGE", 3)
+    doc, ids = setup_resume(db, account_id, sent=True)
+    proposed(db, account_id, doc, change("add", "bullet", EXPERIENCE_SECTION_ID,
+                                         ids["Led a team"], parent_kind="experience",
+                                         parent_id=ids["job"]))
+    [_, message] = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
+    assert message["proposals"][0]["page"] is None

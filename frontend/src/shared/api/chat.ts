@@ -45,6 +45,38 @@ export interface Proposal {
   flags?: WritingFlag[]
   fixed?: boolean
   checked?: boolean
+  // Only while it's waiting: whether it would take the document past its pages, estimated
+  // against the document as it is each time the chat is read (backend/app/proposals.py).
+  page?: PageMark | null
+}
+
+// A change that would take the document past its pages, or make a section too long for one.
+export interface PageMark {
+  limit: number
+  // About how many pages the document would take after it.
+  pages: number
+  // How many lines over its pages it would be (0 when it's only a section too long).
+  over_lines: number
+  // The sections it would make too long for one page.
+  too_long: string[]
+}
+
+// The proposals still waiting that would take the document past its pages.
+export const markedOf = (messages: ChatMessage[]) =>
+  messages.flatMap((message) => message.proposals ?? []).filter((proposal) => proposal.state === 'pending' && proposal.page)
+
+// What a card says about it: "Would take the resume 3 lines over 2 pages." and any section it
+// would make too long.
+export function pageMarkNote(page: PageMark, singular: string) {
+  const sentences: string[] = []
+  if (page.over_lines > 0) {
+    const lines = page.over_lines === 1 ? '1 line' : `${page.over_lines} lines`
+    sentences.push(`Would take the ${singular} ${lines} over ${page.limit === 1 ? '1 page' : `${page.limit} pages`}.`)
+  }
+  if (page.too_long.length > 0) {
+    sentences.push(`Would make ${page.too_long.join(', ')} too long for one page.`)
+  }
+  return sentences.join(' ')
 }
 
 // Whether the proposal puts narrative content or a bullet's text in the document (Claude's

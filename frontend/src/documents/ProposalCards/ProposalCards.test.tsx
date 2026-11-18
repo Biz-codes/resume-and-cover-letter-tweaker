@@ -53,7 +53,7 @@ function renderCards(
   const announce = vi.fn()
   const onReply = vi.fn()
   const view = render(
-    <ProposalCards
+    <ProposalCards singular="resume"
       message={shown}
       sections={SECTIONS}
       readOnly={readOnly}
@@ -105,6 +105,37 @@ group('describe', () => {
 })
 
 group('ProposalCards', () => {
+  it('says when a waiting change would take the document past its pages, and by how much', async () => {
+    const page = { limit: 2, pages: 2.1, over_lines: 3, too_long: ['Experience'] }
+    const { view } = renderCards(message({ ...base, page }, { ...NEW, page: { ...page, over_lines: 1, too_long: [] } }))
+    const [first, second] = within(screen.getByRole('list', { name: 'Proposed changes' })).getAllByRole('listitem')
+    expect(first).toHaveTextContent('Would take the resume 3 lines over 2 pages. Would make Experience too long for one page.')
+    expect(second).toHaveTextContent('Would take the resume 1 line over 2 pages.')
+    // Read with Apply too.
+    expect(within(first).getByRole('button', { name: /^Apply: / })).toHaveAccessibleDescription(
+      'Would take the resume 3 lines over 2 pages. Would make Experience too long for one page.',
+    )
+    expect(within(first).getByRole('button', { name: /^Dismiss: / })).not.toHaveAccessibleDescription()
+    await expectNoA11yViolations()
+    // Only while it's waiting, and a letter's one page.
+    view.rerender(
+      <ProposalCards
+        singular="cover letter"
+        message={message({ ...base, state: 'dismissed', page }, { ...NEW, page: { limit: 1, pages: 1.1, over_lines: 2, too_long: [] } })}
+        sections={SECTIONS}
+        readOnly={false}
+        onApply={vi.fn()}
+        onState={vi.fn()}
+        onCheck={vi.fn()}
+        onUpdate={vi.fn()}
+        announce={vi.fn()}
+        onReply={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText(/Would take the resume/)).not.toBeInTheDocument()
+    expect(screen.getByText('Would take the cover letter 2 lines over 1 page.')).toBeInTheDocument()
+  })
+
   it('shows each change with its before and after and reason, and Apply and Dismiss named for it', async () => {
     renderCards()
     const [reword, added] = within(screen.getByRole('list', { name: 'Proposed changes' })).getAllByRole('listitem')
@@ -140,7 +171,7 @@ group('ProposalCards', () => {
     // Every message it changed is shown with its new state.
     expect(onUpdate.mock.calls.map(([changed]) => changed.message_id)).toEqual([4, 3])
     view.rerender(
-      <ProposalCards
+      <ProposalCards singular="resume"
         message={setAside}
         sections={SECTIONS}
         readOnly={false}
@@ -175,7 +206,7 @@ group('ProposalCards', () => {
     await vi.waitFor(() => expect(announce).toHaveBeenCalledWith('Dismissed: Add new bullet in Experience.'))
     expect(onState).toHaveBeenCalledWith(4, 'toolu_2', 'dismissed')
     view.rerender(
-      <ProposalCards
+      <ProposalCards singular="resume"
         message={message(base, { ...NEW, state: 'dismissed' })}
         sections={SECTIONS}
         readOnly={false}
@@ -235,7 +266,7 @@ group('ProposalCards', () => {
         <p id="chat-message-8" tabIndex={-1}>
           Second reply
         </p>
-        <ProposalCards
+        <ProposalCards singular="resume"
           message={message(base, NEW)}
           sections={SECTIONS}
           readOnly
@@ -385,7 +416,7 @@ group('WaitingForYou', () => {
       <>
         <WaitingForYou messages={messages} sections={SECTIONS} />
         {messages.map((shown) => (
-          <ProposalCards
+          <ProposalCards singular="resume"
             key={shown.message_id}
             message={shown}
             sections={SECTIONS}

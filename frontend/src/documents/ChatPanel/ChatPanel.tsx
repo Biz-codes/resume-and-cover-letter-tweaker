@@ -11,6 +11,11 @@
 // panel's own live region, not every piece. A reply that
 // fails saves nothing, and the message stays in the box, with Retry.
 //
+// Each card still waiting says whether it would take the document past its pages, against the
+// document as it is now, so the conversation is read again whenever the page's `version` changes
+// (the page includes the document's last change in it); when that changes how many cards are
+// marked, it's announced, with what was just said when it comes right after.
+//
 // A sent document's conversation can be read, not added to. Claude's proposals show under its
 // reply through `proposals` (ProposalCards), and the ones still waiting are listed above the
 // message box through `waiting` (WaitingForYou), except in a sent one.
@@ -20,12 +25,12 @@
 // the conversation. Reply on another card replaces it, and a failed send keeps it. The two ends
 // link to each other: the card's title in "Replying to:" moves focus to the card, and the card
 // lists the messages that replied to it (`proposals`' `repliesTo`), each moving focus to one.
-import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import { KINDS, type DocKind } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import { sendOnEnter } from '../../shared/hooks/sendOnEnter'
-import { chatApi, uncheckedOf, type ChatAbout, type ChatMessage, type ReplyTo } from '../../shared/api/chat'
+import { chatApi, markedOf, uncheckedOf, type ChatAbout, type ChatMessage, type ReplyTo } from '../../shared/api/chat'
 import { cardId, messageId } from '../ProposalCards/describe'
 import styles from './ChatPanel.module.css'
 
@@ -63,9 +68,19 @@ function Replying({ replyTo, id, onGoTo }: { replyTo: ReplyTo; id?: string; onGo
 
 const CHECKING = 'Checking the proposed changes against your writing rules…'
 
-// After a reply: how many changes it proposes, how many of them break a writing rule, and whether
-// the check couldn't run.
-function proposalsNote(answer: ChatMessage) {
+// How many cards still waiting would take the document past its pages.
+function markedNote(count: number, singular: string) {
+  if (count === 0) return `No proposed change would take the ${singular} past its pages now.`
+  return `${count === 1 ? '1 proposed change' : `${count} proposed changes`} would take the ${singular} past its pages.`
+}
+
+// A change the chat announces within this long of another is said with it, so neither replaces the
+// other in the live region before it's read.
+const TOGETHER_MS = 3000
+
+// After a reply: how many changes it proposes, how many of them break a writing rule, whether
+// the check couldn't run, and how many would take the document past its pages.
+function proposalsNote(answer: ChatMessage, singular: string) {
   const proposals = answer.proposals ?? []
   if (proposals.length === 0) return ''
   const count = proposals.length === 1 ? '1 proposed change' : `${proposals.length} proposed changes`
@@ -74,6 +89,8 @@ function proposalsNote(answer: ChatMessage) {
   let note = ` ${count} below.`
   if (flagged) note += ` ${flagged === 1 ? '1 breaks' : `${flagged} break`} a writing rule, marked Flagged.`
   if (unchecked) note += ` ${unchecked === 1 ? '1 could' : `${unchecked} could`}n't be checked against your writing rules.`
+  const marked = markedOf([answer]).length
+  if (marked) note += ` ${marked === 1 ? '1 would' : `${marked} would`} take the ${singular} past its pages, as marked.`
   return note
 }
 
@@ -107,8 +124,9 @@ export default function ChatPanel({
   // Changes each time "Chat with Claude" or "Ask Claude" opens it, which moves focus to the message
   // box; 0 when it opened from its tab, which keeps focus.
   focusRequest: number
-  // Changes when a question was asked from an item's dialog, so the conversation is read again.
-  version?: number
+  // Changes when a question was asked from an item's dialog, or the document changed (which changes
+  // whether each card would fit on its pages), so the conversation is read again.
+  version?: number | string
   // Claude's proposals under a reply (ProposalCards), given a way to show the message's new
   // state, to say something in the panel's live region, and to reply to one of them.
   proposals?: (
@@ -137,19 +155,48 @@ export default function ChatPanel({
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null)
   const [ownAnnouncement, setOwnAnnouncement] = useState('')
   // In the side panel, said outside its tabs (so it's heard while the posting's tab shows).
-  const setAnnouncement = onAnnounce ?? setOwnAnnouncement
+  const announceTo = onAnnounce ?? setOwnAnnouncement
+  // What it said last and when, so a change in the page marks right after (an applied card's) is
+  // said with it.
+  const lastSaid = useRef({ text: '', at: 0 })
+  const setAnnouncement = useCallback(
+    (said: string) => {
+      lastSaid.current = { text: said, at: Date.now() }
+      announceTo(said)
+    },
+    [announceTo],
+  )
+  // How many waiting cards were marked when the conversation was last read; null before the first.
+  const marked = useRef<number | null>(null)
   const focusLater = useFocusLater()
   const errorId = useId()
   const replyId = useId()
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<boolean> => {
     try {
-      setMessages(await chatApi(kind).list(docId))
+      const read = await chatApi(kind).list(docId)
+      setMessages(read)
       setLoadError(null)
+      // Read again after a change: say when it changed how many cards wouldn't fit.
+      const count = markedOf(read).length
+      if (marked.current !== null && count !== marked.current) {
+        const note = markedNote(count, singular)
+        const last = lastSaid.current
+        setAnnouncement(last.text && Date.now() - last.at < TOGETHER_MS ? `${last.text} ${note}` : note)
+      }
+      marked.current = count
+      return true
     } catch (error) {
       setLoadError(toApiError(error))
+      return false
     }
-  }, [kind, docId])
+  }, [kind, docId, singular, setAnnouncement])
+
+  // Retry's alert goes once the conversation reads, so focus moves to the message box (a sent
+  // one's heading) instead of staying on the removed button.
+  async function retry() {
+    if (await load()) focusLater(locked ? headingId : CHAT_INPUT_ID)
+  }
 
   useEffect(() => {
     void load()
@@ -178,11 +225,16 @@ export default function ChatPanel({
         },
         replyTo,
       )
-      setMessages((current) => [...(current ?? []), ...saved])
+      // Without any of them already read again (the document changed while Claude replied).
+      setMessages((current) => [
+        ...(current ?? []).filter((message) => !saved.some((one) => one.message_id === message.message_id)),
+        ...saved,
+      ])
+      marked.current = markedOf([...(messages ?? []), ...saved]).length
       setText('')
       setReplyTo(null)
       const answer = saved.at(-1)
-      setAnnouncement(`Claude: ${answer?.text ?? ''}${answer ? proposalsNote(answer) : ''}`)
+      setAnnouncement(`Claude: ${answer?.text ?? ''}${answer ? proposalsNote(answer, singular) : ''}`)
     } catch (error) {
       setSendError(toApiError(error))
       setAnnouncement('')
@@ -216,12 +268,23 @@ export default function ChatPanel({
 
   const describedBy = [replyTo && replyId, sendError && errorId].filter(Boolean).join(' ') || undefined
 
+  // A failed read after the document changed keeps the conversation shown (and focus where it
+  // is), saying above it that its page marks may be out of date.
+  const staleError = loadError && messages && (
+    <div role="alert">
+      <p>{loadError.message} The changes below may not say whether they still fit on the page.</p>
+      <button type="button" onClick={() => void retry()}>
+        Retry
+      </button>
+    </div>
+  )
+
   let conversation: ReactNode
-  if (loadError) {
+  if (loadError && !messages) {
     conversation = (
       <div role="alert">
         <p>{loadError.message}</p>
-        <button type="button" onClick={() => void load()}>
+        <button type="button" onClick={() => void retry()}>
           Retry
         </button>
       </div>
@@ -262,6 +325,7 @@ export default function ChatPanel({
 
   return (
     <>
+      {staleError}
       {conversation}
       {/* Above the message box, where the user is after a reply, since the conversation above
           scrolls out of view as it grows. */}

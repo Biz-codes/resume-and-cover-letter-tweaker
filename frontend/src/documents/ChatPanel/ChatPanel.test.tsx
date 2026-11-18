@@ -115,6 +115,30 @@ describe('ChatPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('No messages yet.')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The button is gone, so focus goes to the message box.
+    await vi.waitFor(() => expect(screen.getByLabelText('Message to Claude')).toHaveFocus())
+  })
+
+  it('keeps the conversation when reading it again fails, offering Retry above it', async () => {
+    const fetchMock = stubApi({
+      'GET /api/resumes/5/chat': [
+        { status: 200, body: [asked(1, 'Add more.'), answered(2, 'Try this.', [PROPOSAL])] },
+        { status: 500, body: errorBody('INTERNAL_ERROR', 'Something went wrong.') },
+        { status: 200, body: [asked(1, 'Add more.'), answered(2, 'Try this.', [PROPOSAL])] },
+      ],
+    })
+    const { view } = renderPanel({ version: '0:a' })
+    await screen.findByText('Try this.')
+    view.rerender(<Framed onAbout={vi.fn()} version="0:b" />)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Something went wrong. The changes below may not say whether they still fit on the page.',
+    )
+    expect(screen.getByText('Try this.')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    await vi.waitFor(() => expect(screen.getByLabelText('Message to Claude')).toHaveFocus())
   })
 
   it('shows the saved conversation, with what each message was about, and moves focus to the box', async () => {
@@ -204,6 +228,66 @@ describe('ChatPanel', () => {
       ),
     )
     expect(within(screen.getByRole('list', { name: 'Conversation' })).queryByText(/^Checking/)).not.toBeInTheDocument()
+  })
+
+  it("says how many of a reply's changes would take it past its pages", async () => {
+    const page = { limit: 2, pages: 2.1, over_lines: 3, too_long: [] }
+    stubChat([], [
+      () => {
+        const reply = streamed()
+        reply.send({ type: 'text', text: 'Two changes.' })
+        reply.send({ type: 'done', messages: [asked(1, 'Add more.'), answered(2, 'Two changes.', [{ ...PROPOSAL, page }, { ...PROPOSAL, id: 'toolu_2' }])] })
+        reply.end()
+        return reply.response
+      },
+    ])
+    renderPanel()
+    await screen.findByText('No messages yet.')
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Add more.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await vi.waitFor(() =>
+      expect(announced()).toBe('Claude: Two changes. 2 proposed changes below. 1 would take the resume past its pages, as marked.'),
+    )
+  })
+
+  it('reads the conversation again when the document changes, saying when that changes what would fit', async () => {
+    const page = { limit: 2, pages: 2.1, over_lines: 3, too_long: [] }
+    const history = (marked: boolean) => [asked(1, 'Add more.'), answered(2, 'Try this.', [{ ...PROPOSAL, ...(marked ? { page } : {}) }])]
+    const fetchMock = stubApi({
+      'GET /api/resumes/5/chat': [
+        { status: 200, body: history(false) },
+        { status: 200, body: history(true) },
+        { status: 200, body: history(true) },
+        { status: 200, body: history(false) },
+      ],
+    })
+    const { view } = renderPanel({ version: '0:a' })
+    await screen.findByText('Try this.')
+    // The first read says nothing.
+    expect(announced()).toBe('')
+
+    view.rerender(<Framed onAbout={vi.fn()} version="0:b" />)
+    await vi.waitFor(() => expect(announced()).toBe('1 proposed change would take the resume past its pages.'))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await expectNoA11yViolations()
+
+    // The same count again says nothing new.
+    view.rerender(<Framed onAbout={vi.fn()} version="0:c" />)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(announced()).toBe('1 proposed change would take the resume past its pages.')
+
+    // Right after something else is said (an applied card's notice), it's said with it.
+    const cards: Parameters<typeof ChatPanel>[0]['proposals'] = (_message, { announce }) => (
+      <button type="button" onClick={() => announce('Applied: the bullet.')}>
+        Apply
+      </button>
+    )
+    view.rerender(<Framed onAbout={vi.fn()} version="0:c" proposals={cards} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply' }))
+    view.rerender(<Framed onAbout={vi.fn()} version="0:d" proposals={cards} />)
+    await vi.waitFor(() =>
+      expect(announced()).toBe('Applied: the bullet. No proposed change would take the resume past its pages now.'),
+    )
   })
 
   it('says when the one flagged change breaks a rule', async () => {

@@ -15,13 +15,16 @@ Applying one also sets aside every earlier proposal still pending for the same c
 one in an earlier reply, or earlier in the same reply, that changes the same section, or the same
 item in the same place. Earlier ones never make a later one stale, and new text (an add with no
 item yet) is never the same content as anything.
+
+Each proposal still waiting is shown with whether it would take the document past its pages
+(PageMarks), estimated against the document as it is each time the chat is read.
 """
 
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.chat import Placed, Proposal, ProposedChange, check_change
+from app.chat import Placed, Proposal, ProposedChange, check_change, check_open
 from app.defaults import default_bullets, default_skills
 from app.documents import Kind, load_tree
 from app.errors import AppError, ErrorCode
@@ -41,6 +44,7 @@ from app.models import (
     SkillCategorySkill,
 )
 from app.own_text import kept_flags
+from app.page_fit import PageMark, document_fit, page_mark
 from app.routers import bullet_points, narrative_content
 from app.routers.bullet_points import BulletIn
 from app.routers.document_tree import (
@@ -270,3 +274,39 @@ def apply(db: Session, kind: Kind, account_id: int, doc: Any, change: ProposedCh
                               default_bullets(db, kind, account_id, doc_id, entry_kind,
                                               item_id, section.row_id), account_id)
     touch(db, kind.doc, {doc_id})
+
+
+class PageMarks:
+    """Marks each proposal still waiting that would take the document past its pages, or make
+    a section too long for one (page_fit.page_mark), against the document as it is now. Each is
+    applied for real inside a savepoint that's then rolled back, so it's estimated exactly as
+    Apply would make it (an added role with its default bullets, say). One that can't be
+    applied now, which Apply would refuse, isn't marked."""
+
+    def __init__(self, db: Session, kind: Kind, account_id: int, doc: Any) -> None:
+        self.db, self.kind, self.account_id, self.doc = db, kind, account_id, doc
+        self.before = document_fit(db, kind, doc)
+
+    def __call__(self, proposal: Proposal) -> PageMark | None:
+        if proposal.state != "pending":
+            return None
+        savepoint = self.db.begin_nested()
+        try:
+            apply(self.db, self.kind, self.account_id, self.doc, proposal)
+            self.db.flush()
+            after = document_fit(self.db, self.kind, self.doc)
+        except AppError:
+            return None
+        finally:
+            savepoint.rollback()
+        return page_mark(self.before, after)
+
+
+def page_marks(db: Session, kind: Kind, account_id: int, doc: Any) -> PageMarks | None:
+    """The marks for a chat that can still apply its proposals: none for a sent document or
+    one still in Claude's draft (chat.check_open)."""
+    try:
+        check_open(db, kind, doc)
+    except AppError:
+        return None
+    return PageMarks(db, kind, account_id, doc)

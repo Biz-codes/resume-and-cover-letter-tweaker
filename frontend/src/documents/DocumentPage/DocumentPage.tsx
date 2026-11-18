@@ -477,11 +477,13 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                   headingId={tabs.length > 1 ? sideTabId('chat') : SIDE_HEADING_ID}
                   onAnnounce={setChatSaid}
                   focusRequest={chat.request}
-                  version={chatVersion}
+                  // Read again whenever the document changes, so each card's page mark is current.
+                  version={`${chatVersion}:${doc.updated_at}`}
                   proposals={(message, { update, announce, reply, repliesTo }) => (
                     <ProposalCards
                       message={message}
                       sections={doc.sections}
+                      singular={singular}
                       readOnly={doc.locked}
                       onApply={applyProposal}
                       onState={proposalState}

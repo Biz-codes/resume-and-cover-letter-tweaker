@@ -29,7 +29,7 @@ cached up to its last message.
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, Literal, NamedTuple
 
 import anthropic
@@ -41,7 +41,15 @@ from app.claude import converse
 from app.documents import EntryKind, Kind, SectionTree, doc_info, load_tree
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole, JobPosting
-from app.page_fit import budget_text, fit, fit_json, limit_of, lines_used, section_lines
+from app.page_fit import (
+    PageMark,
+    budget_text,
+    fit,
+    fit_json,
+    limit_of,
+    lines_used,
+    section_lines,
+)
 from app.plain_text import document_output
 from app.suggestions import (
     Library,
@@ -610,24 +618,38 @@ def _line(kind: str, **data: Any) -> str:
     return json.dumps({"type": kind, **data}, ensure_ascii=False, default=str) + "\n"
 
 
+class ProposalOut(Proposal):
+    """A proposal as the page shows it: one still waiting that would take the document past its
+    pages has `page` (app/proposals.py, PageMarks), estimated as the chat is read, never stored."""
+
+    page: PageMark | None = None
+
+
 class ChatMessageOut(BaseModel):
     message_id: int
     role: ChatRole
     text: str
     about: About | None
-    proposals: list[Proposal] | None
+    proposals: list[ProposalOut] | None
     reply_to: ReplyToOut | None = None
     created_at: Any
 
 
-def message_out(turn: ChatMessage) -> ChatMessageOut:
+def message_out(turn: ChatMessage,
+                mark: Callable[[Proposal], PageMark | None] | None = None) -> ChatMessageOut:
+    """The message as the page shows it, with each proposal's `mark` when it's given."""
     about = turn.about if turn.role == ChatRole.user else None
+
+    def shown(stored: dict[str, Any]) -> ProposalOut:
+        proposal = ProposalOut.model_validate(stored)
+        proposal.page = mark(proposal) if mark else None
+        return proposal
+
     return ChatMessageOut(message_id=turn.message_id, role=turn.role, text=turn.text,
                           about=About.model_validate(about) if about else None,
                           reply_to=ReplyToOut.model_validate(turn.reply_to)
                           if turn.reply_to else None,
-                          proposals=([Proposal.model_validate(proposal)
-                                      for proposal in turn.proposals
+                          proposals=([shown(proposal) for proposal in turn.proposals
                                       if proposal["state"] != "left_out"]
                                      if turn.proposals is not None else None),
                           created_at=turn.created_at)
@@ -691,10 +713,14 @@ def start(db: Session, kind: Kind, account_id: int, doc: Any,
 
 
 def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int, doc: Any,
-          text: str, about: About, replying: Replying | None = None) -> Iterator[str]:
+          text: str, about: About, replying: Replying | None = None,
+          marks: Callable[[], Callable[[Proposal], PageMark | None] | None] | None = None,
+          ) -> Iterator[str]:
     """Claude's reply as JSON lines: its text as it's written ("text"), then the two saved
     turns ("done"), or an error in the API_ERRORS.md shape ("error"), in which case nothing
-    is saved. Both turns are saved in one transaction, committed before "done"."""
+    is saved. Both turns are saved in one transaction, committed before "done". `marks` makes
+    the page marks for the reply's proposals (app/proposals.py, page_marks), which proposals.py
+    gives, since it imports this module."""
     doc_id = getattr(doc, kind.doc_id)
     one, _ = _words(kind)
     try:
@@ -751,8 +777,10 @@ def reply(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: int,
         db.add_all([asked, answered])
         db.flush()
         db.commit()
+        # Estimated after the commit, in savepoints that are rolled back.
+        mark = marks() if marks else None
         yield _line("done", messages=[message_out(asked).model_dump(mode="json"),
-                                      message_out(answered).model_dump(mode="json")])
+                                      message_out(answered, mark).model_dump(mode="json")])
     except AppError as error:
         db.rollback()
         # Logged with its cause, as handle_app_error does for other requests: the stream's

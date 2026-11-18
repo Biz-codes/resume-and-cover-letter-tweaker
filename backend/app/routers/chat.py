@@ -6,7 +6,9 @@ message, or what it's about not in the document) run before the stream starts, s
 back as ordinary error responses. A proposal in Claude's reply is applied (an ordinary change
 to the tree, app/proposals.py), which sets aside earlier ones for the same content (stale), or
 dismissed, and dismissing can be taken back. A reply whose
-writing check failed can be checked again.
+writing check failed can be checked again. Every message returned marks its proposals still
+waiting that would take the document past its pages (app/proposals.py, page_marks), against the
+document as it is then.
 """
 
 from collections.abc import Callable
@@ -33,7 +35,7 @@ from app.db import DbSession, get_db
 from app.documents import Kind
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole
-from app.proposals import apply, find_proposal, mark_stale, set_state
+from app.proposals import apply, find_proposal, mark_stale, page_marks, set_state
 
 # The session stays open until the stream ends ("request" scope), so the reply's two turns
 # are saved in the same transaction as the checks before it.
@@ -62,16 +64,19 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
 
     @router.get("/{doc_id}/chat")
     def read_chat(doc_id: int, db: DbSession, account_id: AccountId) -> list[ChatMessageOut]:
-        get_owned(db, kind.doc, doc_id, account_id)
-        return [message_out(turn) for turn in history(db, kind, doc_id)]
+        doc = get_owned(db, kind.doc, doc_id, account_id)
+        mark = page_marks(db, kind, account_id, doc)
+        return [message_out(turn, mark) for turn in history(db, kind, doc_id)]
 
     @router.post("/{doc_id}/chat")
     def send_message(doc_id: int, body: ChatIn, db: StreamSession, account_id: StreamAccountId,
                      client: Claude) -> Any:
         doc = get_owned(db, kind.doc, doc_id, account_id)
         text, about, replying = start(db, kind, account_id, doc, body)
-        return StreamingResponse(reply(db, client, kind, account_id, doc, text, about, replying),
-                                 media_type="application/x-ndjson")
+        return StreamingResponse(
+            reply(db, client, kind, account_id, doc, text, about, replying,
+                  marks=lambda: page_marks(db, kind, account_id, doc)),
+            media_type="application/x-ndjson")
 
     @router.post("/{doc_id}/chat/{message_id}/proposals/{proposal_id}/apply")
     def apply_proposal(doc_id: int, message_id: int, proposal_id: str, db: DbSession,
@@ -92,8 +97,9 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         updated, stale = mark_stale(history(db, kind, doc_id), message, index)
         db.flush()
         db.refresh(doc)
-        return {"document": detail(db, doc), "message": message_out(message),
-                "updated": [message_out(turn) for turn in updated], "stale": stale}
+        mark = page_marks(db, kind, account_id, doc)
+        return {"document": detail(db, doc), "message": message_out(message, mark),
+                "updated": [message_out(turn, mark) for turn in updated], "stale": stale}
 
     @router.post("/{doc_id}/chat/{message_id}/check")
     def check_message(doc_id: int, message_id: int, db: DbSession, account_id: AccountId,
@@ -107,7 +113,7 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
             raise AppError(ErrorCode.NOT_FOUND)
         recheck(db, client, account_id, doc, message)
         db.flush()
-        return message_out(message)
+        return message_out(message, page_marks(db, kind, account_id, doc))
 
     @router.put("/{doc_id}/chat/{message_id}/proposals/{proposal_id}")
     def set_proposal_state(doc_id: int, message_id: int, proposal_id: str,
@@ -126,4 +132,4 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
                            f"That change was already {proposal.state}.")
         set_state(message, index, body.state)
         db.flush()
-        return message_out(message)
+        return message_out(message, page_marks(db, kind, account_id, doc))

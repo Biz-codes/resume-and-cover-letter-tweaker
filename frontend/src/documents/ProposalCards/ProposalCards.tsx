@@ -7,7 +7,9 @@
 // Claude's new or reworded text becomes a new library row used in this document only. A dismissed
 // card can be restored. Each change is announced in the panel's live region, and focus stays on
 // the card. Once a card is applied or dismissed, its before and after and reason fold away under
-// "Details" (closed), leaving its title, its state, and Restore. Applying one also sets aside the
+// "Details" (closed), leaving its title, its state, and Restore. A card still waiting that would
+// take the document past its pages, or make a section too long for one, says so and by how much
+// under its title (its `page`, estimated by the backend against the document as it is now). Applying one also sets aside the
 // earlier ones still waiting for the same content (the backend's app/proposals.py), which then
 // show "stale", with Restore, and the announcement says how many. Reply, on every card in any
 // state, puts it above the chat panel's message box as what the next message replies to.
@@ -19,7 +21,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import type { TreeSection } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { staleNote, uncheckedOf, type Applied, type ChatMessage, type Proposal, type ReplyTo } from '../../shared/api/chat'
+import { pageMarkNote, staleNote, uncheckedOf, type Applied, type ChatMessage, type Proposal, type ReplyTo } from '../../shared/api/chat'
 import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
 import { cardId as idOf, describe, messageId } from './describe'
 import Collapsible from '../../library/Collapsible/Collapsible'
@@ -29,6 +31,7 @@ import styles from './ProposalCards.module.css'
 function Card({
   proposal,
   title,
+  singular,
   readOnly,
   onApply,
   onState,
@@ -37,6 +40,8 @@ function Card({
 }: {
   proposal: Proposal
   title: string
+  // "resume" or "cover letter", for what its page mark says.
+  singular: string
   readOnly: boolean
   onApply: () => Promise<void>
   onState: (state: 'pending' | 'dismissed') => Promise<void>
@@ -47,6 +52,8 @@ function Card({
   const focusLater = useFocusLater()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
+  const markId = useId()
+  const marked = proposal.state === 'pending' && proposal.page
 
   async function run(action: () => Promise<void>) {
     if (busy) return
@@ -97,6 +104,12 @@ function Card({
         )}
         {proposal.state !== 'pending' && <span className="tag">{proposal.state}</span>}
       </p>
+      {/* Only while it's waiting; read before Apply, and with it. */}
+      {marked && (
+        <p id={markId} className="note">
+          {pageMarkNote(marked, singular)}
+        </p>
+      )}
       {details && (proposal.state === 'pending' ? details : (
           <Collapsible
             title={
@@ -114,7 +127,13 @@ function Card({
           {/* aria-disabled, not disabled, so a focused button keeps focus while it saves. */}
           {proposal.state === 'pending' && (
             <>
-              <button type="button" aria-label={`Apply: ${title}`} aria-disabled={busy} onClick={() => void run(onApply)}>
+              <button
+                type="button"
+                aria-label={`Apply: ${title}`}
+                aria-describedby={marked ? markId : undefined}
+                aria-disabled={busy}
+                onClick={() => void run(onApply)}
+              >
                 Apply
               </button>
               <button type="button" aria-label={`Dismiss: ${title}`} aria-disabled={busy} onClick={() => void run(() => onState('dismissed'))}>
@@ -211,6 +230,7 @@ function checkedNotice(message: ChatMessage, ids: string[]) {
 export default function ProposalCards({
   message,
   sections,
+  singular,
   readOnly,
   onApply,
   onState,
@@ -223,6 +243,8 @@ export default function ProposalCards({
   message: ChatMessage
   // The document's sections, which name where each change is.
   sections: TreeSection[]
+  // "resume" or "cover letter", for what a card's page mark says.
+  singular: string
   // A sent document: the cards are only shown.
   readOnly: boolean
   // Makes the change and returns the message with its new state, and the others it changed.
@@ -255,6 +277,7 @@ export default function ProposalCards({
             <Card
               proposal={proposal}
               title={title}
+              singular={singular}
               readOnly={readOnly}
               onApply={async () => {
                 const applied = await onApply(message.message_id, proposal.id)

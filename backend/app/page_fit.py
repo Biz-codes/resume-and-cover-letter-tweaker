@@ -12,7 +12,8 @@ page, so the page count shows how far over it is).
 
 Tailoring (app/suggestions.py) and the chat (app/chat.py) are told the page budget (budget_text)
 and how many lines each section takes now (section_lines), and the page estimates Claude's draft
-as the user has it (app/drafts.py, draft_fit).
+as the user has it (app/drafts.py, draft_fit). A chat proposal still waiting that would take
+the document past its pages is marked (page_mark, through app/proposals.py's PageMarks).
 
 Settings per document type, font, and template are question 27 in docs/OPEN_QUESTIONS.md.
 """
@@ -21,9 +22,10 @@ import math
 from typing import Any
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from app.documents import Kind, SectionTree
-from app.plain_text import Output, section_text
+from app.documents import Kind, SectionTree, load_tree
+from app.plain_text import Output, document_output, section_text
 
 # The user's formatting: a Letter page with 0.5" margins (a 7.5" by 10" text area) in Calibri 11,
 # single spaced: about 110 characters per line (Calibri is narrow) and 53 lines per page.
@@ -54,6 +56,30 @@ class PageFit(BaseModel):
     spare_lines: int
 
 
+class PageMark(BaseModel):
+    """A change that would take the document past its pages, or make a section too long for
+    one (docs/APP_FLOW.md, "Fitting on the page"): what the document would take after it."""
+
+    limit: int
+    pages: float
+    # How many lines over its pages it would be (0 when it's only a section too long).
+    over_lines: int
+    # The sections it would make too long for one page.
+    too_long: list[str]
+
+
+def page_mark(before: PageFit, after: PageFit) -> PageMark | None:
+    """The mark for a change, from the estimates before and after it: only when it leaves the
+    document not fitting and it's the cause, by adding lines past the limit or by making a
+    section too long for a page. A change that trims a document already over isn't marked."""
+    new_long = [label for label in after.too_long if label not in before.too_long]
+    over = after.spare_lines < 0 and after.spare_lines < before.spare_lines
+    if not (new_long or over):
+        return None
+    return PageMark(limit=after.limit, pages=after.pages,
+                    over_lines=-after.spare_lines if over else 0, too_long=new_long)
+
+
 def wrapped(text: str, width: int = CHARS_PER_LINE) -> int:
     """How many lines a line of text takes, wrapped at `width` (an empty one takes one)."""
     return max(1, math.ceil(len(text) / width))
@@ -74,6 +100,12 @@ def part_lines(text: str, *, header: bool = False) -> int:
 
 def limit_of(kind: Kind) -> int:
     return RESUME_PAGES if kind.prefix == "resume" else LETTER_PAGES
+
+
+def document_fit(db: Session, kind: Kind, doc: Any) -> PageFit:
+    """Whether the document as it's saved now fits on its pages."""
+    sections = load_tree(db, kind, getattr(doc, kind.doc_id))
+    return fit(document_output(db, kind, doc, sections), limit_of(kind))
 
 
 def section_lines(kind: Kind, section: SectionTree) -> int:
