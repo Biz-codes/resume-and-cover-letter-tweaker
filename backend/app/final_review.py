@@ -14,7 +14,8 @@ The review is kept with the posting (`final_review`), replacing the last, with a
 each document's printed text and tone, so the page can say it's out of date once either changes.
 Each fix can be applied to its document as a chat card is (app/proposals.py), undone while the
 document is still as the fix left it, dismissed, or restored; the review's own fixes keep it
-current.
+current. A posting applied to can still be reviewed, but its fixes are only shown, since its
+versions can't change (VERSION_LOCKED).
 
 Prompt caching: the instructions and writing rules, then the library, come first and are cached;
 the posting and the two documents come last.
@@ -415,11 +416,10 @@ def _checked_fixes(reply: Review, library: Any, placed: dict[str, Placed],
 def review(db: Session, client: anthropic.Anthropic, account_id: int,
            posting: JobPosting) -> FinalReview:
     """Review the posting's documents together and keep the review with the posting (see the
-    module docstring). VERSION_LOCKED once the posting is applied to; VALIDATION_FAILED when
-    neither document has anything in it, or one is still in Claude's first draft. Claude
-    failing is AI_UNAVAILABLE, and the last review stays."""
-    if posting.applied_on is not None:
-        raise AppError(ErrorCode.VERSION_LOCKED)
+    module docstring). A posting applied to can be reviewed too, to see what to do better next
+    time, but its fixes can't be applied. VALIDATION_FAILED when neither document has anything
+    in it, or one is still in Claude's first draft. Claude failing is AI_UNAVAILABLE, and the
+    last review stays."""
     docs = posting_documents(db, posting)
     for name, doc in docs.items():
         if doc.draft is not None:

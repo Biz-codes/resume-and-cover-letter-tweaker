@@ -3,7 +3,8 @@
 // and the latest review is kept with the posting. It shows the posting's keywords with which
 // document covers each, then the findings grouped by kind, each naming its document with a link
 // to it. Once either document changes, it says the review is out of date, with "Review again".
-// A posting applied to keeps showing its last review, with no way to run a new one.
+// A posting applied to can be reviewed too, to see what to do better next time, but its fixes are
+// only shown, since its resume and cover letter can't change.
 //
 // The button stays while Claude reviews (its text changes, so it keeps focus), and the panel's
 // own live region says it's reviewing; the page's notice says what it found.
@@ -135,14 +136,12 @@ export default function FinalReview({
         <p className="muted">Not reviewed yet.</p>
       )}
       {review?.out_of_date && <p className="note">The resume or cover letter changed since this review.</p>}
-      {!posting.locked && (
-        <div className="actions">
-          {/* aria-disabled, not disabled, so the button keeps focus while Claude reviews. */}
-          <button type="button" aria-disabled={busy} aria-describedby={error ? errorId : undefined} onClick={() => void run()}>
-            {busy ? 'Reviewing…' : review ? 'Review again' : 'Review now'}
-          </button>
-        </div>
-      )}
+      <div className="actions">
+        {/* aria-disabled, not disabled, so the button keeps focus while Claude reviews. */}
+        <button type="button" aria-disabled={busy} aria-describedby={error ? errorId : undefined} onClick={() => void run()}>
+          {busy ? 'Reviewing…' : review ? 'Review again' : 'Review now'}
+        </button>
+      </div>
       {error && (
         <p role="alert" id={errorId}>
           {error.message}
@@ -173,6 +172,7 @@ export default function FinalReview({
             <p className="note">Claude couldn't check these fixes against your writing rules, so nothing in them is flagged.</p>
           )}
           {review.findings.length === 0 && <p className="muted">Nothing to fix.</p>}
+          {posting.locked && hasFixes && <p className="note">You applied to this posting, so its fixes can't be applied.</p>}
           {GROUPS.map(({ kind, title }) => {
             const found = review.findings.filter((finding) => finding.kind === kind)
             if (found.length === 0) return null

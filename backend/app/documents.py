@@ -400,7 +400,7 @@ def posting_for_version(db: Session, account_id: int, job_posting_id: int,
         raise AppError(ErrorCode.NOT_FOUND, field="job_posting_id")
     if posting.applied_on is not None:
         raise AppError(ErrorCode.VERSION_LOCKED,
-                       "You applied to this posting, so its resumes and cover letters are a "
+                       "You applied to this posting, so its resume and cover letter are a "
                        "record of what you sent. Start a base version instead.",
                        field="job_posting_id")
     existing = db.scalar(select(kind.doc.name).where(kind.doc.job_posting_id == job_posting_id))

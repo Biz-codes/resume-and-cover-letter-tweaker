@@ -477,7 +477,7 @@ describe('PostingPage', () => {
     fireEvent.change(screen.getByLabelText('Applied on'), { target: { value: '2026-10-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await expectNotice('Saved the tracking details.')
-    expect(await screen.findByText('You applied to this posting, so its resumes and cover letters are a record of what you sent.')).toBeInTheDocument()
+    expect(await screen.findByText('You applied to this posting, so its resume and cover letter are a record of what you sent.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add interview' }))
     fireEvent.change(screen.getByLabelText('Date (required)'), { target: { value: '2026-10-05' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))

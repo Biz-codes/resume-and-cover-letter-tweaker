@@ -152,11 +152,18 @@ def test_refuses_what_it_cant_review(client: TestClient, db: Session, account_id
     doc.draft = {"starting_document": None, "starting_reason": "", "texts": [], "sections": []}
     db.flush()
     assert error(client.post(review_url(doc)))[:2] == (422, "VALIDATION_FAILED")
-
-    # Applied to.
-    sent, _ = setup_resume(db, account_id, sent=True)
-    assert error(client.post(review_url(sent)))[:2] == (409, "VERSION_LOCKED")
     assert claude.calls == []
+
+
+def test_a_posting_applied_to_can_be_reviewed(client: TestClient, db: Session, account_id: int,
+                                              claude: FakeMessages):
+    # To see what to do better next time; its fixes stay read-only (the tests below).
+    sent, _ = setup_resume(db, account_id, sent=True)
+    claude.reply = Review(keywords=[Coverage(term="React", covered_by="resume", where="Here")],
+                          findings=[])
+    response = client.post(review_url(sent))
+    assert response.status_code == 200
+    assert response.json()["final_review"]["keywords"][0]["term"] == "React"
 
 
 def test_claude_failing_keeps_the_last_review(client: TestClient, db: Session,

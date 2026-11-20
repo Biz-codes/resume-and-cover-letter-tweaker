@@ -275,7 +275,7 @@ export function PostingPage({ id }: { id: number }) {
           </Disclosure>
           {posting.locked && (
             <p className="note">
-              You applied to this posting, so its resumes and cover letters are a record of what you sent.
+              You applied to this posting, so its resume and cover letter are a record of what you sent.
             </p>
           )}
 

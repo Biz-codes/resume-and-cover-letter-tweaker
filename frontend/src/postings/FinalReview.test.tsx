@@ -78,6 +78,18 @@ describe('FinalReview', () => {
     await expectNoA11yViolations()
   })
 
+  it('offers a review for a posting applied to that was never reviewed, keeping focus while it waits', async () => {
+    stubPendingApi()
+    renderReview({ ...POSTING, locked: true })
+    const button = screen.getByRole('button', { name: 'Review now' })
+    button.focus()
+    fireEvent.click(button)
+    const reviewing = await screen.findByRole('button', { name: 'Reviewing…' })
+    expect(reviewing).toHaveFocus()
+    expect(screen.getByText('Claude is reviewing them together…')).toBeInTheDocument()
+    await expectNoA11yViolations()
+  })
+
   it('gives the page the posting with its review once it is done', async () => {
     const reviewed = { ...POSTING, final_review: REVIEW }
     stubApi({ 'POST /api/job-postings/9/review': [{ status: 200, body: reviewed }] })
@@ -125,9 +137,9 @@ describe('FinalReview', () => {
     await expectNoA11yViolations()
   })
 
-  it("shows a posting applied to its last review, with no new one, and a document it no longer has by name", async () => {
+  it("reviews a posting applied to as well, and names a document it no longer has", async () => {
     renderReview({ ...POSTING, locked: true, versions: [POSTING.versions[0]], final_review: REVIEW })
-    expect(screen.queryByRole('button', { name: 'Review again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review again' })).toBeInTheDocument()
     expect(screen.getByText('Reviewed on November 18, 2026.')).toBeInTheDocument()
     const repeated = screen.getByRole('list', { name: 'Repeated wording' })
     expect(within(repeated).queryByRole('link', { name: /^Cover letter/ })).not.toBeInTheDocument()
@@ -261,6 +273,7 @@ describe('FinalReview', () => {
       const fixes = await screen.findByRole('list', { name: 'Fixes for Experience: Shipped it' })
       await vi.waitFor(() => expect(fixes).toHaveTextContent(TITLE))
       expect(within(fixes).queryByRole('button')).not.toBeInTheDocument()
+      expect(screen.getByText("You applied to this posting, so its fixes can't be applied.")).toBeInTheDocument()
     })
   })
 
