@@ -305,6 +305,17 @@ def test_prompt_has_the_writing_rules_and_tone(client: TestClient, db: Session, 
         "Tone for this document:\n- Name the tools.")
 
 
+def test_claude_is_told_to_skip_overlapping_items(client: TestClient, db: Session,
+                                                 account_id: int, claude: FakeMessages):
+    # The library keeps every version of a bullet, so Claude is told to use one of each.
+    assert tailor(client, db, account_id).status_code == 201
+    [request] = claude.calls
+    instructions = request["system"][0]["text"]
+    assert "Treat overlapping items as alternatives and use at most one of them in the resume" \
+        in instructions
+    assert "{doc}" not in instructions
+
+
 def test_claude_is_told_the_page_budget(client: TestClient, db: Session, account_id: int,
                                         claude: FakeMessages):
     job = role(db, account_id, ["Shipped it", "Tested it"], section_id=EXPERIENCE_SECTION_ID)

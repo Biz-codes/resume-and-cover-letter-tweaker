@@ -28,6 +28,7 @@ from app.documents import RESUME, load_tree
 from app.main import app
 from app.models import (
     EXPERIENCE_SECTION_ID,
+    PROFESSIONAL_TONE_ID,
     SKILLS_SECTION_ID,
     SUMMARY_SECTION_ID,
     BulletPoint,
@@ -41,6 +42,7 @@ from app.models import (
 )
 from app.page_fit import budget_text, part_lines
 from app.plain_text import header_text
+from app.rule_proposals import RULE_TOOL
 from app.suggestions import load_library
 from app.writing_check import Issue, Review, Reviewed
 from tests.test_documents import header
@@ -59,9 +61,11 @@ class FakeChat:
         self.calls: list[dict[str, Any]] = []
 
     def answer(self, *texts: str, tools: list[dict[str, Any]] = (),
-               stop_reason: str | None = None) -> None:
+               stop_reason: str | None = None, update: str = "") -> None:
+        """`update` is a progress update: what Claude writes to the person right before its
+        tool calls, which the API returns as a thinking block with text."""
         self.replies.append((texts, list(tools), stop_reason or (
-            "tool_use" if tools else "end_turn")))
+            "tool_use" if tools else "end_turn"), update))
 
     @contextmanager
     def stream(self, **request: Any) -> Iterator[SimpleNamespace]:
@@ -78,15 +82,35 @@ class FakeChat:
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
-        texts, tools, stop_reason = reply
+        texts, tools, stop_reason, update = reply
+        # The reasoning comes back empty, and a progress update with its text. `texts` are the
+        # pieces one text block streams in.
         content = [BetaThinkingBlock(type="thinking", thinking="", signature="sig"),
-                   *(BetaTextBlock(type="text", text=text) for text in texts),
-                   *(BetaToolUseBlock(type="tool_use", id=f"toolu_{n}", name="propose_change",
-                                      input=tool) for n, tool in enumerate(tools, start=1))]
+                   *([BetaTextBlock(type="text", text="".join(texts))] if texts else []),
+                   *([BetaThinkingBlock(type="thinking", thinking=update, signature="sig2")]
+                     if update else []),
+                   # A tool input with "_tool" calls that tool instead (propose_rule).
+                   *(BetaToolUseBlock(type="tool_use", id=f"toolu_{n}",
+                                      name=tool.get("_tool", "propose_change"),
+                                      input={key: value for key, value in tool.items()
+                                             if key != "_tool"})
+                     for n, tool in enumerate(tools, start=1))]
         message = SimpleNamespace(content=content, stop_reason=stop_reason,
                                   usage={"input_tokens": 1, "output_tokens": 1})
-        events = [SimpleNamespace(type="thinking"),
-                  *(SimpleNamespace(type="text", text=text) for text in texts)]
+        # Each block's raw delta, as the API streams it, with the SDK's own "text" event after
+        # a text block's, as the real stream gives both.
+        events = []
+        for index, block in enumerate(content):
+            if block.type == "text":
+                for text in texts:
+                    events += [SimpleNamespace(type="content_block_delta", index=index,
+                                               delta=SimpleNamespace(type="text_delta",
+                                                                     text=text)),
+                               SimpleNamespace(type="text", text=text)]
+            elif block.type == "thinking":
+                events.append(SimpleNamespace(
+                    type="content_block_delta", index=index,
+                    delta=SimpleNamespace(type="thinking_delta", thinking=block.thinking)))
         yield SimpleNamespace(__iter__=None, get_final_message=lambda: message,
                               events=events)
 
@@ -173,7 +197,8 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
 
     [request] = claude.calls
     assert (request["model"], request["output_config"], request["tools"]) == (
-        "claude-opus-5-5", {"effort": "medium"}, [json.loads(json.dumps(PROPOSE_TOOL))])
+        "claude-opus-5-5", {"effort": "medium"},
+        [json.loads(json.dumps(PROPOSE_TOOL)), json.loads(json.dumps(RULE_TOOL))])
     instructions, posting = request["system"]
     assert "propose_change" in instructions["text"] and "Never say a change is made" in \
         instructions["text"]
@@ -185,8 +210,10 @@ def test_streams_the_reply_and_saves_both_turns(client: TestClient, db: Session,
     assert posting["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert "<posting>\nOrganization: Acme" in posting["text"]
     [turn] = request["messages"]
-    library, document, about, text = turn["content"]
-    # The first message brings the whole library.
+    library, rules, document, about, text = turn["content"]
+    # The first message brings the whole library, then the rules Claude writes by, with ids.
+    assert rules["text"].startswith("<rules>\n")
+    assert json.loads(rules["text"].split("\n")[1]) == {"banned": [], "patterns": [], "tone": None}
     assert library["text"].startswith("<library>\n")
     assert json.loads(library["text"].split("\n")[1])["roles"][0]["id"] == ids["job"]
     assert document["text"].startswith("<document>")
@@ -245,11 +272,13 @@ def test_the_next_message_replays_the_history_and_says_what_became_of_each_propo
     send(client, doc, "And now?")
     assert claude.calls[3]["messages"][-1]["content"][0]["text"] == (
         "<about>the whole resume</about>")
-    # The library in the system prompt changes during a conversation, so saved thinking
-    # blocks that no longer match are dropped rather than refusing the message.
+    # Saved thinking blocks that no longer match are dropped rather than refusing the message,
+    # and what Claude writes before its tool calls comes back as progress updates with text.
     assert claude.calls[3]["thinking"] == {
-        "type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
-    assert "thinking-binding-controls-2026-08-01" in claude.calls[3]["betas"]
+        "type": "adaptive", "display": "updates",
+        "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
+    assert {"thinking-binding-controls-2026-08-01",
+            "thinking-display-updates-2026-08-18"} <= set(claude.calls[3]["betas"])
 
 
 def test_refuses_a_message_it_cant_send(client: TestClient, db: Session, account_id: int,
@@ -306,7 +335,7 @@ def test_an_item_dialogs_unsaved_text_goes_with_the_message(client: TestClient, 
     send(client, doc, about={"level": "item", "section_id": EXPERIENCE_SECTION_ID,
                              "kind": "experience", "item_id": ids["job"],
                              "unsaved": {"role_title": "Senior Engineer"}})
-    about = claude.calls[0]["messages"][0]["content"][2]["text"]
+    about = claude.calls[0]["messages"][0]["content"][3]["text"]
     assert about == (f'<about>experience {ids["job"]} in section "Experience" (id 3)</about>\n'
                      '<unsaved>The person is editing it, with these values not saved yet: '
                      '{"role_title": "Senior Engineer"}</unsaved>')
@@ -340,7 +369,11 @@ def test_a_message_can_reply_to_a_proposal(client: TestClient, db: Session, acco
         "item_id": ids["Shipped it"], "parent_kind": "experience", "parent_id": ids["job"],
         "new_text": "Shipped it weekly.", "position": 0, "reason": "Fits.", "state": "pending"}
     assert text["text"] == "Why weekly?"
-    assert "<replying_to> tags" in claude.calls[1]["system"][0]["text"]
+    instructions = claude.calls[1]["system"][0]["text"]
+    assert "<replying_to> tags" in instructions
+    # A reply is built on, and sentences split apart stay on one card while they're worked on.
+    assert "when they reply to one, change it the way they say" in instructions
+    assert "keep them in the one narrative content item" in instructions
     # A message with no reply has none.
     assert first["reply_to"] is None
 
@@ -451,7 +484,7 @@ def test_the_document_comes_with_its_page_estimate(client: TestClient, db: Sessi
     [request] = claude.calls
     instructions = request["system"][0]["text"]
     assert budget_text(RESUME) in instructions and '("lines_outside_sections")' in instructions
-    document = request["messages"][0]["content"][1]["text"]
+    document = request["messages"][0]["content"][2]["text"]
     sections = json.loads(document.split("<document>\n")[1].split("\n</document>")[0])
     # The title, the role's line, and its two bullets.
     assert [section["lines"] for section in sections] == [4]
@@ -510,6 +543,9 @@ def test_proposals_are_checked_against_the_writing_rules(client: TestClient, db:
     assert checked_texts(check_request) == [
         (1, "Shipped it — weekly.", "assistant"), (2, "Mentored two — fast.", "assistant"),
         (3, "Led a team — of five", "the person")]
+    # With what the person asked for, so a fix never takes it out.
+    assert check_request["messages"][0]["content"].endswith(
+        "<asked>\nTighten the first bullet.\n</asked>")
     reworded, new, saved, removed = streamed[-1]["messages"][1]["proposals"]
     assert (reworded["new_text"], reworded["fixed"], reworded["flags"], reworded["checked"]) == (
         "Shipped it weekly.", True, [], True)
@@ -573,6 +609,9 @@ def test_a_failed_check_keeps_the_reply_unchecked_until_checked_again(
     assert response.status_code == 200
     # Only the writing check ran, on the rewording alone.
     assert checked_texts(claude.calls[-1]) == [(1, "Shipped it — weekly.", "assistant")]
+    # With the message the reply answers.
+    assert claude.calls[-1]["messages"][0]["content"].endswith(
+        "<asked>\nTighten the first bullet.\n</asked>")
     reworded, moved = response.json()["proposals"]
     assert (reworded["checked"], reworded["fixed"], reworded["new_text"]) == (
         True, True, "Shipped it weekly.")
@@ -646,3 +685,65 @@ def test_library_changes_add_up_to_the_library_as_it_is():
                        "skills": {"changed": [{"id": 9, "name": "Go"}], "removed": []}}
     assert library_changes(apply_library_changes(before, changes), after) == {}
     assert library_changes(after, after) == {}
+
+
+def test_an_answer_before_tool_calls_is_the_reply(client: TestClient, db: Session,
+                                                   account_id: int, claude: FakeChat):
+    # What Claude writes before its tool calls comes back as a progress-update thinking block.
+    doc, ids = setup_resume(db, account_id)
+    claude.answer(update="The posting doesn't mention QA.  ", tools=[
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+               parent_kind="experience", parent_id=ids["job"], new_text="Shipped it weekly.")])
+    streamed = lines(send(client, doc, "Does the posting mention QA?"))
+    assert [line["text"] for line in streamed if line["type"] == "text"] == [
+        "The posting doesn't mention QA.  "]
+    answered = streamed[-1]["messages"][1]
+    assert answered["text"] == "The posting doesn't mention QA."
+    assert len(answered["proposals"]) == 1
+    # Passed back unchanged, with the empty reasoning block before it.
+    claude.answer("Glad to help.")
+    send(client, doc, "Thanks.")
+    replayed = claude.calls[-1]["messages"][1]["content"]
+    assert [(block["type"], block.get("thinking")) for block in replayed[:2]] == [
+        ("thinking", ""), ("thinking", "The posting doesn't mention QA.  ")]
+
+
+def test_the_rules_come_in_the_messages_when_they_change(client: TestClient, db: Session,
+                                                          account_id: int, claude: FakeChat):
+    # Not in the system prompt, so changing a rule keeps the cached conversation and Claude's
+    # earlier reasoning; each with its id, so Claude can propose changing it.
+    doc, _ = setup_resume(db, account_id)
+    banned = add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.term,
+                                 rule_text="spearhead"))
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.term, rule_text="synergy",
+                        active=False))
+    doc.tone_set_id = PROFESSIONAL_TONE_ID
+    db.flush()
+    claude.answer("Fine.")
+    send(client, doc)
+    sent = rules_sent(claude.calls[0])
+    assert sent["banned"] == [{"id": banned.writing_rule_id, "text": "spearhead"}]
+    assert (sent["tone"]["id"], sent["tone"]["built_in"]) == (PROFESSIONAL_TONE_ID, True)
+    assert sent["tone"]["rules"] and all(rule["id"] for rule in sent["tone"]["rules"])
+    system = claude.calls[0]["system"]
+    assert "spearhead" not in json.dumps(system)
+    assert "Tone for this document" not in json.dumps(system)
+
+    # Unchanged, it isn't sent again; changed, it is, and the system prompt stays the same.
+    claude.answer("Fine.")
+    send(client, doc, "And now?")
+    assert rules_sent(claude.calls[1], last=True) is None
+    banned.rule_text = "spearheaded"
+    db.flush()
+    claude.answer("Fine.")
+    send(client, doc, "Again?")
+    assert rules_sent(claude.calls[2], last=True)["banned"][0]["text"] == "spearheaded"
+    assert claude.calls[2]["system"] == system
+
+
+def rules_sent(call: dict[str, Any], last: bool = False) -> dict[str, Any] | None:
+    """The <rules> block in the request's first message, or with `last`, its newest one."""
+    turn = call["messages"][-1 if last else 0]["content"]
+    found = [block["text"] for block in turn
+             if block.get("type") == "text" and block["text"].startswith("<rules>\n")]
+    return json.loads(found[0].split("\n")[1]) if found else None

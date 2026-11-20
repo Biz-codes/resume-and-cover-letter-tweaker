@@ -2,9 +2,13 @@
 the break, and a cover letter on one. What tailoring, the chat, and the draft do with it is
 tested with them (tests/test_suggestions.py, test_chat.py, and test_drafts.py)."""
 
+import re
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app import page_fit
 from app.documents import COVER_LETTER, RESUME
 from app.page_fit import (
     BULLET_INDENT,
@@ -113,3 +117,12 @@ def test_a_change_is_marked_only_when_it_takes_the_document_past_its_pages():
     # A section it makes too long for a page, even with lines to spare.
     assert page_mark(estimate(9), estimate(4, ("Experience",))).too_long == ["Experience"]
     assert page_mark(estimate(9, ("Experience",)), estimate(9, ("Experience",))) is None
+
+
+def test_the_front_ends_line_estimate_uses_the_same_numbers():
+    # Rows that wrap say so as they're worked on (frontend/src/shared/lineFit.ts).
+    source = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "shared"
+              / "lineFit.ts").read_text()
+    found = dict(re.findall(r"export const (CHARS_PER_LINE|BULLET_INDENT) = (\d+)", source))
+    assert found == {"CHARS_PER_LINE": str(page_fit.CHARS_PER_LINE),
+                     "BULLET_INDENT": str(page_fit.BULLET_INDENT)}

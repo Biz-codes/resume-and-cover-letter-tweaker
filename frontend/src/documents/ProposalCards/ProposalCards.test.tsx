@@ -3,7 +3,7 @@ import { describe as group, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/client'
 import type { TreeSection } from '../../shared/api/documents'
 import { expectNoA11yViolations } from '../../test/axe'
-import type { ChatMessage, Proposal } from '../../shared/api/chat'
+import type { AnyProposal, ChatMessage, Proposal } from '../../shared/api/chat'
 import { describe } from './describe'
 import ProposalCards, { WaitingForYou } from './ProposalCards'
 
@@ -25,7 +25,7 @@ const base: Proposal = {
 }
 const NEW: Proposal = { ...base, id: 'toolu_2', action: 'add', item_id: 0, new_text: 'Mentored two.', before: '', reason: '' }
 
-const message = (...proposals: Proposal[]): ChatMessage => ({
+const message = (...proposals: AnyProposal[]): ChatMessage => ({
   message_id: 4,
   role: 'assistant',
   text: 'Try these.',
@@ -492,5 +492,79 @@ group('WaitingForYou', () => {
   it('shows nothing when nothing is waiting', () => {
     const { container } = render(<WaitingForYou messages={[message({ ...base, state: 'applied' })]} sections={SECTIONS} />)
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+group('ProposalCards with a rule', () => {
+  const BAN: AnyProposal = {
+    kind: 'rule',
+    id: 'toolu_3',
+    action: 'add',
+    target: 'banned',
+    rule_id: 0,
+    new_text: 'streamlined',
+    reason: 'You called it nonsense.',
+    before: '',
+    tone_set_id: 0,
+    tone_name: '',
+    built_in: false,
+    state: 'pending',
+  }
+
+  it("shows a rule's card among the others, and says what applying it did", async () => {
+    const shown = message(base, BAN)
+    const onApplyRule = vi.fn(() =>
+      Promise.resolve({
+        message: message(base, { ...BAN, state: 'applied' as const }),
+        updated: [] as ChatMessage[],
+        stale: 0,
+        notice: 'Banned "streamlined".',
+      }),
+    )
+    const announce = vi.fn()
+    const onUpdate = vi.fn()
+    render(
+      <ProposalCards
+        singular="resume"
+        message={shown}
+        sections={SECTIONS}
+        readOnly={false}
+        onApply={vi.fn()}
+        onState={vi.fn()}
+        onCheck={vi.fn()}
+        onUpdate={onUpdate}
+        announce={announce}
+        onReply={vi.fn()}
+        onApplyRule={onApplyRule}
+      />,
+    )
+    const cards = screen.getByRole('list', { name: 'Proposed changes' })
+    expect(within(cards).getAllByRole('listitem')).toHaveLength(2)
+    await expectNoA11yViolations()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply: Ban "streamlined"' }))
+    await vi.waitFor(() =>
+      expect(onApplyRule).toHaveBeenCalledWith(4, 'toolu_3', { apply_to: [], earlier_name: null, copy_name: null }),
+    )
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledWith('Applied: Ban "streamlined". Banned "streamlined".'))
+    expect(onUpdate).toHaveBeenCalled()
+    await vi.waitFor(() => expect(document.getElementById('proposal-4-toolu_3')).toHaveFocus())
+  })
+
+  it("only shows a rule's card where rules can't be applied (the review's fixes)", () => {
+    render(
+      <ProposalCards
+        singular="resume"
+        message={message(BAN)}
+        sections={SECTIONS}
+        readOnly={false}
+        onApply={vi.fn()}
+        onState={vi.fn()}
+        onCheck={vi.fn()}
+        onUpdate={vi.fn()}
+        announce={vi.fn()}
+        onReply={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Apply: Ban "streamlined"' })).not.toBeInTheDocument()
   })
 })

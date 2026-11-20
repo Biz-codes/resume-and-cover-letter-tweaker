@@ -5,6 +5,16 @@ import { expectNoA11yViolations } from '../../../test/axe'
 import NameForm from './NameForm'
 
 describe('NameForm', () => {
+  it("says how many printed lines a bullet's text takes as it's typed, read with the field", async () => {
+    render(<NameForm label="Bullet text" field="content" multiline lines={{ bullet: true, what: 'The bullet' }} onSave={vi.fn()} />)
+    const field = screen.getByLabelText('Bullet text')
+    expect(field).not.toHaveAccessibleDescription()
+    fireEvent.change(field, { target: { value: 'x'.repeat(115) } })
+    expect(field).toHaveAccessibleDescription('2 lines, 9 characters on the second')
+    expect(screen.getByText('The bullet now takes 2 lines.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+  })
+
   it("doesn't take focus when it's always on the page", async () => {
     render(<NameForm label="New section title" field="title" submitLabel="Add section" onSave={vi.fn()} />)
     const input = screen.getByLabelText('New section title')

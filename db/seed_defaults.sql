@@ -42,13 +42,8 @@ CROSS JOIN (VALUES
     ('term', 'hit the ground running'),
     ('term', 'wear many hats'),
     ('term', 'I am writing to express my interest'),
-    ('term', 'I am excited to apply'),
-    -- Patterns
-    ('pattern', 'intensifiers like very, really, highly, extremely'),
-    ('pattern', '"responsible for" and "helped with" instead of an action verb'),
-    ('pattern', '"not only X but also Y"'),
-    ('pattern', 'lists of three used for rhythm rather than content'),
-    ('pattern', 'em dashes used for drama')
+    ('term', 'I am excited to apply')
+    -- No patterns to start: the user adds their own (docs/WRITING_RULES.md).
 ) AS r(kind, rule_text)
 WHERE NOT EXISTS (SELECT 1 FROM writing_rule w WHERE w.account_id = a.account_id);
 

@@ -9,15 +9,16 @@
 // its tone (tones aren't printed).
 // A posting's version Claude started shows Claude's draft (DraftTree) in place of its tree until its
 // first review is finished; each change saves the draft, and Undo and Redo cover those too. Once
-// it's approved, "Claude's first draft" (FirstDraft) opens it read-only, as it was approved.
+// it's approved, the side panel's "Claude's first draft" tab (FirstDraft) shows it read-only, as approved.
 // Under its title, whether it fits on its pages (PageFitNote), or during Claude's draft, whether
 // the draft as the user has it does.
-// The side panel (SidePanel) holds the chat, and for a posting's document the job posting too
-// (PostingDetails). It's always on the page, collapsed to a button for each until one is pressed
+// The side panel (SidePanel) holds the chat, for a posting's document the job posting too
+// (PostingDetails), and Claude's first draft once it's approved. It's always on the page, collapsed to a button for each until one is pressed
 // (or a row's "Ask Claude"), then expanded with them as tabs. The posting is offered during
 // Claude's draft and on sent ones too.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { useSentNotice } from '../../shared/hooks/useSentNotice'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import {
   capitalize,
@@ -46,7 +47,7 @@ import ChatPanel from '../ChatPanel/ChatPanel'
 import SidePanel, { SIDE_HEADING_ID, openButtonId, sideTabId, type PanelTab, type SideTab } from '../SidePanel/SidePanel'
 import PostingDetails from '../SidePanel/PostingDetails'
 import ProposalCards, { WaitingForYou } from '../ProposalCards/ProposalCards'
-import { chatApi, type Applied, type ChatAbout } from '../../shared/api/chat'
+import { chatApi, type Applied, type ChatAbout, type RuleChoice } from '../../shared/api/chat'
 import HeaderFields from '../../shared/components/HeaderFields'
 import { Greeting, SignOffPart } from '../LetterParts'
 import NameForm from '../../shared/components/NameForm/NameForm'
@@ -160,13 +161,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     void load()
   }, [load])
 
-  // A notice sent with the move here (a new or copied version) opens once the page has rendered and
-  // App has moved focus to its heading, so OK returns focus there.
-  const sentNotice = (location.state as ListState | null)?.notice ?? null
-  useEffect(() => {
-    const timer = setTimeout(() => setNotice(sentNotice))
-    return () => clearTimeout(timer)
-  }, [sentNotice])
+  // A notice sent with the move here, shown once (shared/hooks/useSentNotice.ts).
+  useSentNotice(setNotice)
 
   // The copy form starts with a name no other one has, so it reads the names first, and opens
   // once it has one, so focus goes from Make a copy straight to the name. If reading them fails,
@@ -410,10 +406,11 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     setChat((current) => ({ about, request: (current?.request ?? 0) + 1 }))
     setSide({ tab: 'chat', returnTo })
   }
-  // Focus goes to its tab, or with no tabs (Claude's draft, when there's no chat), the heading.
-  function openPosting() {
-    setSide({ tab: 'posting', returnTo: openButtonId('posting') })
-    focusLater(doc?.draft ? SIDE_HEADING_ID : sideTabId('posting'))
+  // The job posting or Claude's first draft. Focus goes to its tab, or with no tabs (the posting
+  // while Claude's draft is reviewed, when there's no chat), the heading.
+  function openTab(tab: SideTab, single: boolean) {
+    setSide({ tab, returnTo: openButtonId(tab) })
+    focusLater(single ? SIDE_HEADING_ID : sideTabId(tab))
   }
   // A tab keeps focus, so the chat shown from its tab doesn't take it.
   function selectTab(tab: SideTab) {
@@ -438,6 +435,19 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
     if (!result) throw new Error('The change was not applied.')
     return result
   }
+  // Applying a rule Claude proposed changes the library (a banned word, or a tone, maybe a new
+  // one this document switches to), not the document's tree, so it isn't kept for Undo; the tones
+  // are read again, for the Tone picker.
+  async function applyRule(messageId: number, proposalId: string, choice: RuleChoice) {
+    const applied = await chatApi(kind).applyRule(id, messageId, proposalId, choice)
+    latest.current = applied.document
+    setDoc(applied.document)
+    setToneSets(await toneSetsApi.list())
+    return applied
+  }
+  // The other resumes and cover letters using a tone, which a tone rule's Apply asks about.
+  const toneUses = (toneSetId: number) =>
+    (toneSets.find((item) => item.tone_set_id === toneSetId)?.used_by ?? []).filter((use) => !(use.kind === kind && use.id === id))
   const proposalState = (messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
     chatApi(kind).setState(id, messageId, proposalId, state)
 
@@ -459,8 +469,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   // A sent one always has a tone; one sent before that rule may have none yet.
   const needsTone = Boolean(doc?.locked && doc.tone_set_id === null)
 
-  // The side panel's tabs: the chat, which comes after Claude's first draft is approved, and the
-  // posting, for a posting's document.
+  // The side panel's tabs: the chat, which comes after Claude's first draft is approved, the
+  // posting, for a posting's document, and Claude's first draft, once it's approved.
   const tabs: PanelTab[] = []
   if (doc && !doc.draft) {
     tabs.push({
@@ -492,6 +502,8 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                       announce={announce}
                       onReply={reply}
                       repliesTo={repliesTo}
+                      onApplyRule={applyRule}
+                      toneUses={toneUses}
                     />
                   )}
                   waiting={(messages) => <WaitingForYou messages={messages} sections={doc.sections} />}
@@ -501,6 +513,10 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
   }
   if (doc?.job_posting) {
     tabs.push({ key: 'posting', label: 'Job posting', content: <PostingDetails postingId={doc.job_posting.job_posting_id} /> })
+  }
+  // Claude's draft as it was approved, kept to look back on.
+  if (doc?.first_draft) {
+    tabs.push({ key: 'first_draft', label: "Claude's first draft", content: <FirstDraft kind={kind} firstDraft={doc.first_draft} /> })
   }
 
   return (
@@ -534,7 +550,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
             tabs={tabs}
             open={Boolean(side)}
             selected={side?.tab ?? tabs[0].key}
-            onOpen={(tab) => (tab === 'chat' ? openChat(wholeDocument, openButtonId('chat')) : openPosting())}
+            onOpen={(tab) => (tab === 'chat' ? openChat(wholeDocument, openButtonId('chat')) : openTab(tab, tabs.length === 1))}
             onSelect={selectTab}
             onClose={closePanel}
             announcement={chatSaid}
@@ -589,8 +605,6 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
           )}
           {mode === null && (
             <div className="actions">
-              {/* Claude's draft as it was approved, kept to look back on. */}
-              {doc.first_draft && <FirstDraft kind={kind} firstDraft={doc.first_draft} />}
               {/* Named for what it makes, since the page's other Copy buttons copy text. Claude's
                   draft isn't a version yet, so there's nothing to copy. */}
               {!doc.draft && (

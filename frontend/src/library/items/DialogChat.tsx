@@ -13,7 +13,7 @@
 // breaks is badged "Flagged" with each rule, and if the check failed, "Check writing rules again".
 import { useId, useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
-import { chatApi, staleNote, type ChatAbout, type ChatMessage, type Proposal } from '../../shared/api/chat'
+import { changesOf, chatApi, staleNote, type ChatAbout, type ChatMessage, type Proposal } from '../../shared/api/chat'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
 import { flagCount } from '../../shared/components/WritingFlags/flagCount'
@@ -151,7 +151,7 @@ export default function DialogChat({
 
   // Claude's rewordings of this item, the ones "Use this" can apply.
   function ownWordings(message: ChatMessage) {
-    return (message.proposals ?? []).filter(
+    return changesOf(message).filter(
       (proposal) =>
         proposal.action === 'reword' &&
         proposal.target === about.kind &&

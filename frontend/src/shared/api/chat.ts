@@ -23,8 +23,10 @@ export interface ChatAbout {
 // "stale": applying a later proposal for the same content set it aside.
 export type ProposalState = 'pending' | 'applied' | 'dismissed' | 'stale'
 
-// One change Claude proposed, shown as a card the user applies or dismisses.
+// One change Claude proposed to the document, shown as a card the user applies or dismisses.
 export interface Proposal {
+  // A rule's is a RuleProposal ("rule"); a proposal saved before rules came has none.
+  kind?: 'change'
   id: string
   action: 'reword' | 'add' | 'remove' | 'move'
   target: 'section' | 'narrative' | 'bullet' | 'experience' | 'project' | 'category' | 'education' | 'skill'
@@ -50,6 +52,44 @@ export interface Proposal {
   page?: PageMark | null
 }
 
+// A change Claude proposed to the user's rules (backend/app/rule_proposals.py): a rule in the
+// document's tone, or a banned word or phrase.
+export interface RuleProposal {
+  kind: 'rule'
+  id: string
+  action: 'add' | 'reword' | 'remove'
+  target: 'tone' | 'banned'
+  // The rule's id, for a rewording or removal; 0 to add one.
+  rule_id: number
+  new_text: string
+  reason: string
+  // The rule's text as it read when Claude proposed it (reword, remove).
+  before: string
+  // For a tone rule: the tone it changes, and whether it's built in (applying saves a copy).
+  tone_set_id: number
+  tone_name: string
+  built_in: boolean
+  state: ProposalState
+}
+
+export type AnyProposal = Proposal | RuleProposal
+
+export const isRule = (proposal: AnyProposal): proposal is RuleProposal => proposal.kind === 'rule'
+
+// The changes to the document among a message's proposals, which the page and the writing check
+// are about.
+export const changesOf = (message: ChatMessage): Proposal[] =>
+  (message.proposals ?? []).filter((proposal): proposal is Proposal => !isRule(proposal))
+
+// The user's choices when applying a tone rule, as the tone's dialog asks them: the other
+// resumes and cover letters using the tone that get it too, the original's new name when it's
+// saved as a new tone, or a built-in tone's copy's name.
+export interface RuleChoice {
+  apply_to: { kind: 'resume' | 'cover_letter'; id: number }[]
+  earlier_name: string | null
+  copy_name: string | null
+}
+
 // A change that would take the document past its pages, or make a section too long for one.
 export interface PageMark {
   limit: number
@@ -63,7 +103,7 @@ export interface PageMark {
 
 // The proposals still waiting that would take the document past its pages.
 export const markedOf = (messages: ChatMessage[]) =>
-  messages.flatMap((message) => message.proposals ?? []).filter((proposal) => proposal.state === 'pending' && proposal.page)
+  messages.flatMap(changesOf).filter((proposal) => proposal.state === 'pending' && proposal.page)
 
 // What a card says about it: "Would take the resume 3 lines over 2 pages." and any section it
 // would make too long.
@@ -87,7 +127,7 @@ export const checksText = (proposal: Proposal) =>
 // The reply's proposals the writing check couldn't read and that aren't applied (or stale), which
 // "Check writing rules again" checks.
 export const uncheckedOf = (message: ChatMessage) =>
-  (message.proposals ?? []).filter(
+  changesOf(message).filter(
     (proposal) => checksText(proposal) && !proposal.checked && (proposal.state === 'pending' || proposal.state === 'dismissed'),
   )
 
@@ -117,7 +157,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   about: ChatAbout | null
-  proposals: Proposal[] | null
+  proposals: AnyProposal[] | null
   reply_to?: ReplyTo | null
   created_at: string | null
 }
@@ -140,6 +180,12 @@ export function chatApi(kind: DocKind) {
     apply: (id: number, messageId: number, proposalId: string) =>
       api
         .post<Applied & { document: Raw }>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}/apply`)
+        .then(({ document, ...applied }) => ({ ...applied, document: withId<DocDetail>(kind, document) })),
+    // Makes the proposed change to a rule, with the user's choices, and returns the document (its
+    // tone may change) with what changed in the chat and what applying did (`notice`).
+    applyRule: (id: number, messageId: number, proposalId: string, choice: RuleChoice) =>
+      api
+        .post<Applied & { document: Raw; notice: string }>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}/apply`, choice)
         .then(({ document, ...applied }) => ({ ...applied, document: withId<DocDetail>(kind, document) })),
     // Dismisses a proposal, or takes that back.
     setState: (id: number, messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>

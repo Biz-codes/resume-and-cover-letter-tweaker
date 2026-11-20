@@ -1001,9 +1001,15 @@ describe('DocumentPage', () => {
     expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('heading', { level: 2, name: 'Engineer at Acme Resume' })).toHaveFocus()
     await expectNoA11yViolations()
-    fireEvent.click(screen.getByRole('button', { name: "Claude's first draft" }))
-    const kept = await screen.findByRole('dialog', { name: "Claude's first draft" })
+    // In the side panel, as a tab after the chat and the posting; focus goes to its tab.
+    const open = screen.getByRole('button', { name: "Claude's first draft" })
+    expect(open).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(open)
+    await vi.waitFor(() => expect(screen.getByRole('tab', { name: "Claude's first draft" })).toHaveFocus())
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Chat with Claude', 'Job posting', "Claude's first draft"])
+    const kept = screen.getByRole('tabpanel', { name: "Claude's first draft" })
     expect(within(kept).getByRole('list', { name: 'Items in Summary' })).toHaveTextContent('Builds accessible apps.Source: Original')
+    expect(screen.getByRole('complementary', { name: "Chat with Claude, Job posting, and Claude's first draft" })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 

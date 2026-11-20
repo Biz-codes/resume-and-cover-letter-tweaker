@@ -1,7 +1,8 @@
-// The panel beside a resume or cover letter (docs/APP_FLOW.md): the chat with Claude, and for a
-// posting's document, the job posting too. It's always on the page: collapsed, it shows a button
-// for each (named for what it opens, with aria-expanded), and expanded, it shows them as two tabs, so switching keeps the chat's place (each
-// tab's content stays in the page while the other shows). With one tab (a base document, or the
+// The panel beside a resume or cover letter (docs/APP_FLOW.md): the chat with Claude, for a
+// posting's document the job posting too, and once Claude's draft is approved, Claude's first draft
+// as it was approved. It's always on the page: collapsed, it shows a button for each (named for
+// what it opens, with aria-expanded), and expanded, it shows them as tabs, so switching keeps the
+// chat's place (each tab's content stays in the page while another shows). With one tab (a base document, or the
 // posting while Claude's draft is reviewed), it's headed by that tab's name, with no tabs. On large
 // screens it's a column beside the document that stays in view while the page scrolls; below them
 // it covers the page (DocumentPage hides the document while it's expanded), and Collapse goes back.
@@ -12,7 +13,7 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 import styles from './SidePanel.module.css'
 
-export type SideTab = 'chat' | 'posting'
+export type SideTab = 'chat' | 'posting' | 'first_draft'
 
 export interface PanelTab {
   key: SideTab
@@ -28,7 +29,15 @@ export const openButtonId = (key: SideTab) => `side-open-${key}`
 const panelId = (key: SideTab) => `side-tabpanel-${key}`
 
 // The Collapse button's text when the panel shows only that tab.
-const COLLAPSE_ONE: Record<SideTab, string> = { chat: 'Collapse chat', posting: 'Collapse job posting' }
+const COLLAPSE_ONE: Record<SideTab, string> = {
+  chat: 'Collapse chat',
+  posting: 'Collapse job posting',
+  first_draft: "Collapse Claude's first draft",
+}
+
+// "Chat with Claude and Job posting", or with more, "Chat with Claude, Job posting, and …".
+const listed = (labels: string[]) =>
+  labels.length <= 2 ? labels.join(' and ') : `${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`
 
 export default function SidePanel({
   tabs,
@@ -53,7 +62,7 @@ export default function SidePanel({
 }) {
   const tabRefs = useRef(new Map<SideTab, HTMLButtonElement>())
   const single = tabs.length === 1
-  const name = tabs.map((tab) => tab.label).join(' and ')
+  const name = listed(tabs.map((tab) => tab.label))
 
   function onKeyDown(event: KeyboardEvent) {
     const index = tabs.findIndex((tab) => tab.key === selected)

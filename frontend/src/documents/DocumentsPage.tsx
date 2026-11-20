@@ -6,7 +6,8 @@
 // Claude reads for the user to check first (ImportReview). It opens on its own page. Hidden ones are listed last,
 // under "Hidden (n)", with Unhide (docs/FRONTEND_CHECKS.md, "Hiding").
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import { useSentNotice } from '../shared/hooks/useSentNotice'
 import { ApiError, toApiError } from '../shared/api/client'
 import { docsApi, KINDS, shownName, type Doc, type DocKind } from '../shared/api/documents'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
@@ -271,7 +272,6 @@ function DocLink({ kind, doc, onUnhide }: { kind: DocKind; doc: Doc; onUnhide?: 
 export default function DocumentsPage({ kind }: { kind: DocKind }) {
   const { singular, plural } = KINDS[kind]
   const api = docsApi(kind)
-  const location = useLocation()
   const navigate = useNavigate()
   const [docs, setDocs] = useState<Doc[] | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
@@ -296,13 +296,8 @@ export default function DocumentsPage({ kind }: { kind: DocKind }) {
     void load()
   }, [load])
 
-  // A notice sent from another page opens once the page has rendered and App has moved focus to its
-  // heading, so OK returns focus there.
-  const sentNotice = (location.state as ListState | null)?.notice ?? null
-  useEffect(() => {
-    const timer = setTimeout(() => setNotice(sentNotice))
-    return () => clearTimeout(timer)
-  }, [sentNotice])
+  // A notice sent with the move here, shown once (shared/hooks/useSentNotice.ts).
+  useSentNotice(setNotice)
 
   async function create(name: string, start: BaseStart) {
     const doc =

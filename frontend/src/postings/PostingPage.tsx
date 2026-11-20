@@ -9,7 +9,8 @@
 // See docs/APP_FLOW.md ("User flow") and "Headers" and "Starting a version for a posting" in
 // docs/FRONTEND_CHECKS.md.
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
+import { useSentNotice } from '../shared/hooks/useSentNotice'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { capitalize, docsApi, KINDS, type Doc, type DocKind } from '../shared/api/documents'
 import { toneSetsApi, type ToneSet } from '../shared/api/toneSets'
@@ -51,7 +52,6 @@ const fieldsOf = ({ url, organization, role_title, description }: PostingDetail)
 })
 
 export function PostingPage({ id }: { id: number }) {
-  const location = useLocation()
   const navigate = useNavigate()
   const [posting, setPosting] = useState<PostingDetail | null>(null)
   const [headers, setHeaders] = useState<Header[]>([])
@@ -94,13 +94,8 @@ export function PostingPage({ id }: { id: number }) {
     void load()
   }, [load])
 
-  // A notice sent with the move here (a new posting) opens once the page has rendered and App has
-  // moved focus to its heading, so OK returns focus there.
-  const sentNotice = (location.state as ListState | null)?.notice ?? null
-  useEffect(() => {
-    const timer = setTimeout(() => setNotice(sentNotice))
-    return () => clearTimeout(timer)
-  }, [sentNotice])
+  // A notice sent with the move here, shown once (shared/hooks/useSentNotice.ts).
+  useSentNotice(setNotice)
 
   function open(next: Mode) {
     setMode(next)

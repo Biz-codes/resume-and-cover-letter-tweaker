@@ -3,6 +3,8 @@
 // item's title, so focus moves into it.
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
+import { lineNote } from '../../lineFit'
+import LineNote from '../LineNote/LineNote'
 import styles from './NameForm.module.css'
 
 // A name field's suffix, read with the field as its description, since the suffix shown beside it
@@ -30,6 +32,7 @@ export default function NameForm({
   onCancel,
   value,
   onValueChange,
+  lines,
 }: {
   label: string
   // The request field, so a VALIDATION_FAILED or DUPLICATE on it highlights the input.
@@ -54,6 +57,9 @@ export default function NameForm({
   // put in the field and the unsaved text goes with a question to Claude).
   value?: string
   onValueChange?: (value: string) => void
+  // Says how many printed lines the text takes as it's typed, when it wraps (a bullet's text),
+  // read with the field; `what` names it when the count changes ("The bullet").
+  lines?: { bullet: boolean; what: string }
 }) {
   const [own, setOwn] = useState(initial)
   const name = value ?? own
@@ -66,6 +72,7 @@ export default function NameForm({
   const errorId = useId()
   const noteId = useId()
   const suffixId = useId()
+  const linesId = useId()
   const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   const opensInPlace = Boolean(onCancel) && focusOnOpen
 
@@ -88,7 +95,9 @@ export default function NameForm({
     }
   }
 
-  const describedBy = [lockedNote && noteId, suffix && suffixId, error && errorId].filter(Boolean).join(' ') || undefined
+  const wraps = lines && lineNote(name, lines.bullet)
+  const describedBy =
+    [lockedNote && noteId, suffix && suffixId, wraps && linesId, error && errorId].filter(Boolean).join(' ') || undefined
 
   return (
     <form className={styles.form} onSubmit={submit}>
@@ -124,6 +133,7 @@ export default function NameForm({
         )}
       </label>
       {suffix && <SuffixNote id={suffixId} suffix={suffix} />}
+      {lines && <LineNote text={name} bullet={lines.bullet} id={linesId} what={lines.what} />}
       {children}
       {error && (
         <p role="alert" id={errorId}>

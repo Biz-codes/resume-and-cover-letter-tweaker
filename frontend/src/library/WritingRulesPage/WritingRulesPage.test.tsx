@@ -92,6 +92,8 @@ describe('WritingRulesPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete "leverage"' }))
     const confirm = screen.getByRole('group', { name: 'Delete "leverage"?' })
     expect(within(confirm).getByText('Cancel')).toHaveFocus()
+    // What else the delete changes.
+    expect(confirm).toHaveTextContent("Bullets and narrative content it flags won't be flagged for it anymore.")
     await expectNoA11yViolations()
     fireEvent.click(within(confirm).getByText('Delete'))
     await expectNotice('Deleted "leverage".')

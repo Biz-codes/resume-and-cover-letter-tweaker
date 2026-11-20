@@ -22,7 +22,7 @@ const GROUPS: { kind: RuleKind; heading: string; note: string; newLabel: string;
   {
     kind: 'pattern',
     heading: 'Patterns',
-    note: 'Described in words, so the AI can spot them (e.g. "lists of three used for rhythm").',
+    note: 'Described in words, so the AI can spot them.',
     newLabel: 'New pattern',
     submitLabel: 'Add pattern',
   },
@@ -170,7 +170,9 @@ export default function WritingRulesPage() {
               setDeleting(null)
               focusLater(buttonId(id, 'delete'))
             }}
-          />
+          >
+            <p>Bullets and narrative content it flags won&apos;t be flagged for it anymore.</p>
+          </ConfirmDelete>
         )}
       </li>
     )

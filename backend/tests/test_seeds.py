@@ -291,12 +291,9 @@ def test_demo_text_follows_the_writing_rules(demo: Connection):
     # The file's own text (the comments too), without the files it includes.
     demo_text = (DB_DIR / DEMO).read_text().lower()
     terms = demo.execute(select(WritingRule.rule_text).where(WritingRule.kind == "term"))
-    # From the patterns: intensifiers, "responsible for" and "helped with", and em dashes.
-    banned = [*terms.scalars(), "very", "really", "highly", "extremely", "responsible for",
-              "helped with"]
+    banned = list(terms.scalars())
     found = [t for t in banned if re.search(rf"\b{re.escape(t.lower())}\b", demo_text)]
     assert found == []
-    assert "\u2014" not in demo_text
 
 
 def test_demo_loads_only_into_a_database_with_no_account(connection: Connection, account: int):

@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { DocKind, FirstDraft as Kept, FirstDraftRow } from '../../shared/api/documents'
 import { expectNoA11yViolations } from '../../test/axe'
 import FirstDraft from './FirstDraft'
@@ -64,21 +64,20 @@ const KEPT: Kept = {
   ],
 }
 
+// Under a heading, as in the side panel's tab, which names it.
 function renderKept(kept: Kept = KEPT, kind: DocKind = 'resume') {
   render(
     <MemoryRouter>
-      <FirstDraft kind={kind} firstDraft={kept} />
+      <section aria-labelledby="first-draft-heading">
+        <h3 id="first-draft-heading">Claude&apos;s first draft</h3>
+        <FirstDraft kind={kind} firstDraft={kept} />
+      </section>
     </MemoryRouter>,
   )
 }
 
 async function openIt() {
-  const button = screen.getByRole('button', { name: "Claude's first draft" })
-  button.focus()
-  fireEvent.click(button)
-  const dialog = await screen.findByRole('dialog', { name: "Claude's first draft" })
-  await vi.waitFor(() => expect(within(dialog).getByRole('heading', { name: "Claude's first draft" })).toHaveFocus())
-  return dialog
+  return screen.findByRole('region', { name: "Claude's first draft" })
 }
 
 function openRationale(name: string) {
@@ -86,10 +85,10 @@ function openRationale(name: string) {
 }
 
 describe('FirstDraft', () => {
-  it('opens the approved draft read-only, and closes back to its button', async () => {
+  it('shows the approved draft read-only, its parts headed under the panel', async () => {
     renderKept()
-    await expectNoA11yViolations()
     const dialog = await openIt()
+    expect(within(dialog).getByRole('heading', { level: 4, name: 'Sections' })).toBeInTheDocument()
     expect(within(dialog).getByRole('link', { name: 'Tech Base Resume' })).toHaveAttribute('href', '/resumes/3')
     expect(dialog).toHaveTextContent('Closest to the posting.')
     expect(dialog).not.toHaveTextContent(/couldn.t check/)
@@ -108,10 +107,6 @@ describe('FirstDraft', () => {
     expect(within(dialog).getByRole('list', { name: 'Items in Skills' })).toBeInTheDocument()
     expect(dialog).toHaveTextContent('Nothing here.')
     await expectNoA11yViolations()
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: "Claude's first draft" })).toHaveFocus()
   })
 
   it("shows Claude's reason and the other wording, without switching", async () => {
@@ -158,13 +153,12 @@ describe('FirstDraft', () => {
     openRationale('greeting')
     expect(dialog).toHaveTextContent('The posting names them.')
     expect(dialog).toHaveTextContent('Usual greetingDear Acme Hiring Team,')
+    expect(within(dialog).getByRole('heading', { level: 4, name: 'Greeting' })).toBeInTheDocument()
     await expectNoA11yViolations()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
 
+    cleanup()
     renderKept({ ...KEPT, greeting: { ...greeting, use_default: true } }, 'cover_letter')
-    const [, second] = screen.getAllByRole('button', { name: "Claude's first draft" })
-    fireEvent.click(second)
-    dialog = await screen.findByRole('dialog')
+    dialog = await openIt()
     expect(within(dialog).getByRole('list', { name: 'Greeting' })).toHaveTextContent('Dear Acme Hiring Team,')
     expect(within(dialog).getByRole('list', { name: 'Greeting' })).not.toHaveTextContent('Source:')
   })

@@ -5,12 +5,9 @@ Every suggestion the app makes must follow these rules. They're stored in the `w
 The app never uses filler words or phrasing that sounds machine-written. A starting list, to be edited over time:
 - **Words:** leverage, utilize, spearhead, synergy, dynamic, passionate, results-driven, detail-oriented, robust, seamless, cutting-edge, delve, tapestry, landscape, realm, foster, elevate, empower, unlock, harness, showcase, testament, pivotal
 - **Phrases:** "proven track record", "fast-paced environment", "team player", "think outside the box", "hit the ground running", "wear many hats", "I am writing to express my interest", "I am excited to apply"
-- **Patterns:**
-  - intensifiers like very, really, highly, extremely
-  - "responsible for" and "helped with" instead of an action verb
-  - "not only X but also Y"
-  - lists of three used for rhythm rather than content
-  - em dashes used for drama
+- **Patterns:** none to start. A pattern is a habit described in words, which Claude checks for, so it rests on Claude's judgment of the writing. The starting ones (intensifiers, "responsible for" and "helped with", "not only X but also Y", lists of three for rhythm, and em dashes for drama) were taken out because whether they're right in a given sentence is the writer's call, not something a check can judge. The user can add their own.
+
+Em dashes are allowed, on purpose: they set off an aside so a long sentence's ideas stay organized, which commas or a split sentence often do worse.
 
 ### Exceptions: technical terms and proper nouns
 Some listed words have real technical or literal meanings. The app must judge each use in context and allow the word when it's one of these:
@@ -37,8 +34,8 @@ The database is seeded with the user's existing resumes and cover letters (and c
 Built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's draft of a posting's document and the changes Claude proposes in the chat are checked (Claude's text fixed, then flagged; library items only flagged), and so is the user's own text each time a bullet or narrative content is saved (flagged only, against the writing rules, not a tone, and kept with the item until new wording is saved). Text that was only ever submitted (in sent versions) isn't held to the rules or marked.
 - **Terms are found in code:** whole words, ignoring capitals, including a single word's usual endings ("leveraged", "spearheading") and a hyphen written as a space ("results driven"). Finding one only makes it a candidate.
 - **Claude judges the rest** in one quick check: whether each found term is filler or a real term (the test above), the patterns, and the document's tone.
-- **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. Whatever still breaks a rule is shown with the rule and why, and the user decides.
-- **The user's own text is only flagged,** never changed.
+- **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. A fix changes how the text says things, never what it says: it keeps every point, fact, and name, and in the chat, everything the user's message asked for. When a rule can't be met without dropping one, the text is flagged instead. Whatever still breaks a rule is shown with the rule and why, and the user decides.
+- **The user's own text is only flagged,** never changed. Deleting a rule takes its flags off the library's text too.
 
 ## Tone rules
 The user can add and adjust rules about tone, combine them into tones (one rule can be in many tones), and pick which tone applies to a resume or cover letter. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.

@@ -133,6 +133,20 @@ describe('AddContent', () => {
     )
   })
 
+  it('says how many printed lines a new bullet takes as it is typed', async () => {
+    renderForm()
+    fireEvent.change(screen.getByLabelText('Type of content'), { target: { value: 'bullet' } })
+    fireEvent.change(screen.getByLabelText('Bullet'), { target: { value: 'new' } })
+    const field = screen.getByLabelText('Bullet text (required)')
+    fireEvent.change(field, { target: { value: 'Shipped it.' } })
+    expect(screen.queryByText(/lines, /)).not.toBeInTheDocument()
+    fireEvent.change(field, { target: { value: 'x'.repeat(115) } })
+    // Read with the field, and said once as it starts to wrap.
+    expect(field).toHaveAccessibleDescription('2 lines, 9 characters on the second')
+    expect(screen.getByText('The bullet now takes 2 lines.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+  })
+
   it('changes type, starting the item over', () => {
     renderForm()
     fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'new' } })

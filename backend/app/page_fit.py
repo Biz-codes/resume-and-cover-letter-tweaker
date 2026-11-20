@@ -28,7 +28,9 @@ from app.documents import Kind, SectionTree, load_tree
 from app.plain_text import Output, document_output, section_text
 
 # The user's formatting: a Letter page with 0.5" margins (a 7.5" by 10" text area) in Calibri 11,
-# single spaced: about 110 characters per line (Calibri is narrow) and 53 lines per page.
+# single spaced: about 110 characters per line (Calibri is narrow) and 53 lines per page. The
+# front end counts a row's lines the same way (frontend/src/shared/lineFit.ts, checked by
+# tests/test_page_fit.py).
 CHARS_PER_LINE = 110
 LINES_PER_PAGE = 53
 # A bullet's text wraps under itself, past its marker.

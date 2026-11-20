@@ -1,7 +1,8 @@
 """Writing rules: banned terms and patterns applied to every suggestion (docs/WRITING_RULES.md).
 
 Rules steer suggestions and are never printed, so they're always edited in place. Switching
-a rule off (active false) keeps it without applying it.
+a rule off (active false) keeps it without applying it. Deleting one also takes its flags off
+the library's bullets and narrative content.
 """
 
 from fastapi import APIRouter, status
@@ -12,6 +13,7 @@ from app.account import AccountId, get_owned
 from app.db import DbSession
 from app.models import WritingRule, WritingRuleKind
 from app.schemas import RequiredText
+from app.writing_rules import delete_writing_rule
 
 router = APIRouter(prefix="/api/writing-rules", tags=["writing rules"])
 
@@ -68,4 +70,5 @@ def update_rule(rule_id: int, body: WritingRuleIn, db: DbSession,
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_rule(rule_id: int, db: DbSession, account_id: AccountId) -> None:
-    db.delete(get_owned(db, WritingRule, rule_id, account_id))
+    """Deletes the rule and its flags on the library's text (app/writing_rules.py)."""
+    delete_writing_rule(db, account_id, get_owned(db, WritingRule, rule_id, account_id))

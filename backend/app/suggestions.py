@@ -190,6 +190,7 @@ null when there are none.
 item doesn't match it well, look in the library for a better one first: another version of a \
 role, a different bullet, project, sentence, or skill. Add or drop sections and items only \
 where that clearly helps; stay close to the starting point.
+{distinct}
 3. Then make minimal tweaks so the wording lines up with the posting: use its keywords and \
 emphasize what it asks for, where that's accurate. Change as little as you can. Never add a \
 skill, tool, result, number, or duty the library doesn't support, and never change facts.
@@ -229,6 +230,20 @@ Everything you write (new text and reasons) follows the person's writing rules:
 A listed word is fine when it's a technical term or a proper noun (\"dynamic programming\", \
 \"Pivotal Tracker\"): replace it with a plain word, and if the meaning changes, it's a real term. \
 {exceptions}"""
+
+# Asked for by the user: the library keeps every version of a bullet or sentence (each new
+# wording is saved as a new row), so it often holds several that say nearly the same thing, and
+# Claude would pick two of them and leave out one that says something different.
+DISTINCT = """\
+Make every item earn its place by saying something the others don't. The library keeps \
+earlier versions of the same bullet or sentence, reworded over time, so many items in it \
+overlap: they describe the same work, duty, or result in different words. Treat overlapping \
+items as alternatives and use at most one of them in the {doc}, the one that fits the posting \
+best. This matters most for a role's or project's bullets: together they should show different \
+sides of the work, so before you add a bullet, check that the ones already chosen don't cover \
+it. A bullet that shows a different side of the work, even one the posting asks for less \
+directly, is worth more than a second one about the same thing. Don't repeat a point from one \
+section in another, either, except where the summary sums up what the rest shows."""
 
 RESUME_NEW_TEXT = """\
 Write new text only when the posting needs something the library doesn't say but the rest of \
@@ -540,7 +555,7 @@ def suggest(db: Session, client: anthropic.Anthropic, kind: Kind, account_id: in
         doc=one, docs=many, rules=rules_text(db, account_id), exceptions=TECHNICAL_EXCEPTIONS,
         new_text=LETTER_NEW_TEXT if letter else RESUME_NEW_TEXT,
         kind_notes=LETTER_NOTES if letter else "", companion=companion_instructions(kind),
-        budget=budget_text(kind))
+        budget=budget_text(kind), distinct=DISTINCT.format(doc=one))
     data = (f"<library>\n{json.dumps(library_json(library), ensure_ascii=False)}\n</library>\n"
             f"<documents>\n{json.dumps(documents, ensure_ascii=False)}\n</documents>")
     if start_from == doc_id:

@@ -36,6 +36,7 @@ from app.documents import Kind
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole
 from app.proposals import apply, find_proposal, mark_stale, page_marks, set_state
+from app.rule_proposals import RuleApplyIn, RuleProposal, apply_rule
 
 # The session stays open until the stream ends ("request" scope), so the reply's two turns
 # are saved in the same transaction as the checks before it.
@@ -80,11 +81,14 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
 
     @router.post("/{doc_id}/chat/{message_id}/proposals/{proposal_id}/apply")
     def apply_proposal(doc_id: int, message_id: int, proposal_id: str, db: DbSession,
-                       account_id: AccountId) -> dict[str, Any]:
-        """Make the proposed change to the document, and mark it applied, setting aside the
-        earlier ones still pending for the same content (stale, app/proposals.py). Returns the
-        document's detail, the message with the proposal's new state, the other messages that
-        changed (`updated`), and how many proposals went stale (`stale`)."""
+                       account_id: AccountId,
+                       body: RuleApplyIn | None = None) -> dict[str, Any]:
+        """Make the proposed change to the document, or to a rule (with the user's choices in
+        the body, app/rule_proposals.py), and mark it applied, setting aside the earlier ones
+        still pending for the same content (stale, app/proposals.py). Returns the document's
+        detail, the message with the proposal's new state, the other messages that changed
+        (`updated`), how many proposals went stale (`stale`), and for a rule, what applying it
+        did (`notice`)."""
         doc = get_owned(db, kind.doc, doc_id, account_id)
         check_open(db, kind, doc)
         message = own_message(db, doc_id, message_id)
@@ -92,14 +96,19 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         if proposal.state != "pending":
             raise AppError(ErrorCode.VALIDATION_FAILED, "That change was already "
                            f"{proposal.state}.")
-        apply(db, kind, account_id, doc, proposal)
+        notice = None
+        if isinstance(proposal, RuleProposal):
+            notice = apply_rule(db, kind, account_id, doc, proposal, body or RuleApplyIn())
+        else:
+            apply(db, kind, account_id, doc, proposal)
         set_state(message, index, "applied")
         updated, stale = mark_stale(history(db, kind, doc_id), message, index)
         db.flush()
         db.refresh(doc)
         mark = page_marks(db, kind, account_id, doc)
         return {"document": detail(db, doc), "message": message_out(message, mark),
-                "updated": [message_out(turn, mark) for turn in updated], "stale": stale}
+                "updated": [message_out(turn, mark) for turn in updated], "stale": stale,
+                "notice": notice}
 
     @router.post("/{doc_id}/chat/{message_id}/check")
     def check_message(doc_id: int, message_id: int, db: DbSession, account_id: AccountId,

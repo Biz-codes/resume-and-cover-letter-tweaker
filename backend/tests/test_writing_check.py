@@ -101,6 +101,18 @@ def test_found_terms_and_rules_go_to_claude(db: Session, account_id: int) -> Non
     assert "Dynamic programming" in content and "Build dynamic systems." in content
 
 
+def test_a_fix_keeps_what_the_person_asked_for(db: Session, account_id: int) -> None:
+    rules(db, account_id)
+    client, messages = claude(Review(texts=[]))
+    check(db, client, account_id, [CheckText(key=1, text="Leveraged Kafka.", claude=True)],
+          step="test", asked="Put business needs in this sentence.")
+    request = messages.calls[0]
+    assert request["messages"][0]["content"].endswith(
+        "<asked>\nPut business needs in this sentence.\n</asked>")
+    assert "never what it says" in request["system"]
+    assert "the fix keeps everything they asked for" in request["system"]
+
+
 def test_claude_text_is_fixed(db: Session, account_id: int) -> None:
     rules(db, account_id)
     client, _ = claude(Review(texts=[Reviewed(

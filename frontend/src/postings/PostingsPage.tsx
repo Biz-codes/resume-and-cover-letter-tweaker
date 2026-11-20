@@ -3,7 +3,8 @@
 // new posting opens on its own page, to pick its header. Hidden ones are listed last, under
 // "Hidden (n)", with Unhide (docs/FRONTEND_CHECKS.md, "Hiding").
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import { useSentNotice } from '../shared/hooks/useSentNotice'
 import { toApiError, type ApiError } from '../shared/api/client'
 import { postingName, postingsApi, type Posting, type PostingFields } from './postings'
 import NewPosting from './NewPosting'
@@ -27,7 +28,6 @@ function versionCount(posting: Posting) {
 }
 
 export default function PostingsPage() {
-  const location = useLocation()
   const navigate = useNavigate()
   const [postings, setPostings] = useState<Posting[] | null>(null)
   const [loadError, setLoadError] = useState<ApiError | null>(null)
@@ -52,13 +52,8 @@ export default function PostingsPage() {
     void load()
   }, [load])
 
-  // A notice sent from another page (a delete) opens once the page has rendered and App has moved
-  // focus to its heading, so OK returns focus there.
-  const sentNotice = (location.state as ListState | null)?.notice ?? null
-  useEffect(() => {
-    const timer = setTimeout(() => setNotice(sentNotice))
-    return () => clearTimeout(timer)
-  }, [sentNotice])
+  // A notice sent with the move here, shown once (shared/hooks/useSentNotice.ts).
+  useSentNotice(setNotice)
 
   async function create(fields: PostingFields) {
     const posting = await postingsApi.create(fields)

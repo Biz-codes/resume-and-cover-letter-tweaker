@@ -205,6 +205,43 @@ describe('DocumentTree', () => {
     expect(screen.queryByRole('group', { name: 'Items in Experience' })).not.toBeInTheDocument()
   })
 
+  it('says which category lines and bullets wrap when printed, and when adding a skill changes that', async () => {
+    stub()
+    const skills = ['React', 'TypeScript', 'Angular', 'RxJS', 'Redux', 'Jest', 'Vitest', 'Playwright', 'Storybook', 'Sass']
+    const long = 'Led the redesign of the scheduling flow, cutting the steps to book from nine to four and support tickets by half.'
+    const withLong = (names: string[]): DocDetail => ({
+      ...DOC,
+      sections: DOC.sections.map((section) =>
+        section.section_id !== 3
+          ? section
+          : {
+              ...section,
+              entries: section.entries.map((entry) =>
+                entry.kind === 'category'
+                  ? { ...entry, skills: names.map((text, index) => ({ row_id: 500 + index, item_id: 20 + index, position: index + 1, text })) }
+                  : { ...entry, bullets: [{ row_id: 400, item_id: 8, position: 1, text: long }] },
+              ),
+            },
+      ),
+    })
+    const props = { onChange: vi.fn(), onReload: vi.fn(), onNotice: vi.fn() }
+    const { rerender } = render(<DocumentTree kind="resume" doc={withLong(skills)} readOnly={false} {...props} />)
+    await openExperience()
+    // "Front End: React, …, Sass" fits on one line, so nothing shows; the bullet wraps.
+    const items = screen.getByRole('group', { name: 'Items in Experience' })
+    // (The role's bullets are inside the section's items too.)
+    expect(within(items).getAllByText(/^\d+ lines, \d+ characters? on the/)).toHaveLength(1)
+    const bullets = screen.getByRole('group', { name: 'Engineer, Acme bullets' })
+    expect(within(bullets).getByText('2 lines, 7 characters on the second')).toBeInTheDocument()
+    await expectNoA11yViolations()
+    // Adding skills that take it past one line says so on the row, and announces it once.
+    const more = [...skills, 'Tailwind', 'Bootstrap', 'Material UI', 'Figma']
+    rerender(<DocumentTree kind="resume" doc={withLong(more)} readOnly={false} {...props} />)
+    expect(await within(items).findByText('2 lines, 24 characters on the second')).toBeInTheDocument()
+    expect(screen.getByText('Front End now takes 2 lines.')).toHaveAttribute('aria-live', 'polite')
+    await expectNoA11yViolations()
+  })
+
   it('opens a role to its fields, and starts adding content with the type the section lists', async () => {
     stub()
     renderTree()

@@ -82,6 +82,7 @@ export default function BulletItem({ id }: { id: number }) {
           value={typed ?? bullet.content}
           onValueChange={setTyped}
           multiline
+          lines={{ bullet: true, what: 'The bullet' }}
           lockedNote={changeNote(here, others, host.placed?.doc, anyLocked(bullet.used_by) ? LOCKED_NOTE : undefined, elsewhere)}
           onSave={(content) => save(bullet, content)}
           focusOnOpen={false}

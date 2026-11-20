@@ -39,6 +39,8 @@ import {
 } from '../treeItems'
 import styles from './DocumentTree.module.css'
 import { offered } from '../../shared/offered'
+import { categoryLine, lineNote } from '../../shared/lineFit'
+import LineNote from '../../shared/components/LineNote/LineNote'
 
 // A button for each thing that can be written here, each opening its own form. Focus moves into
 // the form, and back to its button when it closes.
@@ -53,6 +55,8 @@ interface WriteOption {
   // A textarea, for text longer than a name.
   multiline: boolean
   submit: string
+  // A bullet's text, which says how many printed lines it takes as it's typed.
+  bullet?: boolean
 }
 
 function Writer({
@@ -81,6 +85,7 @@ function Writer({
         field={writing.name}
         submitLabel={writing.submit}
         multiline={writing.multiline}
+        lines={writing.bullet ? { bullet: true, what: 'The bullet' } : undefined}
         onSave={async (content) => {
           await onWrite(writing.key, content)
           close(writing)
@@ -197,6 +202,7 @@ function EntryChildren({
       row && (
       <>
       <FlaggedBadge flags={row.flags} />
+      <WrapNote text={row.text} bullet />
       {editRow(
         `bullet-${parentKind}-${row.row_id}`,
         `${item.label ?? item.name} under ${name} in ${sectionTitle}`,
@@ -274,6 +280,13 @@ function EntryChildren({
               actions={readOnly ? undefined : skillActions}
             onChange={onSkills}
           />
+          {/* Adding or removing a skill can change how many lines the category's line takes. */}
+          {entry.kind === 'category' && (
+            <LineNote
+              text={categoryLine(String(entry.values.category_name ?? ''), entry.skills.map((skill) => skill.text))}
+              what={String(entry.values.category_name ?? 'The category')}
+            />
+          )}
           {!readOnly && (
             <Writer
               idBase={`${entry.kind}-${entry.row_id}-skill`}
@@ -324,6 +337,7 @@ function EntryChildren({
                   name: 'content',
                   multiline: true,
                   submit: 'Add bullet',
+                  bullet: true,
                 },
               ]}
               onWrite={(_, content) => onWriteBullet(content)}
@@ -423,6 +437,10 @@ function SectionBody({
     return (
       <>
       <FlaggedBadge flags={entry.flags} />
+      {entry.kind === 'bullet' && <WrapNote text={String(entry.values.content ?? '')} bullet />}
+      {entry.kind === 'category' && (
+        <WrapNote text={categoryLine(String(entry.values.category_name ?? ''), entry.skills.map((skill) => skill.text))} />
+      )}
       {editRow(
       `${entry.kind}-${entry.row_id}`,
       `${item.label ?? item.name} in ${section.title}`,
@@ -700,6 +718,13 @@ export default function DocumentTree({
       {dialog}
     </>
   )
+}
+
+// A skill category's line or a bullet that wraps onto more lines when printed, and by how much
+// (shared/lineFit.ts); nothing for one that fits on one line.
+function WrapNote({ text, bullet = false }: { text: string; bullet?: boolean }) {
+  const note = lineNote(text, bullet)
+  return note ? <span className="muted">{note}</span> : null
 }
 
 // A row whose text breaks a writing rule; its View and Edit says which.

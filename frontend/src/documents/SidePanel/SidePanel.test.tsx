@@ -104,6 +104,26 @@ describe('SidePanel', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it("lists three tabs in its name, and moves through them all", async () => {
+    const draft: PanelTab = { key: 'first_draft', label: "Claude's first draft", content: <p>As you approved it</p> }
+    render(<Panel tabs={[...TABS, draft]} />)
+    expect(screen.getByRole('complementary', { name: "Chat with Claude, Job posting, and Claude's first draft" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Collapse Chat with Claude, Job posting, and Claude's first draft" })).toBeInTheDocument()
+    const chat = screen.getByRole('tab', { name: 'Chat with Claude' })
+    fireEvent.keyDown(chat, { key: 'End' })
+    expect(screen.getByRole('tab', { name: "Claude's first draft" })).toHaveFocus()
+    expect(screen.getByRole('tabpanel', { name: "Claude's first draft" })).toHaveTextContent('As you approved it')
+    fireEvent.keyDown(screen.getByRole('tab', { name: "Claude's first draft" }), { key: 'ArrowRight' })
+    expect(chat).toHaveFocus()
+    await expectNoA11yViolations()
+  })
+
+  it("collapses Claude's first draft on its own by name", () => {
+    render(<Panel tabs={[{ key: 'first_draft', label: "Claude's first draft", content: <p>As you approved it</p> }]} />)
+    expect(screen.getByRole('heading', { name: "Claude's first draft" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Collapse Claude's first draft" })).toBeInTheDocument()
+  })
+
   it('collapses a chat on its own as "Collapse chat"', () => {
     render(<Panel tabs={[TABS[0]]} />)
     expect(screen.getByRole('button', { name: 'Collapse chat' })).toHaveAttribute('aria-expanded', 'true')

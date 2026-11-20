@@ -2,7 +2,7 @@
 // Where it is names its immediate parent: the skill category, role, or project a skill or bullet
 // is under ("in Back End"), or for anything placed directly in a section, the section.
 import { shortBullet } from '../../shared/api/bullets'
-import type { Proposal } from '../../shared/api/chat'
+import { isRule, type AnyProposal, type Proposal, type RuleProposal } from '../../shared/api/chat'
 import type { TreeSection } from '../../shared/api/documents'
 import { itemName } from '../treeItems'
 
@@ -29,7 +29,26 @@ function parentName(proposal: Proposal, sections: TreeSection[]) {
   return (parent && itemName(parent.kind, parent.values)) || section?.title || 'a section'
 }
 
-export function describe(proposal: Proposal, sections: TreeSection[]) {
+// A rule's: what it bans, or what it changes in which tone ("Add "Name the tools." to the "Tech"
+// tone").
+function describeRule(proposal: RuleProposal) {
+  const quoted = (text: string) => `"${shortBullet(text)}"`
+  if (proposal.target === 'banned') {
+    return proposal.action === 'add' ? `Ban ${quoted(proposal.new_text)}` : `Stop banning ${quoted(proposal.before)}`
+  }
+  const tone = `the "${proposal.tone_name}" tone`
+  switch (proposal.action) {
+    case 'add':
+      return `Add ${quoted(proposal.new_text)} to ${tone}`
+    case 'reword':
+      return `Reword ${quoted(proposal.before)} in ${tone}`
+    case 'remove':
+      return `Remove ${quoted(proposal.before)} from ${tone}`
+  }
+}
+
+export function describe(proposal: AnyProposal, sections: TreeSection[]) {
+  if (isRule(proposal)) return describeRule(proposal)
   const noun = NAMES[proposal.target]
   const name = isText(proposal) ? `"${shortBullet(proposal.before)}"` : proposal.before
   const where = proposal.target === 'section' ? '' : ` in ${parentName(proposal, sections)}`

@@ -58,22 +58,31 @@ from app.routers.document_tree import (
     restore,
 )
 from app.routers.narrative_content import NarrativeIn
+from app.rule_proposals import RuleProposal
 from app.suggestions import load_library
 from app.usage import touch
 
 
-def find_proposal(message: ChatMessage, proposal_id: str) -> tuple[int, Proposal]:
-    """The proposal shown in Claude's message, by id, or NOT_FOUND."""
+def find_proposal(message: ChatMessage,
+                  proposal_id: str) -> tuple[int, Proposal | RuleProposal]:
+    """The proposal shown in Claude's message, by id (a change to the document, or to a rule),
+    or NOT_FOUND."""
     if message.role != ChatRole.assistant:
         raise AppError(ErrorCode.NOT_FOUND)
     for index, stored in enumerate(message.proposals or []):
         if stored.get("id") == proposal_id and stored.get("state") != "left_out":
-            return index, Proposal.model_validate(stored)
+            model = RuleProposal if stored.get("kind") == "rule" else Proposal
+            return index, model.model_validate(stored)
     raise AppError(ErrorCode.NOT_FOUND)
 
 
 def content_key(proposal: dict[str, Any]) -> tuple[Any, ...] | None:
-    """What a proposal changes: the section, or the item in its place; none for new text."""
+    """What a proposal changes: the section, or the item in its place, or a saved rule; none
+    for new text or a new rule."""
+    if proposal.get("kind") == "rule":
+        if not proposal.get("rule_id"):
+            return None
+        return ("rule", proposal["target"], proposal.get("tone_set_id", 0), proposal["rule_id"])
     if proposal.get("item_id", 0) == 0 and proposal.get("target") != "section":
         return None
     return (proposal["target"], proposal["section_id"], proposal["item_id"],
@@ -288,7 +297,7 @@ class PageMarks:
         self.before = document_fit(db, kind, doc)
 
     def __call__(self, proposal: Proposal) -> PageMark | None:
-        if proposal.state != "pending":
+        if proposal.state != "pending" or proposal.kind != "change":
             return None
         savepoint = self.db.begin_nested()
         try:

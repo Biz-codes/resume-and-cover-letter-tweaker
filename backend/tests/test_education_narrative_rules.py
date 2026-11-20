@@ -15,6 +15,7 @@ from app.models import (
     SUMMARY_SECTION_ID,
     TECHNICAL_TONE_ID,
     Account,
+    BulletPoint,
     CoverLetter,
     CoverLetterNarrativeContent,
     CoverLetterSection,
@@ -359,6 +360,46 @@ def test_add_switch_off_and_delete_a_writing_rule(client: TestClient, db: Sessio
     assert saved["active"] is False
     assert client.delete(url).status_code == 204
     assert db.get(WritingRule, rule["writing_rule_id"]) is None
+
+
+def flagged(rule: str, kind: str = "pattern") -> dict:
+    return {"rule": rule, "kind": kind, "quote": "—", "why": "Because."}
+
+
+def test_deleting_a_writing_rule_takes_its_flags_off_the_library(client: TestClient,
+                                                                 db: Session, account_id: int):
+    rule = add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern,
+                               rule_text="em dashes"))
+    both = add(db, BulletPoint(account_id=account_id, content="Shipped it — fast",
+                               flags=[flagged("em dashes"), flagged("leverage", "term")]))
+    only = narrative(db, account_id, "Motivated — by teaching")
+    only.flags = [flagged("em dashes")]
+    # A term with the same text is another rule.
+    term = narrative(db, account_id, "em dashes")
+    term.flags = [flagged("em dashes", "term")]
+    theirs = narrative(db, add(db, Account()).account_id, "Theirs — too", section_id=None)
+    theirs.flags = [flagged("em dashes")]
+    db.flush()
+    assert client.delete(f"/api/writing-rules/{rule.writing_rule_id}").status_code == 204
+    for row in (both, only, term, theirs):
+        db.refresh(row)
+    assert both.flags == [flagged("leverage", "term")]
+    # Checked, and breaking none now.
+    assert only.flags == []
+    assert term.flags == [flagged("em dashes", "term")]
+    assert theirs.flags == [flagged("em dashes")]
+
+
+def test_deleting_one_of_two_same_rules_keeps_their_flags(client: TestClient, db: Session,
+                                                          account_id: int):
+    first, _ = (add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern,
+                                    rule_text="em dashes")) for _ in range(2))
+    row = narrative(db, account_id, "Motivated — by teaching")
+    row.flags = [flagged("em dashes")]
+    db.flush()
+    assert client.delete(f"/api/writing-rules/{first.writing_rule_id}").status_code == 204
+    db.refresh(row)
+    assert row.flags == [flagged("em dashes")]
 
 
 def test_writing_rule_errors(client: TestClient, db: Session, account_id: int):

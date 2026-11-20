@@ -6,11 +6,13 @@
 // tree then changes. In a cover letter the type starts as narrative content; in a resume, as the
 // kind the library lists most under the section (treeItems.ts, defaultKind). An empty section
 // shows the form right away; otherwise it opens from its button, and focus moves into it and back.
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { toApiError, type ApiError } from '../shared/api/client'
 import type { DocKind, EntryKind, NewItem, TreeSection } from '../shared/api/documents'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
 import { sortByName } from '../shared/sortByName'
+import { lineNote } from '../shared/lineFit'
+import LineNote from '../shared/components/LineNote/LineNote'
 import {
   defaultKind,
   KIND_NAMES,
@@ -54,6 +56,7 @@ export default function AddContent({
   const [focusType, setFocusType] = useState(false)
   const typeRef = useRef<HTMLSelectElement>(null)
   const errorId = useId()
+  const linesId = useId()
   const focusLater = useFocusLater()
   const buttonId = `add-content-${section.row_id}`
 
@@ -170,18 +173,28 @@ export default function AddContent({
         <fieldset>
           <legend>New {names?.lower}</legend>
           {NEW_FIELDS[kind].map((field) => {
+            // A new bullet says how many printed lines it takes as it's typed.
+            const lines = kind === 'bullet' && field.name === 'content'
+            const describedBy =
+              [invalid(field.name)['aria-describedby'], lines && lineNote(values.content ?? '', true) && linesId]
+                .filter(Boolean)
+                .join(' ') || undefined
             const control = {
               value: values[field.name] ?? '',
               'aria-required': field.required || undefined,
               ...invalid(field.name),
+              'aria-describedby': describedBy,
               onChange: (event: { target: { value: string } }) =>
                 setValues({ ...values, [field.name]: event.target.value }),
             }
             return (
-              <label key={field.name}>
-                {field.required ? `${field.label} (required)` : field.label}
-                {field.multiline ? <textarea rows={3} {...control} /> : <input type={field.type ?? 'text'} {...control} />}
-              </label>
+              <Fragment key={field.name}>
+                <label>
+                  {field.required ? `${field.label} (required)` : field.label}
+                  {field.multiline ? <textarea rows={3} {...control} /> : <input type={field.type ?? 'text'} {...control} />}
+                </label>
+                {lines && <LineNote text={values.content ?? ''} bullet id={linesId} what="The bullet" />}
+              </Fragment>
             )
           })}
         </fieldset>

@@ -21,12 +21,26 @@ import { useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import type { TreeSection } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
-import { pageMarkNote, staleNote, uncheckedOf, type Applied, type ChatMessage, type Proposal, type ReplyTo } from '../../shared/api/chat'
+import {
+  changesOf,
+  isRule,
+  pageMarkNote,
+  staleNote,
+  uncheckedOf,
+  type AnyProposal,
+  type Applied,
+  type ChatMessage,
+  type Proposal,
+  type ReplyTo,
+  type RuleChoice,
+} from '../../shared/api/chat'
+import type { Use } from '../../shared/api/usage'
 import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
 import { cardId as idOf, describe, messageId } from './describe'
 import Collapsible from '../../library/Collapsible/Collapsible'
 import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import styles from './ProposalCards.module.css'
+import RuleCard from './RuleCard'
 
 // One card, also shown for a posting's review's fixes (frontend/src/postings/FinalReview), which
 // have Undo on an applied card (`onUndo`) and no Reply.
@@ -234,7 +248,7 @@ function CheckAgain({
 
 // How many of the checked cards break a rule, for the live region.
 function checkedNotice(message: ChatMessage, ids: string[]) {
-  const flagged = (message.proposals ?? []).filter((proposal) => ids.includes(proposal.id) && proposal.flags?.length).length
+  const flagged = changesOf(message).filter((proposal) => ids.includes(proposal.id) && proposal.flags?.length).length
   if (flagged === 0) return 'Checked against your writing rules. Nothing breaks a rule.'
   return `Checked against your writing rules. ${flagged === 1 ? '1 change breaks' : `${flagged} changes break`} a rule, marked Flagged.`
 }
@@ -251,6 +265,8 @@ export default function ProposalCards({
   announce,
   onReply,
   repliesTo = () => [],
+  onApplyRule,
+  toneUses = () => [],
 }: {
   message: ChatMessage
   // The document's sections, which name where each change is.
@@ -272,11 +288,15 @@ export default function ProposalCards({
   onReply: (to: ReplyTo) => void
   // The user's messages that replied to one of the cards, by id (ChatPanel).
   repliesTo?: (proposalId: string) => number[]
+  // Makes a rule's change with the user's choices; without it, rule cards are only shown.
+  onApplyRule?: (messageId: number, proposalId: string, choice: RuleChoice) => Promise<Applied & { notice: string }>
+  // The other resumes and cover letters using a tone, which a tone rule's Apply asks about.
+  toneUses?: (toneSetId: number) => Use[]
 }) {
   const focusLater = useFocusLater()
   const proposals = message.proposals ?? []
   if (proposals.length === 0) return null
-  const cardId = (proposal: Proposal) => idOf(message.message_id, proposal.id)
+  const cardId = (proposal: AnyProposal) => idOf(message.message_id, proposal.id)
   const unchecked = uncheckedOf(message).map((proposal) => proposal.id)
 
   return (
@@ -284,6 +304,37 @@ export default function ProposalCards({
     <ul aria-label="Proposed changes" className={styles.cards}>
       {proposals.map((proposal) => {
         const title = describe(proposal, sections)
+        const reply = () => onReply({ message_id: message.message_id, proposal_id: proposal.id, label: title, text: proposal.new_text })
+        const changed = async (state: 'pending' | 'dismissed') => {
+          onUpdate(await onState(message.message_id, proposal.id, state))
+          announce(state === 'dismissed' ? `Dismissed: ${title}.` : `Restored: ${title}.`)
+          focusLater(cardId(proposal))
+        }
+        if (isRule(proposal)) {
+          return (
+            <li key={proposal.id} id={cardId(proposal)} tabIndex={-1} className={styles.card}>
+              <RuleCard
+                proposal={proposal}
+                title={title}
+                idBase={cardId(proposal)}
+                singular={singular}
+                readOnly={readOnly || !onApplyRule}
+                uses={proposal.target === 'tone' ? toneUses(proposal.tone_set_id) : []}
+                onApply={async (choice) => {
+                  if (!onApplyRule) return
+                  const applied = await onApplyRule(message.message_id, proposal.id, choice)
+                  for (const one of [applied.message, ...applied.updated]) onUpdate(one)
+                  announce(`Applied: ${title}. ${applied.notice}${staleNote(applied.stale)}`)
+                  // Its buttons are gone, so focus stays on the card.
+                  focusLater(cardId(proposal))
+                }}
+                onState={changed}
+                replies={repliesTo(proposal.id)}
+                onReply={reply}
+              />
+            </li>
+          )
+        }
         return (
           <li key={proposal.id} id={cardId(proposal)} tabIndex={-1} className={styles.card}>
             <ProposalCard
@@ -298,15 +349,9 @@ export default function ProposalCards({
                 // Its buttons are gone, so focus stays on the card.
                 focusLater(cardId(proposal))
               }}
-              onState={async (state) => {
-                onUpdate(await onState(message.message_id, proposal.id, state))
-                announce(state === 'dismissed' ? `Dismissed: ${title}.` : `Restored: ${title}.`)
-                focusLater(cardId(proposal))
-              }}
+              onState={changed}
               replies={repliesTo(proposal.id)}
-              onReply={() =>
-                onReply({ message_id: message.message_id, proposal_id: proposal.id, label: title, text: proposal.new_text })
-              }
+              onReply={reply}
             />
           </li>
         )

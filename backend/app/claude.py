@@ -96,13 +96,27 @@ def ask[T: BaseModel](client: anthropic.Anthropic, *, step: str,
     return response.parsed_output
 
 
+def reply_text(content: list[dict[str, Any]]) -> str:
+    """What the person reads of a reply (stored content blocks): its text blocks and the text
+    of its progress-update thinking blocks, in order, each trimmed, a blank line between
+    them. Reasoning blocks are empty under `display: "updates"`, so they add nothing."""
+    parts = [(block.get("text") if block.get("type") == "text" else block.get("thinking")
+              if block.get("type") == "thinking" else "") or "" for block in content]
+    return "\n\n".join(part.strip() for part in parts if part.strip())
+
+
 def converse(client: anthropic.Anthropic, *, step: str, system: list[dict[str, Any]],
              messages: list[dict[str, Any]], tools: list[dict[str, Any]], effort: Effort,
              max_tokens: int = MAX_TOKENS) -> Generator[str, None, Any]:
     """One turn of a conversation, for the chat (app/chat.py): yields Claude's reply text as
     it's written, and returns the whole message (its content blocks, with any tool calls).
     Claude may end its turn calling tools; nothing here runs them. Failures are
-    AI_UNAVAILABLE, as in `ask`."""
+    AI_UNAVAILABLE, as in `ask`.
+
+    What Claude writes to the person before a tool call comes back as a progress-update
+    thinking block, not a text block (on Claude Opus 5.5, anything longer than a sentence or
+    two), so the reply is its text blocks and its progress updates, in order (reply_text).
+    With `display: "updates"` the updates have text and the reasoning blocks stay empty."""
     try:
         with client.beta.messages.stream(
             model=MODEL,
@@ -110,20 +124,33 @@ def converse(client: anthropic.Anthropic, *, step: str, system: list[dict[str, A
             system=system,
             messages=messages,
             tools=tools,
-            # Each thinking block is bound to the system prompt and tools it was written
-            # under. The chat's system prompt holds the library, posting, and tone, which
-            # change during a conversation (applying a proposal adds a library row), so the
-            # API drops the saved blocks that no longer match instead of refusing the request.
-            # Claude still reads every message; it thinks again where its old reasoning is gone.
-            thinking={"type": "adaptive",
+            # Each thinking block is bound to the system prompt, tools, and messages it was
+            # written after. The chat only appends to its history (its rules come in the
+            # messages), but its system prompt holds the instructions and the posting, so editing
+            # either mid-conversation makes the saved blocks stop matching.
+            # The API then drops them instead of refusing the request; Claude still reads every
+            # message, and thinks again where its old reasoning is gone.
+            thinking={"type": "adaptive", "display": "updates",
                       "block_binding": {"prefix_mismatch_behavior": "drop_block"}},
             output_config={"effort": effort},
-            betas=["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01"],
+            betas=["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01",
+                   "thinking-display-updates-2026-08-18"],
             fallbacks="default",
         ) as stream:
+            # Each block's text as it streams, with a blank line between blocks.
+            last_block: int | None = None
             for event in stream:
-                if event.type == "text":
-                    yield event.text
+                if event.type != "content_block_delta":
+                    continue
+                piece = (event.delta.text if event.delta.type == "text_delta"
+                         else event.delta.thinking if event.delta.type == "thinking_delta"
+                         else "")
+                if not piece:
+                    continue
+                if last_block is not None and event.index != last_block:
+                    yield "\n\n"
+                last_block = event.index
+                yield piece
             response = stream.get_final_message()
         dropped = [item for item in getattr(response, "input_transformations", None) or []
                    if getattr(item, "type", None) == "thinking_dropped"]
