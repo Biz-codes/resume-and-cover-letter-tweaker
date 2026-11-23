@@ -35,7 +35,14 @@ from app.db import DbSession, get_db
 from app.documents import Kind
 from app.errors import AppError, ErrorCode
 from app.models import ChatMessage, ChatRole
-from app.proposals import apply, find_proposal, mark_stale, page_marks, set_state
+from app.proposals import (
+    apply,
+    find_proposal,
+    mark_stale,
+    page_marks,
+    set_aside_gone,
+    set_state,
+)
 from app.rule_proposals import RuleApplyIn, RuleProposal, apply_rule
 
 # The session stays open until the stream ends ("request" scope), so the reply's two turns
@@ -66,8 +73,11 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
     @router.get("/{doc_id}/chat")
     def read_chat(doc_id: int, db: DbSession, account_id: AccountId) -> list[ChatMessageOut]:
         doc = get_owned(db, kind.doc, doc_id, account_id)
+        turns = history(db, kind, doc_id)
+        # Cards about what's been taken out of the document since are set aside first.
+        set_aside_gone(db, kind, doc, turns)
         mark = page_marks(db, kind, account_id, doc)
-        return [message_out(turn, mark) for turn in history(db, kind, doc_id)]
+        return [message_out(turn, mark) for turn in turns]
 
     @router.post("/{doc_id}/chat")
     def send_message(doc_id: int, body: ChatIn, db: StreamSession, account_id: StreamAccountId,

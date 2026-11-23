@@ -144,6 +144,7 @@ export default function WritingRulesPage() {
                 </button>
                 <button
                   type="button"
+                  className="danger"
                   id={buttonId(id, 'delete')}
                   aria-label={`Delete ${label}`}
                   onClick={() => {

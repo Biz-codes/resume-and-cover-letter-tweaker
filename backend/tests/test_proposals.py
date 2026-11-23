@@ -24,6 +24,7 @@ from app.models import (
     Project,
     ProjectSkill,
     ResumeBulletPoint,
+    ResumeExperience,
     SectionNarrativeContent,
     SectionProject,
     Skill,
@@ -142,6 +143,42 @@ def test_a_change_that_no_longer_fits_is_refused(client: TestClient, db: Session
     db.expire_all()
     assert db.scalar(select(BulletPoint).where(BulletPoint.content == "Tested well.")) is None
     assert db.get(ChatMessage, message.message_id).proposals[0]["state"] == "pending"
+
+
+def test_cards_about_what_was_taken_out_are_set_aside(client: TestClient, db: Session,
+                                                       account_id: int):
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    message = proposed(
+        db, account_id, doc,
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Tested it"], new_text="A.", **job),
+        change("reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"], new_text="B.", **job),
+        change("add", "bullet", EXPERIENCE_SECTION_ID, 0, new_text="C.", **job))
+    # Taken out by hand: one of the role's bullets.
+    db.execute(ResumeBulletPoint.__table__.delete().where(
+        ResumeBulletPoint.bullet_id == ids["Tested it"]))
+    chat = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
+    assert [p["state"] for p in chat[-1]["proposals"]] == ["stale", "pending", "pending"]
+    # Saved, and restorable as any stale card is.
+    db.refresh(message)
+    assert message.proposals[0]["state"] == "stale"
+    assert client.put(f"{url(doc, message)}", json={"state": "pending"}).status_code == 200
+
+    # The whole role: everything under it goes too, the restored one again.
+    db.execute(ResumeExperience.__table__.delete().where(
+        ResumeExperience.experience_id == ids["job"]))
+    chat = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
+    assert [p["state"] for p in chat[-1]["proposals"]] == ["stale", "stale", "stale"]
+
+
+def test_a_sent_documents_cards_are_left_as_they_are(client: TestClient, db: Session,
+                                                     account_id: int):
+    doc, ids = setup_resume(db, account_id, sent=True)
+    proposed(db, account_id, doc, change(
+        "reword", "bullet", EXPERIENCE_SECTION_ID, 999999, new_text="A.",
+        parent_kind="experience", parent_id=ids["job"]))
+    chat = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
+    assert chat[-1]["proposals"][0]["state"] == "pending"
 
 
 def test_dismissing_and_taking_it_back(client: TestClient, db: Session, account_id: int):

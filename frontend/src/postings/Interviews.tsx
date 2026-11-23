@@ -166,6 +166,7 @@ export default function Interviews({
                     </button>
                     <button
                       type="button"
+                      className="danger"
                       id={`interview-delete-${interview.interview_id}`}
                       aria-label={`Delete ${name}`}
                       onClick={() => open({ action: 'delete', id: interview.interview_id })}

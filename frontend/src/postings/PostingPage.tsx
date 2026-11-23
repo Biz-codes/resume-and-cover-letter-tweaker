@@ -248,7 +248,7 @@ export function PostingPage({ id }: { id: number }) {
                 {posting.hidden ? (hiding ? 'Unhiding…' : 'Unhide') : hiding ? 'Hiding…' : 'Hide'}
               </button>
               {/* Named by kind, since the page's resume and cover letter are named for it too. */}
-              <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
+              <button type="button" className="danger" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
                 Delete job posting
               </button>
             </div>

@@ -216,6 +216,7 @@ export default function RuleCard({
                 <>
                   <button
                     type="button"
+                    className="primary"
                     id={applyId}
                     aria-label={`Apply: ${title}`}
                     aria-disabled={busy}

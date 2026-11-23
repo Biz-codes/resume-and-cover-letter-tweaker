@@ -53,7 +53,7 @@ export default function ConfirmDelete({
       {locked && <p>{lockedNote}</p>}
       {error && <p role="alert">{error.message}</p>}
       <div className="actions">
-        <button type="button" onClick={onConfirm}>
+        <button type="button" className="danger" onClick={onConfirm}>
           {noun ? `Delete ${noun}` : 'Delete'}
         </button>
         <button type="button" ref={cancelRef} onClick={onCancel}>

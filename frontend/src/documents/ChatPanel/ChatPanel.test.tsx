@@ -290,6 +290,32 @@ describe('ChatPanel', () => {
     )
   })
 
+  it('says when reading again sets cards aside because what they change was removed', async () => {
+    const history = (state: 'pending' | 'stale') => [asked(1, 'Add more.'), answered(2, 'Try this.', [{ ...PROPOSAL, state }])]
+    stubApi({
+      'GET /api/resumes/5/chat': [
+        { status: 200, body: history('pending') },
+        { status: 200, body: history('stale') },
+        { status: 200, body: history('stale') },
+      ],
+    })
+    const { view } = renderPanel({ version: '0:a' })
+    await screen.findByText('Try this.')
+    expect(announced()).toBe('')
+
+    // Removed from the resume by hand: the next read has the card set aside.
+    view.rerender(<Framed onAbout={vi.fn()} version="0:b" />)
+    await vi.waitFor(() =>
+      expect(announced()).toBe('1 proposed change in the chat is now stale: what it changes was removed.'),
+    )
+    await expectNoA11yViolations()
+
+    // Already shown as stale, so another read says nothing new.
+    view.rerender(<Framed onAbout={vi.fn()} version="0:c" />)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(announced()).toBe('1 proposed change in the chat is now stale: what it changes was removed.')
+  })
+
   it('says when the one flagged change breaks a rule', async () => {
     const reply = streamed()
     stubChat([], [reply.response])

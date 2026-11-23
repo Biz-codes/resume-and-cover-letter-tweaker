@@ -623,7 +623,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                   {doc.hidden ? (hiding ? 'Unhiding…' : 'Unhide') : hiding ? 'Hiding…' : 'Hide'}
                 </button>
               ) : (
-                <button type="button" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
+                <button type="button" className="danger" id={BUTTON_IDS.delete} onClick={() => open('delete')}>
                   Delete {singular}
                 </button>
               )}

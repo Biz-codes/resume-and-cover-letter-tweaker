@@ -68,6 +68,94 @@
 
 body {
   margin: 0;
+  background: var(--page);
+}
+
+/* Base elements (step 2 of "Before release: the look"). */
+h2 {
+  font-size: var(--text-2xl);
+  line-height: 1.25;
+}
+
+h3 {
+  font-size: var(--text-lg);
+}
+
+h4 {
+  font-size: var(--text-md);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* One focus ring everywhere, teal and offset, shown for keyboard focus. */
+:focus-visible {
+  outline: 3px solid var(--outline);
+  outline-offset: 2px;
+}
+
+/* Fields: one look, with a visible edge (3:1) and room to click. */
+/* `:where` keeps these at no specificity, so any class (a component's own) overrides them. */
+:where(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  min-height: var(--control-height);
+  padding: var(--space-2) 10px;
+  border: 1px solid var(--control-edge);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+/* Checkboxes and radio buttons, large enough to hit. */
+:where(input[type='checkbox'], input[type='radio']) {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+/* Buttons, in three kinds: ordinary; the main action of a form or card (a form's submit, or
+   `primary`); and destructive (`danger`: Delete, and its confirm). At no specificity (`:where`),
+   so a component's own class always wins, and later kinds override earlier ones by order. */
+:where(button) {
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--control-edge);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+:where(button):hover {
+  background: var(--page);
+}
+
+:where(button[type='submit'], button.primary) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+:where(button[type='submit'], button.primary):hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+:where(button.danger) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+:where(button.danger):hover {
+  background: var(--error-tint);
 }
 
 .app {
@@ -184,9 +272,6 @@ form.card input,
 form.card textarea {
   display: block;
   width: 100%;
-  box-sizing: border-box;
-  padding: 6px;
-  font: inherit;
 }
 
 /* A box-shadow, not an outline, so the browser's focus ring still shows on invalid fields. */
@@ -307,8 +392,6 @@ h2[tabindex='-1']:focus {
 .card > label select,
 form.card label select {
   display: block;
-  padding: 6px;
-  font: inherit;
 }
 
 /* Read by screen readers but not shown. */
@@ -384,6 +467,7 @@ form.card label select {
 
 /* A name that shows its item in a library dialog: a button that reads like a link. */
 .link-button {
+  min-height: 0;
   padding: 0;
   border: none;
   background: none;
@@ -397,7 +481,7 @@ form.card label select {
 /* The button that opens and closes a level (Disclosure, and OrderedList rows with `details`).
    The marker is decoration; aria-expanded says open or closed. */
 .disclosure-toggle {
-  padding: 2px 4px;
+  padding: var(--space-1) var(--space-1);
   border: none;
   background: none;
   color: inherit;
@@ -423,8 +507,6 @@ form.card label select {
 .stacked-form select,
 .stacked-form input {
   display: block;
-  padding: 6px;
-  font: inherit;
 }
 
 /* A name field with what the app adds after the name ("Base Resume") beside it, wrapping under

@@ -148,6 +148,7 @@ export function ProposalCard({
             <>
               <button
                 type="button"
+                className="primary"
                 aria-label={`Apply: ${title}`}
                 aria-describedby={marked ? markId : undefined}
                 aria-disabled={busy}

@@ -138,7 +138,7 @@ export default function FinalReview({
       {review?.out_of_date && <p className="note">The resume or cover letter changed since this review.</p>}
       <div className="actions">
         {/* aria-disabled, not disabled, so the button keeps focus while Claude reviews. */}
-        <button type="button" aria-disabled={busy} aria-describedby={error ? errorId : undefined} onClick={() => void run()}>
+        <button type="button" className="primary" aria-disabled={busy} aria-describedby={error ? errorId : undefined} onClick={() => void run()}>
           {busy ? 'Reviewing…' : review ? 'Review again' : 'Review now'}
         </button>
       </div>

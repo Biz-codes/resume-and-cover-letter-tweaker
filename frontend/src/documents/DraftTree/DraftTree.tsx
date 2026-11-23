@@ -648,7 +648,7 @@ export default function DraftTree({
       {finishError && !asking && <p role="alert">{finishError.message}</p>}
       <div className="actions">
         {/* aria-disabled, not disabled, so a focused button keeps focus while saving. */}
-        <button type="button" id={FINISH_ID} aria-disabled={finishing} onClick={startFinish}>
+        <button type="button" className="primary" id={FINISH_ID} aria-disabled={finishing} onClick={startFinish}>
           {finishing && !asking ? 'Approving…' : 'Approve first draft'}
         </button>
       </div>

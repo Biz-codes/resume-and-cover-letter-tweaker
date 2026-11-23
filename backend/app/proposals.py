@@ -13,7 +13,10 @@ category, or under "Other" and the project). The page keeps the document as it w
 
 Applying one also sets aside every earlier proposal still pending for the same content (`stale`):
 one in an earlier reply, or earlier in the same reply, that changes the same section, or the same
-item in the same place. Earlier ones never make a later one stale, and new text (an add with no
+item in the same place. And whenever the chat is read (after every change to the document),
+a pending one whose section, parent, or item is no longer in the document is set aside too
+(set_aside_gone), so removing something by hand folds away the cards about it. Earlier ones
+never make a later one stale, and new text (an add with no
 item yet) is never the same content as anything. A thread of replies counts too: the card the
 user replied to, to get the reply the applied one is in, and so on back up the thread, is set
 aside when it makes the same kind of change in the same place, so a summary written from scratch
@@ -343,6 +346,45 @@ class PageMarks:
         finally:
             savepoint.rollback()
         return page_mark(self.before, after)
+
+
+def gone(change: dict[str, Any], placed: Placed) -> bool:
+    """Whether what a change works on is no longer in the document: its section (for anything
+    but adding the section), the role, project, or skill category it goes under, or the item it
+    rewords, moves, or removes."""
+    section_id, target = change["section_id"], change["target"]
+    if target == "section":
+        return change["action"] != "add" and section_id not in placed.sections
+    if section_id not in placed.sections:
+        return True
+    parent_kind, parent_id = change.get("parent_kind") or "", change.get("parent_id") or 0
+    if parent_kind and placed.entry(section_id, parent_kind, parent_id) is None:
+        return True
+    if change["action"] == "add" or not change.get("item_id"):
+        return False
+    if parent_kind:
+        return placed.child(section_id, parent_kind, parent_id, target, change["item_id"]) is None
+    return placed.entry(section_id, target, change["item_id"]) is None
+
+
+def set_aside_gone(db: Session, kind: Kind, doc: Any, turns: list[ChatMessage]) -> None:
+    """Sets aside (`stale`) every pending change whose content was taken out of the document,
+    by hand or otherwise (gone), so its card folds away like any other stale one and can be
+    restored. Nothing for a chat that can't apply its proposals (a sent document, or one still
+    in Claude's draft)."""
+    try:
+        check_open(db, kind, doc)
+    except AppError:
+        return
+    placed = Placed(load_tree(db, kind, getattr(doc, kind.doc_id)))
+    for turn in turns:
+        if turn.role != ChatRole.assistant:
+            continue
+        for at, stored in enumerate(turn.proposals or []):
+            if (stored.get("kind", "change") == "change" and stored.get("state") == "pending"
+                    and gone(stored, placed)):
+                set_state(turn, at, "stale")
+    db.flush()
 
 
 def page_marks(db: Session, kind: Kind, account_id: int, doc: Any) -> PageMarks | None:

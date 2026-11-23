@@ -74,6 +74,18 @@ function markedNote(count: number, singular: string) {
   return `${count === 1 ? '1 proposed change' : `${count} proposed changes`} would take the ${singular} past its pages.`
 }
 
+// How many cards are set aside (stale), all of them.
+const staleOf = (messages: ChatMessage[] | null) =>
+  messages?.reduce((count, message) => count + (message.proposals ?? []).filter((p) => p.state === 'stale').length, 0) ?? null
+
+// Said when reading the chat again finds more set aside: their content was taken out of the
+// document (the backend's set_aside_gone), by hand or otherwise.
+function goneNote(count: number) {
+  return count === 1
+    ? '1 proposed change in the chat is now stale: what it changes was removed.'
+    : `${count} proposed changes in the chat are now stale: what they change was removed.`
+}
+
 // A change the chat announces within this long of another is said with it, so neither replaces the
 // other in the live region before it's read.
 const TOGETHER_MS = 3000
@@ -168,6 +180,12 @@ export default function ChatPanel({
   )
   // How many waiting cards were marked when the conversation was last read; null before the first.
   const marked = useRef<number | null>(null)
+  // How many cards are stale as shown now, so a read that sets more aside says so; a card's own
+  // Apply already says how many it set aside, and updates what's shown first.
+  const staleShown = useRef<number | null>(null)
+  useEffect(() => {
+    staleShown.current = staleOf(messages)
+  }, [messages])
   const focusLater = useFocusLater()
   const errorId = useId()
   const replyId = useId()
@@ -177,10 +195,15 @@ export default function ChatPanel({
       const read = await chatApi(kind).list(docId)
       setMessages(read)
       setLoadError(null)
-      // Read again after a change: say when it changed how many cards wouldn't fit.
+      // Read again after a change: say when it set cards aside, or changed how many wouldn't fit.
       const count = markedOf(read).length
-      if (marked.current !== null && count !== marked.current) {
-        const note = markedNote(count, singular)
+      const stale = staleOf(read) ?? 0
+      const notes = [
+        staleShown.current !== null && stale > staleShown.current ? goneNote(stale - staleShown.current) : '',
+        marked.current !== null && count !== marked.current ? markedNote(count, singular) : '',
+      ].filter(Boolean)
+      if (notes.length > 0) {
+        const note = notes.join(' ')
         const last = lastSaid.current
         setAnnouncement(last.text && Date.now() - last.at < TOGETHER_MS ? `${last.text} ${note}` : note)
       }

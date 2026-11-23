@@ -94,7 +94,7 @@ export default function ItemParts({
                 </button>
               )}
               {canDelete && (
-                <button type="button" ref={deleteRef} aria-label={`Delete ${name}`} onClick={() => open('delete')}>
+                <button type="button" className="danger" ref={deleteRef} aria-label={`Delete ${name}`} onClick={() => open('delete')}>
                   Delete
                 </button>
               )}

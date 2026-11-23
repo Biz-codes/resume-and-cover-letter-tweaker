@@ -7,8 +7,6 @@
 
 .tone select {
   display: block;
-  padding: 6px;
-  font: inherit;
 }
 
 /* The tree: nested lists whose levels open and close. */
