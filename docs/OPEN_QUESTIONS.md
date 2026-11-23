@@ -33,6 +33,15 @@ Choices left as they are for now. None blocks the build plan.
 27. **Measurements for the space on the page:** phase 5 step 4 in [BUILD_PLAN.md](BUILD_PLAN.md) estimates the layout from the user's usual formatting (Calibri 11 with 0.5" margins), so a resume fits on two pages with no section split across the break, and a cover letter on one. Later: let the user set the measurements per document type, font, and template, which ties in with exporting files (question 26), since an exported layout would give the real line breaks.
 28. **A phone app:** the user wants, eventually, an iOS or Android app of the platform. Still to decide: how to build it, reusing as much of the React front end as possible: an installable web app (a PWA, the least new code), the same front end wrapped as a native app (such as Capacitor), or a separate app (such as React Native). A phone app needs the backend online, not only on the user's computer, so it comes after phase 6 (release), and an app store listing fits phase 8 (a product for other job seekers) in [BUILD_PLAN.md](BUILD_PLAN.md). The pages already work at phone width.
 
+## The look (before release)
+The plan is "Before release: the look" in [BUILD_PLAN.md](BUILD_PLAN.md). Decide these before its first step.
+
+29. **Direction:** the feel in a few words, one accent color, and a name or wordmark in the header?
+30. **A mockup first,** of the main screens, or straight to the CSS?
+31. **Dark mode:** now, later, or not at all?
+32. **Font:** system fonts, or one self-hosted web font?
+33. **Own CSS or a library?** Recommended: keep writing the CSS, since the components already handle their own accessibility.
+
 ## Release (phase 6)
 Recommendations are in phase 6 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these when the phase starts.
 
