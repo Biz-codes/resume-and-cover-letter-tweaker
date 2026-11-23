@@ -276,6 +276,43 @@ describe('DraftTree', () => {
     await expectNoA11yViolations()
   })
 
+  it('says how many lines a bullet or skill category that wraps takes, and when that changes', async () => {
+    // Claude's rewording of the first bullet runs past one printed line (106 characters, after
+    // the bullet's indent), and Front End's line does with all four skills.
+    const long = `Led the React redesign of the checkout, ${'and much more besides, '.repeat(3)}shipping it on time`
+    const skills = ['React', 'CSS', 'TypeScript', 'Vite'].map((skill_name, index) => ({ skill_id: index + 1, skill_name, hidden: false }))
+    const longSkills = skills.map((skill) => ({ ...skill, skill_name: `${skill.skill_name} ${'x'.repeat(24)}` }))
+    stubApi({
+      ...Object.fromEntries(Object.entries(LIBRARY).map(([path, body]) => [`GET /api/${path}`, [{ status: 200, body }]])),
+      'GET /api/skill-categories': [
+        { status: 200, body: [{ ...(LIBRARY['skill-categories'][0] as object), skills: longSkills }] },
+      ],
+      'GET /api/resumes/4': [{ status: 200, body: { sections: START } }],
+    })
+    const draft = structuredClone(DRAFT)
+    draft.texts[2].text = long
+    draft.sections[1].entries[1].skill_ids = [1, 2, 3, 4]
+    renderDraft(draft)
+    const bullets = await rows('Bullets under Engineer, Acme in Experience')
+    expect(bullets[0]).toBe(`${long}2 lines, ${long.length - 106} characters on the secondSource: Claude`)
+    // One that fits says nothing.
+    expect(bullets[1]).toBe('Cut load time in half.Source: LibraryReject')
+    // "Front End: " and the four skills, 139 characters.
+    const items = await rows('Items in Experience')
+    expect(items[1]).toBe('Skills: Front End2 lines, 29 characters on the secondSource: Original')
+    await expectNoA11yViolations()
+
+    // The original fits, so going back to it says nothing about lines.
+    fireEvent.click(screen.getByRole('button', { name: `Rationale for "Led the React redesign of the…" under Engineer, Acme in Experience` }))
+    fireEvent.click(screen.getByRole('button', { name: /^Use the original wording of / }))
+    await vi.waitFor(() => expect(announced()).toBe('Using the original wording.'))
+
+    // Rejecting a skill says when its category's line is a line shorter (108 characters now).
+    const vite = longSkills[3].skill_name
+    fireEvent.click(screen.getByRole('button', { name: `Reject ${vite} under Front End in Experience` }))
+    await vi.waitFor(() => expect(announced()).toBe(`Rejected ${vite}. Front End now fits on one line.`))
+  })
+
   it("says when the writing rules couldn't be checked, and checks again, saying what it checks", async () => {
     stubLibrary()
     const { onCheck, rerender } = renderDraft({ ...DRAFT, checked: false }, undefined, [], undefined, 'Tech')

@@ -9,7 +9,10 @@
 // Claude's reason and, for a rewording, the other wording with a button to switch to it. What
 // Claude brought in or wrote new can be rejected, which takes it out of the draft. A row whose
 // wording in use breaks a writing rule (checked when the draft was made) is badged "Flagged",
-// with each rule, the words, and why under its name.
+// with each rule, the words, and why under its name. A bullet or skill category's line that
+// wraps when printed says by how much, as in the usual tree (shared/lineFit.ts); switching a
+// bullet's wording says it too, and rejecting a skill says when its category's count changes
+// (in the same announcement, so the tree keeps one live region).
 //
 // Each change saves the draft only (backend/app/drafts.py) and is announced here; Undo and Redo
 // on the page cover them. "Approve first draft" first asks which of Claude's texts the draft
@@ -43,6 +46,7 @@ import Disclosure from '../../shared/components/Disclosure/Disclosure'
 import Flags from '../../shared/components/WritingFlags/WritingFlags'
 import { flagCount } from '../../shared/components/WritingFlags/flagCount'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
+import { categoryLine, lineFit, lineNote } from '../../shared/lineFit'
 import { KIND_NAMES, keyOf, loadLibrary, savedItems, type Library } from '../treeItems'
 import styles from './DraftTree.module.css'
 
@@ -166,6 +170,7 @@ export function Row({
   label,
   source,
   flags,
+  note,
   onReject,
   rejectText = 'Reject',
   children,
@@ -176,6 +181,8 @@ export function Row({
   // Absent for what's neither Claude's nor the library's (a letter's usual greeting).
   source?: Source
   flags?: WritingFlag[]
+  // How many printed lines it takes, for a bullet or skill category that wraps (lineNote).
+  note?: string | null
   // Absent for what was already in the starting document, and for a rewording, which goes back
   // to the original instead.
   onReject?: () => void
@@ -187,6 +194,7 @@ export function Row({
     <li>
       <div className={styles.row}>
         <span>{name}</span>
+        {note && <span className="muted">{note}</span>}
         {source && <Badge source={source} />}
         {flags && flags.length > 0 && <span className="badge badge-flagged">Flagged</span>}
         {onReject && (
@@ -294,8 +302,16 @@ export default function DraftTree({
     const claude = claudeText(texts, row)
     return claude && !row.use_original ? claude.flags : itemFlags(itemKind, itemId)
   }
-  const switched = (useOriginal: boolean, flags?: WritingFlag[]) =>
-    (useOriginal ? 'Using the original wording.' : "Using Claude's wording.") + flagCount(flags)
+  // What switching wording says: which is in use, the rules it breaks, and for a bullet that
+  // wraps, how many lines it takes.
+  const switched = (useOriginal: boolean, flags?: WritingFlag[], bullet?: string) => {
+    const lines = bullet === undefined ? null : lineNote(bullet, true)
+    return (
+      (useOriginal ? 'Using the original wording.' : "Using Claude's wording.") +
+      flagCount(flags) +
+      (lines ? ` It takes ${lines}.` : '')
+    )
+  }
   const unused = draft.texts.filter((text) => !textsInUse(draft.sections).has(text.key))
   const listId = (key: string) => `${idBase}-${key}`
 
@@ -317,6 +333,18 @@ export default function DraftTree({
       ? draft.sections.filter((row) => row !== section)
       : draft.sections.map((row) => (row === section ? next : row))
 
+  // When rejecting a skill changes how many lines its category's line takes: " Front End now
+  // fits on one line." The category's name here is the row's, as `name`.
+  function linesChanged(name: string, before: number[], after: number[]) {
+    const names = new Map(
+      [...library!.categories, ...library!.projects].flatMap((item) => item.skills).map((skill) => [skill.skill_id, skill.skill_name]),
+    )
+    const count = (ids: number[]) => lineFit(categoryLine(name, ids.map((id) => names.get(id) ?? '')), false).lines
+    const lines = count(after)
+    if (lines === count(before)) return ''
+    return lines === 1 ? ` ${name} now fits on one line.` : ` ${name} now takes ${lines} lines.`
+  }
+
   function renderSkills(section: DraftSection, entry: DraftEntry, name: string, where: string) {
     // Claude can put any of the account's skills under a category or project, not only the ones
     // it lists, so a name comes from every list (every skill has a category).
@@ -331,17 +359,17 @@ export default function DraftTree({
         {skillIds.map((skillId) => {
           const skillName = listed.find((skill) => skill.skill_id === skillId)?.skill_name ?? ''
           const inStart = start!.skills.has(skillId)
-          const reject = () =>
+          const reject = () => {
+            const kept = skillIds.filter((other) => other !== skillId)
             void change(
               withSection(section, {
                 ...section,
-                entries: section.entries.map((row) =>
-                  row === entry ? { ...entry, skill_ids: skillIds.filter((other) => other !== skillId) } : row,
-                ),
+                entries: section.entries.map((row) => (row === entry ? { ...entry, skill_ids: kept } : row)),
               }),
-              `Rejected ${skillName}.`,
+              `Rejected ${skillName}.${entry.kind === 'category' ? linesChanged(name, skillIds, kept) : ''}`,
               after,
             )
+          }
           return (
             <Row
               key={skillId}
@@ -383,6 +411,7 @@ export default function DraftTree({
               label={label}
               source={source}
               flags={flagsOf('bullet', bullet, bullet.bullet_id)}
+              note={lineNote(text, true)}
               onReject={
                 canReject
                   ? () => void change(withBullets(bullets.filter((row) => row !== bullet)), `Rejected "${shortBullet(text)}".`, after)
@@ -398,7 +427,11 @@ export default function DraftTree({
                 onSwitch={(useOriginal) =>
                   void change(
                     withBullets(bullets.map((row) => (row === bullet ? { ...row, use_original: useOriginal } : row))),
-                    switched(useOriginal, flagsOf('bullet', { ...bullet, use_original: useOriginal }, bullet.bullet_id)),
+                    switched(
+                      useOriginal,
+                      flagsOf('bullet', { ...bullet, use_original: useOriginal }, bullet.bullet_id),
+                      useOriginal ? original : (claude?.text ?? original),
+                    ),
                   )
                 }
               />
@@ -411,6 +444,10 @@ export default function DraftTree({
 
   function renderEntries(section: DraftSection, title: string) {
     const where = `in ${title}`
+    // Every skill's name, since Claude can put any of them under a category (as renderSkills).
+    const skillNames = new Map(
+      [...library!.categories, ...library!.projects].flatMap((item) => item.skills).map((skill) => [skill.skill_id, skill.skill_name]),
+    )
     const id = listId(`section-${sectionKey(section)}`)
     if (section.entries.length === 0) return <p className="muted">Nothing here.</p>
     const after = section.entries.length > 1 ? id : listId('sections')
@@ -425,6 +462,16 @@ export default function DraftTree({
           const isNew = entry.item_id === null
           const source = sourceOf(texts, entry, !isNew && start!.entries.has(keyOf(entry.kind, entry.item_id!)))
           const canReject = isNew || (source === 'library' && !claude)
+          // A skill category's printed line, with the skills Claude put under it.
+          const categoryText =
+            entry.kind === 'category'
+              ? categoryLine(
+                  saved,
+                  (entry.skill_ids ?? []).map((skillId) => skillNames.get(skillId) ?? ''),
+                )
+              : null
+          const note =
+            entry.kind === 'bullet' ? lineNote(name, true) : categoryText === null ? null : lineNote(categoryText, false)
           return (
             <Row
               key={isNew ? `new:${entry.text_key}` : keyOf(entry.kind, entry.item_id!)}
@@ -436,6 +483,7 @@ export default function DraftTree({
               label={label}
               source={source}
               flags={isText(entry.kind) ? flagsOf(entry.kind, entry, entry.item_id) : undefined}
+              note={note}
               onReject={
                 canReject
                   ? () =>
@@ -459,7 +507,11 @@ export default function DraftTree({
                       ...section,
                       entries: section.entries.map((row) => (row === entry ? { ...entry, use_original: useOriginal } : row)),
                     }),
-                    switched(useOriginal, flagsOf(entry.kind, { ...entry, use_original: useOriginal }, entry.item_id)),
+                    switched(
+                      useOriginal,
+                      flagsOf(entry.kind, { ...entry, use_original: useOriginal }, entry.item_id),
+                      entry.kind === 'bullet' ? (useOriginal ? saved : (claude?.text ?? saved)) : undefined,
+                    ),
                   )
                 }
               />

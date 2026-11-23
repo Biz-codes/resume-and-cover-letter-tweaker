@@ -14,7 +14,10 @@ category, or under "Other" and the project). The page keeps the document as it w
 Applying one also sets aside every earlier proposal still pending for the same content (`stale`):
 one in an earlier reply, or earlier in the same reply, that changes the same section, or the same
 item in the same place. Earlier ones never make a later one stale, and new text (an add with no
-item yet) is never the same content as anything.
+item yet) is never the same content as anything. A thread of replies counts too: the card the
+user replied to, to get the reply the applied one is in, and so on back up the thread, is set
+aside when it makes the same kind of change in the same place, so a summary written from scratch
+over several replies keeps only the version applied.
 
 Each proposal still waiting is shown with whether it would take the document past its pages
 (PageMarks), estimated against the document as it is each time the chat is read.
@@ -89,14 +92,42 @@ def content_key(proposal: dict[str, Any]) -> tuple[Any, ...] | None:
             proposal["parent_kind"], proposal["parent_id"])
 
 
+def place_key(proposal: dict[str, Any]) -> tuple[Any, ...]:
+    """The kind of change and where it goes, for following a thread of replies: the same kind of
+    content in the same section, role, or project."""
+    return (proposal.get("kind", "change"), proposal.get("target"), proposal.get("section_id"),
+            proposal.get("parent_kind"), proposal.get("parent_id"))
+
+
+def thread_of(turns: list[ChatMessage], message: ChatMessage) -> list[tuple[ChatMessage, str]]:
+    """The cards `message` answers, back up the thread: the card the user's message before it
+    replied to, then the card the message before that one replied to, and so on."""
+    by_id = {turn.message_id: turn for turn in turns}
+    found: list[tuple[ChatMessage, str]] = []
+    reply = message
+    while True:
+        asked = next((turn for turn in reversed(turns) if turn.role == ChatRole.user
+                      and turn.message_id < reply.message_id), None)
+        if asked is None or not asked.reply_to:
+            return found
+        earlier = by_id.get(asked.reply_to["message_id"])
+        if earlier is None or earlier.message_id >= reply.message_id:
+            return found
+        found.append((earlier, asked.reply_to["proposal_id"]))
+        reply = earlier
+
+
 def mark_stale(turns: list[ChatMessage], message: ChatMessage,
                index: int) -> tuple[list[ChatMessage], int]:
-    """Sets aside the pending proposals for the same content as the one at `index` in `message`
-    that came before it, in the conversation `turns` (in order). Returns the other messages that
-    changed, and how many proposals went stale in all."""
-    key = content_key(message.proposals[index])
-    if key is None:
-        return [], 0
+    """Sets aside the pending proposals that the one at `index` in `message` replaces, in the
+    conversation `turns` (in order): those for the same content that came before it, and the
+    cards it answers back up the thread of replies (thread_of) that make the same kind of change
+    in the same place, so a new version of new text sets its earlier versions aside. Returns the
+    other messages that changed, and how many proposals went stale in all."""
+    applied = message.proposals[index]
+    key = content_key(applied)
+    place = place_key(applied)
+    answered = {(turn.message_id, proposal_id) for turn, proposal_id in thread_of(turns, message)}
     changed: list[ChatMessage] = []
     count = 0
     for turn in turns:
@@ -104,7 +135,10 @@ def mark_stale(turns: list[ChatMessage], message: ChatMessage,
             continue
         stale = [at for at, stored in enumerate(turn.proposals or [])
                  if (turn.message_id < message.message_id or at < index)
-                 and stored.get("state") == "pending" and content_key(stored) == key]
+                 and stored.get("state") == "pending"
+                 and ((key is not None and content_key(stored) == key)
+                      or ((turn.message_id, stored.get("id")) in answered
+                          and place_key(stored) == place))]
         if not stale:
             continue
         for at in stale:

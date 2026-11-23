@@ -36,11 +36,11 @@ Choices left as they are for now. None blocks the build plan.
 ## The look (before release)
 The plan is "Before release: the look" in [BUILD_PLAN.md](BUILD_PLAN.md). Decide these before its first step.
 
-29. **Direction:** the feel in a few words, one accent color, and a name or wordmark in the header?
-30. **A mockup first,** of the main screens, or straight to the CSS?
-31. **Dark mode:** now, later, or not at all?
-32. **Font:** system fonts, or one self-hosted web font?
-33. **Own CSS or a library?** Recommended: keep writing the CSS, since the components already handle their own accessibility.
+29. ~~**Direction**~~: decided. As user-friendly as possible: cleanly laid out, and obvious where to click for what. Each design choice (the color palette, the accent, a name or wordmark, and the rest) is suggested and approved by the user one at a time as the work goes.
+30. ~~**Mockups first**~~: decided yes, drawn by Claude as private design pages on claude.ai that the user comments on, not in Figma.
+31. ~~**Dark mode**~~: decided. Later, not in this step; the colors are variables, so a second set can be added.
+32. ~~**Font**~~: decided. System fonts for now, maybe changed later.
+33. ~~**Own CSS or a library**~~: decided. Our own CSS, laid out with flexbox (and grid where a layout has rows and columns), no component or utility library.
 
 ## Release (phase 6)
 Recommendations are in phase 6 of [BUILD_PLAN.md](BUILD_PLAN.md). Decide these when the phase starts.

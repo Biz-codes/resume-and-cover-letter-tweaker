@@ -48,6 +48,7 @@ from app.routers.sections import get_section
 from app.schemas import RequiredText
 from app.usage import BULLET_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 from app.writing_check import Flag
+from app.writing_rules import shown_flags, switched_off
 
 router = APIRouter(prefix="/api/bullet-points", tags=["bullet points"])
 
@@ -92,8 +93,9 @@ def to_out(db: Session, bullets: list[BulletPoint], account_id: int) -> list[Bul
                             order_by=Project.project_title)
     sections = section_refs(db, SectionBulletPoint, "bullet_id", ids)
     used_by = uses(db, BULLET_LINKS, ids)
+    off = switched_off(db, account_id)
     return [BulletOut(bullet_id=bullet.bullet_id, hidden=bullet.hidden, content=bullet.content,
-                      flags=bullet.flags,
+                      flags=shown_flags(bullet.flags, off),
                       experience=experience[bullet.bullet_id],
                       projects=projects[bullet.bullet_id], sections=sections[bullet.bullet_id],
                       used_by=used_by[bullet.bullet_id])

@@ -35,7 +35,7 @@ Built in phase 5 step 3 (see [BUILD_PLAN.md](BUILD_PLAN.md)): Claude's draft of 
 - **Terms are found in code:** whole words, ignoring capitals, including a single word's usual endings ("leveraged", "spearheading") and a hyphen written as a space ("results driven"). Finding one only makes it a candidate.
 - **Claude judges the rest** in one quick check: whether each found term is filler or a real term (the test above), the patterns, and the document's tone.
 - **Claude's own text is fixed first:** filler or a broken pattern in what Claude wrote is reworded before the user sees it. A fix changes how the text says things, never what it says: it keeps every point, fact, and name, and in the chat, everything the user's message asked for. When a rule can't be met without dropping one, the text is flagged instead. Whatever still breaks a rule is shown with the rule and why, and the user decides.
-- **The user's own text is only flagged,** never changed. Deleting a rule takes its flags off the library's text too.
+- **The user's own text is only flagged,** never changed. Deleting a rule takes its flags off the library's text too. Switching one off hides its flags until it's switched on again.
 
 ## Tone rules
 The user can add and adjust rules about tone, combine them into tones (one rule can be in many tones), and pick which tone applies to a resume or cover letter. Different kinds of jobs call for different word choice and sentence structure. For example, a tech resume favors tools, metrics, and short technical bullets, while a teaching resume favors students, outcomes, and collaboration.

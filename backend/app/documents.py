@@ -52,6 +52,7 @@ from app.models import (
 )
 from app.usage import Use
 from app.versions import is_locked, shown_name
+from app.writing_rules import shown_flags, switched_off
 
 EntryKind = Literal["narrative", "category", "experience", "project", "bullet", "education"]
 
@@ -219,14 +220,22 @@ def load_tree(db: Session, kind: Kind, doc_id: int) -> list[SectionTree]:
 
 
 def _add_flags(db: Session, entries: list[Entry], bullets: list[Child]) -> None:
-    """Each narrative content's and bullet's writing flags, read in one query per kind."""
+    """Each narrative content's and bullet's writing flags, read in one query per kind, without
+    those for rules switched off."""
     narrative_ids = {entry.item_id for entry in entries if entry.kind == "narrative"}
     bullet_ids = ({entry.item_id for entry in entries if entry.kind == "bullet"}
                   | {child.item_id for child in bullets})
-    narrative = dict(db.execute(select(NarrativeContent.content_id, NarrativeContent.flags)
-                                .where(NarrativeContent.content_id.in_(narrative_ids))).all())
-    bullet = dict(db.execute(select(BulletPoint.bullet_id, BulletPoint.flags)
-                             .where(BulletPoint.bullet_id.in_(bullet_ids))).all())
+    narrative_rows = db.execute(select(NarrativeContent.content_id, NarrativeContent.flags,
+                                       NarrativeContent.account_id)
+                                .where(NarrativeContent.content_id.in_(narrative_ids))).all()
+    bullet_rows = db.execute(select(BulletPoint.bullet_id, BulletPoint.flags,
+                                    BulletPoint.account_id)
+                             .where(BulletPoint.bullet_id.in_(bullet_ids))).all()
+    # A rule switched off keeps its flags on the text, hidden (app/writing_rules.py).
+    accounts = {row[2] for row in [*narrative_rows, *bullet_rows]}
+    off = switched_off(db, accounts.pop()) if len(accounts) == 1 else set()
+    narrative = {row[0]: shown_flags(row[1], off) for row in narrative_rows}
+    bullet = {row[0]: shown_flags(row[1], off) for row in bullet_rows}
     for entry in entries:
         if entry.kind == "narrative":
             entry.flags = narrative.get(entry.item_id)

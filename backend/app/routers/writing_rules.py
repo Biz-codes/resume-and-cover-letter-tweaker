@@ -1,8 +1,9 @@
 """Writing rules: banned terms and patterns applied to every suggestion (docs/WRITING_RULES.md).
 
 Rules steer suggestions and are never printed, so they're always edited in place. Switching
-a rule off (active false) keeps it without applying it. Deleting one also takes its flags off
-the library's bullets and narrative content.
+a rule off (active false) keeps it without applying it, and hides the flags it put on the
+library's text until it's switched on again (app/writing_rules.py, shown_flags). Deleting one
+also takes its flags off the library's bullets and narrative content.
 """
 
 from fastapi import APIRouter, status

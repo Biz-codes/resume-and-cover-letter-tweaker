@@ -36,6 +36,7 @@ from app.refs import SectionRef, section_refs
 from app.schemas import RequiredText
 from app.usage import NARRATIVE_LINKS, DocRef, Use, edit_choice, switch_unsent, uses
 from app.writing_check import Flag
+from app.writing_rules import shown_flags, switched_off
 
 router = APIRouter(prefix="/api/narrative-content", tags=["narrative content"])
 
@@ -69,8 +70,9 @@ def to_out(db: Session, excerpts: list[NarrativeContent]) -> list[NarrativeOut]:
     ids = [excerpt.content_id for excerpt in excerpts]
     sections = section_refs(db, SectionNarrativeContent, "content_id", ids)
     used_by = uses(db, NARRATIVE_LINKS, ids)
-    return [NarrativeOut(content_id=excerpt.content_id,
-                         hidden=excerpt.hidden, content=excerpt.content, flags=excerpt.flags,
+    off = switched_off(db, excerpts[0].account_id) if excerpts else set()
+    return [NarrativeOut(content_id=excerpt.content_id, hidden=excerpt.hidden,
+                         content=excerpt.content, flags=shown_flags(excerpt.flags, off),
                          sections=sections[excerpt.content_id],
                          used_by=used_by[excerpt.content_id])
             for excerpt in excerpts]

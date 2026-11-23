@@ -17,7 +17,7 @@ A web app that tailors your resume and cover letter to each job posting, using a
 | ![A posting's "Review together": the keywords each document covers, and a finding with a fix to apply](docs/images/review-together.png) | |
 -->
 
-The walkthrough uses made-up demo data (`db/seed_demo.sql`), never real applications.
+The walkthrough uses made-up demo data (`db/seed_demo.sql`), never real applications. For how the look was designed, one decision at a time from mockups, see [Design Decisions](docs/DESIGN.md).
 
 ## What stands out in how it's built
 - **Claude's output is checked before it's shown.** Every Claude request uses structured outputs, so replies come back as typed data, and the backend checks every id in a suggestion is the user's own and listed where Claude put it before the draft reaches the screen. The library and earlier documents are sent first with prompt caching, so later requests reuse them.
@@ -99,4 +99,5 @@ Then open http://localhost:5173. The first visit creates your account, with the 
 - [Database](docs/DATABASE.md): library tables, join tables, and delete behavior
 - [Front End Checks](docs/FRONTEND_CHECKS.md): rules the database doesn't enforce, which the app must handle
 - [API Errors](docs/API_ERRORS.md): error codes and how failures are handled
+- [Design Decisions](docs/DESIGN.md): the mockups behind the app's look, the options each was chosen over, and why
 - [Walkthrough](docs/WALKTHROUGH.md): the script for the recorded walkthrough, with the demo setup and the screenshots to take

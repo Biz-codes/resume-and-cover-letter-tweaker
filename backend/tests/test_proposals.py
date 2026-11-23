@@ -229,6 +229,47 @@ def test_new_text_never_sets_others_aside(client: TestClient, db: Session, accou
     assert body["stale"] == 0
 
 
+def test_applying_a_reply_sets_aside_the_cards_it_answers(client: TestClient, db: Session,
+                                                          account_id: int):
+    # New text written over a thread of replies, as a summary from scratch is: each reply's
+    # card is a new version of the one replied to.
+    doc, ids = setup_resume(db, account_id)
+
+    def draft(text: str):
+        # In Experience, the section the test resume has; any content goes in any section.
+        return change("add", "narrative", EXPERIENCE_SECTION_ID, 0, new_text=text)
+
+    def reply_to(message: ChatMessage, proposal: str = "toolu_1"):
+        add(db, ChatMessage(account_id=account_id, resume_id=doc.resume_id, role=ChatRole.user,
+                            text="Shorter.", about={"level": "document"}, content=[],
+                            reply_to={"message_id": message.message_id, "proposal_id": proposal,
+                                      "label": "Add new text in Summary", "text": ""}))
+        return add(db, ChatMessage(
+            account_id=account_id, resume_id=doc.resume_id, role=ChatRole.assistant,
+            text="Here.", content=[], proposals=[Proposal(id="toolu_1", **draft("C.")).model_dump(),
+                                                 Proposal(id="toolu_2", **change(
+                                                     "add", "bullet", EXPERIENCE_SECTION_ID, 0,
+                                                     new_text="D.", parent_kind="experience",
+                                                     parent_id=ids["job"])).model_dump()]))
+
+    first = proposed(db, account_id, doc, draft("A."))
+    unrelated = proposed(db, account_id, doc, draft("Another paragraph."))
+    second = reply_to(first)
+    third = reply_to(second)
+    response = apply(client, doc, third)
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["stale"] == 2
+    # Read again: the request changed them in its own session.
+    for message in (first, second, unrelated):
+        db.refresh(message)
+    assert [first.proposals[0]["state"], second.proposals[0]["state"]] == ["stale", "stale"]
+    # Outside the thread, or another kind of change in it, is left alone.
+    assert unrelated.proposals[0]["state"] == "pending"
+    assert second.proposals[1]["state"] == "pending"
+    assert [p["state"] for p in body["message"]["proposals"]] == ["applied", "pending"]
+
+
 def test_refuses_what_isnt_there_or_cant_change(client: TestClient, db: Session,
                                                 account_id: int):
     doc, ids = setup_resume(db, account_id)

@@ -402,6 +402,47 @@ def test_deleting_one_of_two_same_rules_keeps_their_flags(client: TestClient, db
     assert row.flags == [flagged("em dashes")]
 
 
+def test_a_rule_switched_off_hides_its_flags_until_its_switched_on(client: TestClient,
+                                                                  db: Session, account_id: int):
+    from tests.test_chat import setup_resume
+
+    doc, ids = setup_resume(db, account_id)
+    rule = add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.term,
+                               rule_text="leverage"))
+    shipped = db.get(BulletPoint, ids["Shipped it"])
+    shipped.flags = [flagged("leverage", "term"), flagged("em dashes")]
+    text = narrative(db, account_id, "Leveraged it")
+    text.flags = [flagged("leverage", "term")]
+    db.flush()
+
+    def shown() -> tuple[list, list, list]:
+        bullets = client.get("/api/bullet-points").json()
+        excerpts = client.get("/api/narrative-content").json()
+        tree = client.get(f"/api/resumes/{doc.resume_id}").json()["sections"]
+        [entry] = [entry for section in tree for entry in section["entries"]]
+        return ([b["flags"] for b in bullets if b["bullet_id"] == ids["Shipped it"]][0],
+                [e["flags"] for e in excerpts if e["content_id"] == text.content_id][0],
+                [b["flags"] for b in entry["bullets"] if b["item_id"] == ids["Shipped it"]][0])
+
+    def switch(active: bool) -> None:
+        body = {"kind": "term", "rule_text": "leverage", "active": active}
+        response = client.put(f"/api/writing-rules/{rule.writing_rule_id}", json=body)
+        assert response.status_code == 200
+
+    switch(False)
+    # Hidden everywhere the library's text shows: the library pages and a document's tree.
+    assert shown() == ([flagged("em dashes")], [], [flagged("em dashes")])
+    # Kept, so switching it on brings them back.
+    switch(True)
+    assert shown() == ([flagged("leverage", "term"), flagged("em dashes")],
+                       [flagged("leverage", "term")],
+                       [flagged("leverage", "term"), flagged("em dashes")])
+    # Another rule with the same text that's on keeps them shown.
+    switch(False)
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.term, rule_text="leverage"))
+    assert shown()[1] == [flagged("leverage", "term")]
+
+
 def test_writing_rule_errors(client: TestClient, db: Session, account_id: int):
     response = client.post("/api/writing-rules", json={"kind": "word", "rule_text": "synergy"})
     assert error(response) == (422, "VALIDATION_FAILED", "kind")
