@@ -4,9 +4,9 @@
    back to it. Colors come from index.css. */
 .panel {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 12px 16px;
-  background: var(--page);
+  background: var(--surface);
 }
 
 @media (min-width: 1024px) {

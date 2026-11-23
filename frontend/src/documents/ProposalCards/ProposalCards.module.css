@@ -9,7 +9,7 @@
 
 .card {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 8px 12px;
 }
 
@@ -32,7 +32,7 @@
 /* The list of cards still waiting, above the chat panel's message box. */
 .waiting {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 8px 12px;
   margin: 0 0 8px;
 }

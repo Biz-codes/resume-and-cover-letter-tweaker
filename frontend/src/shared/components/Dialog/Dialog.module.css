@@ -4,7 +4,7 @@
   max-height: calc(100% - 32px);
   padding: 16px 24px 24px;
   border: 1px solid var(--outline);
-  border-radius: 6px;
+  border-radius: var(--radius);
   color: inherit;
 }
 

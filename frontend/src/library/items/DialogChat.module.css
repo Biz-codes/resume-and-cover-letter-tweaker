@@ -19,7 +19,7 @@
   margin-top: 4px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 /* Claude's wording the writing check couldn't read. */

@@ -1,18 +1,69 @@
 :root {
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  color: #1f1d24;
-  background: #fff;
-  /* Colors the components' own CSS modules use, kept here so a11yChecks.ts checks them. */
-  --border: #d8d5dd;
-  --highlight: #ece9f0;
-  /* The page's own background, for a panel that covers the page (ChatPanel.module.css). */
-  --page: #fff;
-  --outline: #5f5b66;
-  /* The line beside the writing rules a draft's row breaks (DraftTree.module.css). */
-  --flag: #b3261e;
+  /* The design tokens (docs/BUILD_PLAN.md, "Before release: the look"): every color, size, and
+     shadow the app uses, set once here. Rules below and components' CSS modules use these
+     variables, never their own values, so a11yChecks.ts can check every color pair. */
+
+  /* Colors: the calm teal palette. */
+  --text: #1a2422;
+  --muted: #56625f;
+  --page: #f4f7f6;
+  --surface: #ffffff;
+  /* Dividers and card edges: decoration, so they needn't reach 3:1. */
+  --border: #d3dcd9;
+  /* The edges of fields and buttons, which must reach 3:1 (WCAG 1.4.11). */
+  --control-edge: #7a8784;
+  --accent: #0f766e;
+  --accent-hover: #0b554f;
+  --accent-tint: #e3f1ef;
+  /* What's being moved, a title hovered to rename, your own messages in the chat. */
+  --highlight: var(--accent-tint);
+  /* Errors and Delete. */
+  --error: #b3261e;
+  --error-tint: #fbeaea;
+  /* Warnings: what wouldn't fit on the page, a line that wraps. */
+  --warning: #7a4b00;
+  --warning-tint: #fdf1dc;
+  --warning-edge: #b07400;
+  /* The line beside the writing rules a row breaks (WritingFlags.module.css). */
+  --flag: var(--error);
+  /* Claude's draft's badges: a tint for each source. */
+  --badge-original: #eef1f0;
+  --badge-claude: #ece8f7;
+  --badge-claude-edge: #6b5bb5;
+  /* The focus ring and other strong edges (OrderedList's moving row, the side panel's tabs). */
+  --outline: var(--accent);
   /* What a modal dialog dims the page behind it with (Dialog.module.css). */
-  --backdrop: #1f1d2480;
+  --backdrop: #1a242280;
+
+  /* Type: system fonts, on a small scale. */
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.625rem;
+
+  /* Spacing steps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+
+  /* Corners, sizes, and shadows. */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --control-height: 40px;
+  --shadow-dialog: 0 12px 40px #1a242240;
+
+  font-family: var(--font);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--page);
 }
 
 body {
@@ -104,14 +155,15 @@ nav a.active {
 }
 
 .muted {
-  color: #5f5b66;
+  color: var(--muted);
 }
 
 .card {
-  border: 1px solid #d8d5dd;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  background: var(--surface);
 }
 
 .card h3,
@@ -140,8 +192,8 @@ form.card textarea {
 /* A box-shadow, not an outline, so the browser's focus ring still shows on invalid fields. */
 input[aria-invalid='true'],
 textarea[aria-invalid='true'] {
-  border-color: #b3261e;
-  box-shadow: 0 0 0 1px #b3261e;
+  border-color: var(--error);
+  box-shadow: 0 0 0 1px var(--error);
 }
 
 button[aria-disabled='true'] {
@@ -156,7 +208,7 @@ h2[tabindex='-1']:focus {
 }
 
 [role='alert'] {
-  color: #b3261e;
+  color: var(--error);
 }
 
 .actions {
@@ -178,19 +230,22 @@ h2[tabindex='-1']:focus {
 }
 
 .tag {
-  margin-left: 8px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: #ece9f0;
-  font-size: 0.85em;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: var(--accent-tint);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 /* Where a row of Claude's draft comes from (DraftTree). The text tells them apart; the colors
    only help. */
 .badge {
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 0.75em;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -198,32 +253,37 @@ h2[tabindex='-1']:focus {
 }
 
 .badge-original {
-  background: #ece9f0;
+  background: var(--badge-original);
 }
 
 .badge-library {
-  background: #dcecf7;
+  border-color: var(--accent);
+  background: var(--accent-tint);
 }
 
 .badge-claude {
-  background: #f8e6c4;
+  border-color: var(--badge-claude-edge);
+  background: var(--badge-claude);
 }
 
 .badge-flagged {
-  background: #f9dedc;
+  border-color: var(--error);
+  color: var(--error);
+  background: var(--error-tint);
 }
 
 .note,
 .confirm {
-  background: #fdf6e3;
-  padding: 8px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .choice {
-  margin: 0 0 8px;
-  border: 1px solid #d8d5dd;
-  border-radius: 4px;
+  margin: 0 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 /* One checkbox per line, wherever a group of them appears. */

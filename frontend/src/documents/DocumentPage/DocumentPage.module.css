@@ -38,7 +38,7 @@
   margin: 4px 0 0;
   padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

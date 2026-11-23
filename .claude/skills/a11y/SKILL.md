@@ -7,7 +7,7 @@ description: Review the whole front end for accessibility (WCAG 2.2 AA), not jus
 
 Every component and page is tested for accessibility from the start. Every test run (`npm test`, `vitest run`, a single file, or a watch-mode rerun) runs all the automated checks:
 
-1. **Whole-front-end checks** (`frontend/a11yChecks.ts`, Vitest global setup) run before the tests and stop the run if any fail: every `.tsx` file has a sibling `.test.tsx`, oxlint's jsx-a11y rules pass, and the color pairs in `CONTRAST_PAIRS` meet 4.5:1. oxlint also runs on every edit through the PostToolUse hook.
+1. **Whole-front-end checks** (`frontend/a11yChecks.ts`, Vitest global setup) run before the tests and stop the run if any fail: every `.tsx` file has a sibling `.test.tsx`, oxlint's jsx-a11y rules pass, the color pairs in `CONTRAST_PAIRS` meet 4.5:1 and those in `NON_TEXT_PAIRS` 3:1, and CSS modules use only the color and corner variables from `index.css`. oxlint also runs on every edit through the PostToolUse hook.
 2. **axe-core** (`frontend/src/test/axe.ts`) runs automatically after every test that rendered something (`src/test/setup.ts`), so every front end test is an accessibility test. Tests also call `expectNoA11yViolations()` themselves for each state they pass through before the end.
 3. **This review** covers what tools can't: focus, keyboard flow, what a screen reader announces, and whether names make sense out of context. axe finds roughly a third of real problems, so this step is not optional.
 
@@ -60,7 +60,7 @@ Every component and page is tested for accessibility from the start. Every test 
 - The shell keeps `header`, `nav`, and `main` landmarks, with page content inside `main`.
 
 **Color and motion**
-- Text contrast is at least 4.5:1, or 3:1 for text at least 24px (or bold and at least 18.66px). Field borders, focus outlines, and other parts of controls are at least 3:1 (WCAG 1.4.11). When you add a text color or a background to `index.css`, add the pair to `CONTRAST_PAIRS` in `frontend/a11yChecks.ts`.
+- Text contrast is at least 4.5:1, or 3:1 for text at least 24px (or bold and at least 18.66px). Field borders, focus outlines, and other parts of controls are at least 3:1 (WCAG 1.4.11). Colors are the tokens on `:root` in `index.css`; when you add a text color or a background, add the pair to `CONTRAST_PAIRS` in `frontend/a11yChecks.ts`, and a control edge, ring, or icon color to `NON_TEXT_PAIRS`.
 - Respect `prefers-reduced-motion` for any animation.
 
 **Content**
