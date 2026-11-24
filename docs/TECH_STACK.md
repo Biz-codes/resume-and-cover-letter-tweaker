@@ -23,7 +23,7 @@
 - **Tests:** pytest for the backend, Vitest for the front end.
 - **Linting:** ruff (Python), and tsc and oxlint (TypeScript, including oxlint's jsx-a11y accessibility rules), run automatically by a Claude Code hook after each edit.
 - **Accessibility:** the front end targets WCAG 2.2 AA. See "Accessibility" below.
-- **Layout across screen sizes:** the CSS (`frontend/src/index.css`) is written for narrow screens first, and no page needs sideways scrolling down to 320px wide (WCAG 1.4.10). Site-wide breakpoints: small is under 640px (rows stack, spacing tightens), medium is 640px and up (the default), and large is 1024px and up (the page widens). Use these same numbers in every media query. Form controls never grow wider than their container.
+- **Layout across screen sizes:** the CSS (`frontend/src/index.css`) is written for narrow screens first, and no page needs sideways scrolling down to 320px wide (WCAG 1.4.10). Site-wide breakpoints: small is under 640px (rows stack, spacing tightens), medium is 640px and up (the default), and large is 1024px and up (the page widens). The shell is a full-width white header bar (`app-header`), with the name on the left and the main links on the right, wrapping under the name when there's no room, the current one tinted; it and the page under it (`app-main`) line up through `app-width`: 960px wide with 16px gutters, 12px on small screens, and 1280px with 40px gutters on large ones. Use these same numbers in every media query. Form controls never grow wider than their container.
 
 ## Running it
 Postgres 18 runs as a Homebrew service on port 5433 (see [BUILD_PLAN.md](BUILD_PLAN.md)). From `backend/`:

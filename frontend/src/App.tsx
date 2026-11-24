@@ -51,26 +51,29 @@ function App() {
 
   return (
     <div className="app">
-      <header>
-        <h1>Resume and Cover Letter Tweaker</h1>
-        <nav aria-label="Main">
-          <NavLink to="/" end>
-            Home
-          </NavLink>
-          {MODES.map((mode) => (
-            // A mode's link stays marked on its sub-pages, as the current section ("true")
-            // rather than the current page.
-            <NavLink
-              key={mode.path}
-              to={mode.path}
-              aria-current={pathname === mode.path ? 'page' : 'true'}
-            >
-              {mode.name}
+      {/* A full-width bar, its name and links lined up with the page below (app-width). */}
+      <header className="app-header">
+        <div className="app-width app-header-inner">
+          <h1>Resume and Cover Letter Tweaker</h1>
+          <nav aria-label="Main">
+            <NavLink to="/" end>
+              Home
             </NavLink>
-          ))}
-        </nav>
+            {MODES.map((mode) => (
+              // A mode's link stays marked on its sub-pages, as the current section ("true")
+              // rather than the current page.
+              <NavLink
+                key={mode.path}
+                to={mode.path}
+                aria-current={pathname === mode.path ? 'page' : 'true'}
+              >
+                {mode.name}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
       </header>
-      <main>
+      <main className="app-width app-main">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/library" element={<LibraryLayout />}>

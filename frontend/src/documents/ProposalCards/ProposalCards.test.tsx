@@ -187,7 +187,7 @@ group('ProposalCards', () => {
     expect(within(card).getByText('stale')).toHaveClass('tag')
     expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual(['Restore', 'Reply'])
     expect(within(card).getByRole('button', { name: 'Restore: Reword the bullet "Shipped it" in Experience' })).toBeInTheDocument()
-    expect(within(card).getByText('Details', { exact: false, selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    expect(within(card).getByText('Details', { exact: false, selector: 'summary > span' }).closest('details')).not.toHaveAttribute('open')
     await expectNoA11yViolations()
   })
 
@@ -296,7 +296,7 @@ group('ProposalCards', () => {
     renderCards(message({ ...base, state: 'applied' }))
     expect(screen.getByText('applied')).toHaveClass('tag')
     expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Reply'])
-    const summary = screen.getByText('Details', { exact: false, selector: 'summary' })
+    const summary = screen.getByText('Details', { exact: false, selector: 'summary > span' })
     expect(summary).toHaveTextContent('Details of Reword the bullet "Shipped it" in Experience')
     expect(summary.closest('details')).not.toHaveAttribute('open')
     await expectNoA11yViolations()
@@ -308,13 +308,13 @@ group('ProposalCards', () => {
 
   it("folds away a dismissed change's details, keeping Restore", () => {
     renderCards(message({ ...NEW, state: 'dismissed' }))
-    expect(screen.getByText('Details', { exact: false, selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Details', { exact: false, selector: 'summary > span' }).closest('details')).not.toHaveAttribute('open')
     expect(screen.getByRole('button', { name: 'Restore: Add new bullet in Experience' })).toBeInTheDocument()
   })
 
   it('has no details to fold away for a change without any', () => {
     renderCards(message({ ...base, action: 'remove', reason: '', state: 'applied' }))
-    expect(screen.queryByText('Details', { exact: false, selector: 'summary' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Details', { exact: false, selector: 'summary > span' })).not.toBeInTheDocument()
   })
 
   it("only shows a sent document's cards", async () => {

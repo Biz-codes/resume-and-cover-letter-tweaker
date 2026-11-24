@@ -23,6 +23,19 @@ describe('Disclosure', () => {
     expect(screen.queryByText('Summary')).not.toBeInTheDocument()
   })
 
+  it('marks open and closed with a chevron that screen readers skip, since they hear aria-expanded', () => {
+    render(
+      <Disclosure title="Sections (2)">
+        <p>Summary</p>
+      </Disclosure>,
+    )
+    const toggle = screen.getByRole('button', { name: 'Sections (2)' })
+    const chevron = toggle.querySelector('svg')!
+    expect(chevron).toHaveAttribute('aria-hidden', 'true')
+    expect(chevron).toHaveClass('disclosure-mark')
+    expect(toggle.textContent).toBe('Sections (2)')
+  })
+
   it('can sit in a heading, so it is found by heading', async () => {
     render(
       <Disclosure title="Preview and copy" heading={3}>

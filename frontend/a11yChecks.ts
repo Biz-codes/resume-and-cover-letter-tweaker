@@ -51,6 +51,9 @@ const NON_TEXT_PAIRS: [string, string, string][] = [
   ['--outline', '--accent-tint', 'the focus ring on a tinted row'],
   ['--warning-edge', '--surface', "a warning's edge"],
   ['--error', '--surface', 'an invalid field or Delete button edge'],
+  ['--muted', '--surface', 'a chevron or icon on a card'],
+  ['--muted', '--page', 'a chevron or icon on the page'],
+  ['--muted', '--accent-tint', 'a chevron or icon on a tinted row'],
 ]
 
 function missingTests() {

@@ -158,10 +158,63 @@ a:hover {
   background: var(--error-tint);
 }
 
-.app {
+/* The shell: a full-width header bar, and the page under it. `app-width` lines both up: the same
+   width and side gutters at each breakpoint. */
+.app-width {
   max-width: 960px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding-inline: var(--space-4);
+}
+
+.app-main {
+  padding-block: var(--space-5);
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* The name on the left and the links on the right; the links wrap under the name when there's
+   no room. */
+.app-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding-block: var(--space-3);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.app-header nav {
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.app-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 0 14px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.app-header nav a:hover {
+  background: var(--page);
+}
+
+/* The current page or section: tint, color, and weight, not weight alone. */
+.app-header nav a.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* Layout across screen sizes. The styles are written for narrow screens first and never need
@@ -198,8 +251,12 @@ fieldset {
 }
 
 @media (max-width: 639px) {
-  .app {
-    padding: 16px 12px;
+  .app-width {
+    padding-inline: var(--space-3);
+  }
+
+  .app-main {
+    padding-block: var(--space-4);
   }
 
   .details-list {
@@ -212,8 +269,9 @@ fieldset {
 }
 
 @media (min-width: 1024px) {
-  .app {
-    max-width: 1100px;
+  .app-width {
+    max-width: 1280px;
+    padding-inline: var(--space-7);
   }
 }
 
@@ -478,9 +536,18 @@ form.card label select {
   cursor: pointer;
 }
 
+/* Icons (Icon.tsx) sit in line with their text and don't shrink in a tight row. */
+.icon {
+  flex: none;
+  vertical-align: middle;
+}
+
 /* The button that opens and closes a level (Disclosure, and OrderedList rows with `details`).
-   The marker is decoration; aria-expanded says open or closed. */
+   The chevron before its title is decoration; aria-expanded says open or closed. */
 .disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-1) var(--space-1);
   border: none;
   background: none;
@@ -490,12 +557,26 @@ form.card label select {
   cursor: pointer;
 }
 
-.disclosure-toggle::before {
-  content: '▸ ' / '';
+/* The chevron points right when closed and down when open. */
+.disclosure-mark {
+  color: var(--muted);
 }
 
-.disclosure-toggle[aria-expanded='true']::before {
-  content: '▾ ' / '';
+.disclosure-toggle[aria-expanded='true'] > .disclosure-mark,
+.collapsible[open] > summary > .disclosure-mark {
+  transform: rotate(90deg);
+}
+
+/* Collapsible's <summary>: the chevron in place of the browser's marker. */
+.collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.collapsible > summary::-webkit-details-marker {
+  display: none;
 }
 
 /* A form of fields stacked one above the next (a header's values, a letter's sign-off). */

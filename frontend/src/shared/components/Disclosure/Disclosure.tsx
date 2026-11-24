@@ -4,6 +4,7 @@
 // the page with headings of its own (the preview), so it's still found by heading. `onToggle`
 // hears each open and close, for a caller that remembers it.
 import { useId, useState, type ReactNode } from 'react'
+import Icon from '../Icon/Icon'
 import styles from './Disclosure.module.css'
 
 export default function Disclosure({
@@ -32,7 +33,8 @@ export default function Disclosure({
         onToggle?.(!open)
       }}
     >
-      {title}
+      <Icon name="chevron" size={16} className="disclosure-mark" />
+      <span>{title}</span>
     </button>
   )
   const Heading = heading === 4 ? 'h4' : 'h3'

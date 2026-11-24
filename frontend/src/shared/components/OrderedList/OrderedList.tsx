@@ -23,6 +23,7 @@
 // `moreChildren` adds other ways to add inside that level.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
+import Icon from '../Icon/Icon'
 import MoreOptions from '../MoreOptions'
 import styles from './OrderedList.module.css'
 
@@ -362,7 +363,8 @@ export default function OrderedList<K extends ListKey = number>({
                     aria-controls={bodyId}
                     onClick={() => toggle(item.id)}
                   >
-                    {item.name}
+                    <Icon name="chevron" size={16} className="disclosure-mark" />
+                    <span>{item.name}</span>
                   </button>
                 )}
                 {!readOnly && (

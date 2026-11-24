@@ -24,4 +24,23 @@ describe('Collapsible', () => {
     expect((screen.getByText('Skills (0)').closest('details') as HTMLDetailsElement).open).toBe(false)
     await expectNoA11yViolations()
   })
+
+  it('shows a chevron that screen readers skip, keeping a title with a hidden part whole', () => {
+    render(
+      <Collapsible
+        title={
+          <>
+            Details<span className="visually-hidden"> of React</span>
+          </>
+        }
+        count={1}
+      >
+        <p>Used in 2 resumes</p>
+      </Collapsible>,
+    )
+    const summary = screen.getByText('Details', { exact: false }).closest('summary')!
+    expect(summary.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    // The title and its count are one piece beside the chevron.
+    expect(summary.querySelector(':scope > span')).toHaveTextContent('Details of React (1)')
+  })
 })
