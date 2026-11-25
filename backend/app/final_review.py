@@ -45,6 +45,7 @@ from app.chat import (
 from app.claude import ask
 from app.documents import COVER_LETTER, RESUME, Kind, load_tree
 from app.errors import AppError, ErrorCode
+from app.flag_dismissal import FlagChoice, set_dismissed
 from app.models import JobPosting
 from app.page_fit import fit, fit_json, limit_of, lines_used
 from app.plain_text import document_output
@@ -53,7 +54,7 @@ from app.routers.document_tree import RestoredSection, restore
 from app.suggestions import library_json, load_library, rules_text
 from app.tones import rule_texts
 from app.usage import touch
-from app.writing_check import TECHNICAL_EXCEPTIONS
+from app.writing_check import TECHNICAL_EXCEPTIONS, Flag
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +370,18 @@ def set_fix_state(posting: JobPosting, fix_id: str, state: Literal["pending", "d
         raise AppError(ErrorCode.VALIDATION_FAILED,
                        f"That change was already {fix.proposal.state}.")
     fix.proposal.state = state
+    _save(posting, kept)
+
+
+def set_fix_flag(posting: JobPosting, fix_id: str, choice: FlagChoice) -> None:
+    """Dismiss one of a fix's writing flags, or restore it (app/flag_dismissal.py). Only the flag
+    changes; a posting applied to keeps its review as it was (VERSION_LOCKED)."""
+    if posting.applied_on is not None:
+        raise AppError(ErrorCode.VERSION_LOCKED)
+    kept = _kept(posting)
+    fix = _find_fix(kept, fix_id)
+    fix.proposal.flags = [Flag.model_validate(flag) for flag in set_dismissed(
+        [flag.model_dump() for flag in fix.proposal.flags], choice)]
     _save(posting, kept)
 
 

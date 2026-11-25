@@ -130,7 +130,32 @@ export interface WritingFlag {
   rule: string
   quote: string
   why: string
+  // The user decided it doesn't apply here (backend/app/flag_dismissal.py): it stops counting
+  // (no "Flagged" badge or tag) and shows apart, with Restore. Absent when it's not.
+  dismissed?: boolean
 }
+
+// Which flag to dismiss (`dismissed` true) or restore (false): its rule's kind and text, and the
+// words that break it.
+export interface FlagChoice {
+  kind: WritingFlag['kind']
+  rule: string
+  quote: string
+  dismissed: boolean
+}
+
+// Where a flag in Claude's draft is: on Claude's text (its key), or on a library item it uses.
+export type FlagTarget = { text_key: number } | { item_kind: 'narrative' | 'bullet'; item_id: number }
+
+export const flagChoice = (flag: WritingFlag, dismissed: boolean): FlagChoice => ({
+  kind: flag.kind,
+  rule: flag.rule,
+  quote: flag.quote,
+  dismissed,
+})
+
+// The flags that still count: those the user hasn't dismissed.
+export const counted = (flags?: WritingFlag[] | null) => (flags ?? []).filter((flag) => !flag.dismissed)
 
 // A rewording (of `replaces`) or new text Claude wrote, with the writing rules it still breaks
 // (`fixed`: the writing check reworded it).
@@ -366,6 +391,10 @@ export function docsApi(kind: DocKind) {
     // Checks the draft against the writing rules again, after the check failed when it was made.
     // Only the draft changes.
     checkDraft: (id: number) => one(api.post<Raw>(`${path}/${id}/draft/check`, {})),
+    // Dismisses or restores a flag in the draft: on Claude's text (its key), or on a library item
+    // it uses (which changes on the item too). Only the flag changes.
+    setDraftFlag: (id: number, on: FlagTarget, choice: FlagChoice) =>
+      one(api.put<Raw>(`${path}/${id}/draft/flags`, { ...choice, ...on })),
     finishReview: (id: number, keep: number[]) => one(api.post<Raw>(`${path}/${id}/draft/finish`, { keep })),
     // What Claude reads in the user's own file or pasted text, each item matched against the
     // library (shared/api/imports.ts). Saves nothing. A file it can't read, or one with no resume

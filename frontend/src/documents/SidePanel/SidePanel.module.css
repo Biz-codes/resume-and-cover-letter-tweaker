@@ -35,12 +35,39 @@
   }
 }
 
+/* Its top row (the heading or tabs, and Collapse) stays pinned while what's under it scrolls (in
+   the panel on large screens, with the page below them), so Collapse is always in reach. The
+   panel's own top padding is the row's, so nothing shows above it when pinned. */
+.panel:not(.collapsed) {
+  padding-top: 0;
+}
+
+/* What focus scrolls into view stops below the pinned row, never under it (WCAG 2.4.11): in the
+   panel on large screens, and on the page below them, while the panel covers it. */
+@media (min-width: 1024px) {
+  .panel:not(.collapsed) {
+    scroll-padding-top: 80px;
+  }
+}
+
+@media (max-width: 1023px) {
+  :global(html):has(.top) {
+    scroll-padding-top: 80px;
+  }
+}
+
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  padding: 12px 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .top h3 {

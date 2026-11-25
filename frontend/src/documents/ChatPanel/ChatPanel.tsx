@@ -27,7 +27,7 @@
 // lists the messages that replied to it (`proposals`' `repliesTo`), each moving focus to one.
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import { KINDS, type DocKind } from '../../shared/api/documents'
+import { counted, KINDS, type DocKind } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import { sendOnEnter } from '../../shared/hooks/sendOnEnter'
 import { changesOf, chatApi, markedOf, uncheckedOf, type ChatAbout, type ChatMessage, type ReplyTo } from '../../shared/api/chat'
@@ -96,7 +96,7 @@ function proposalsNote(answer: ChatMessage, singular: string) {
   const proposals = answer.proposals ?? []
   if (proposals.length === 0) return ''
   const count = proposals.length === 1 ? '1 proposed change' : `${proposals.length} proposed changes`
-  const flagged = changesOf(answer).filter((proposal) => proposal.flags?.length).length
+  const flagged = changesOf(answer).filter((proposal) => counted(proposal.flags).length).length
   const unchecked = uncheckedOf(answer).length
   let note = ` ${count} below.`
   if (flagged) note += ` ${flagged === 1 ? '1 breaks' : `${flagged} break`} a writing rule, marked Flagged.`

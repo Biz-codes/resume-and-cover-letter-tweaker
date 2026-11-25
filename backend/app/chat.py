@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from app.claude import converse, reply_text
 from app.documents import EntryKind, Kind, SectionTree, doc_info, load_tree
 from app.errors import AppError, ErrorCode
+from app.flag_dismissal import counted
 from app.models import ChatMessage, ChatRole, JobPosting, ToneSet, WritingRule, WritingRuleKind
 from app.page_fit import (
     PageMark,
@@ -603,10 +604,14 @@ def _check_note(proposal: dict[str, Any]) -> str:
         note += (" Its wording was changed to follow the writing rules, to: "
                  f"{json.dumps(proposal['new_text'], ensure_ascii=False)}.")
     flags = proposal.get("flags") or []
-    if flags:
-        note += " It still breaks these writing rules: " + "; ".join(
-            f"{flag['rule']} ({json.dumps(flag['quote'], ensure_ascii=False)})"
-            for flag in flags) + "."
+    listed = lambda chosen: "; ".join(  # noqa: E731
+        f"{flag['rule']} ({json.dumps(flag['quote'], ensure_ascii=False)})" for flag in chosen)
+    if counted(flags):
+        note += f" It still breaks these writing rules: {listed(counted(flags))}."
+    # The user decided these don't apply here (app/flag_dismissal.py).
+    dismissed = [flag for flag in flags if flag.get("dismissed")]
+    if dismissed:
+        note += f" The user dismissed these writing flags as fine here: {listed(dismissed)}."
     return note
 
 

@@ -19,7 +19,7 @@
 // conversation.
 import { useId, useState, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import type { TreeSection } from '../../shared/api/documents'
+import { counted, flagChoice, type FlagChoice, type TreeSection, type WritingFlag } from '../../shared/api/documents'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import {
   changesOf,
@@ -54,6 +54,8 @@ export function ProposalCard({
   onReply,
   onUndo,
   replies = [],
+  onFlag,
+  say,
 }: {
   proposal: Proposal
   title: string
@@ -67,6 +69,10 @@ export function ProposalCard({
   onUndo?: () => Promise<void>
   // The user's messages that replied to it, by id, oldest first.
   replies?: number[]
+  // Saves one of its writing flags dismissed or restored; without it, its flags are only shown.
+  onFlag?: (flag: WritingFlag, dismissed: boolean) => Promise<void>
+  // Where a dismissed or restored flag is said (the panel's live region); else WritingFlags' own.
+  say?: (text: string) => void
 }) {
   const focusLater = useFocusLater()
   const [busy, setBusy] = useState(false)
@@ -89,10 +95,10 @@ export function ProposalCard({
 
   const reword = proposal.action === 'reword'
   const written = proposal.action === 'add' && proposal.item_id === 0
-  const flagged = (proposal.flags?.length ?? 0) > 0
+  const flagged = counted(proposal.flags).length > 0
   const details: ReactNode = (reword || written || proposal.reason || flagged) && (
     <>
-      <WritingFlags flags={proposal.flags} name={title} />
+      <WritingFlags flags={proposal.flags} name={title} onDismiss={readOnly ? undefined : onFlag} say={say} />
       {reword && (
         <dl className={styles.change}>
           <dt>Before</dt>
@@ -249,7 +255,7 @@ function CheckAgain({
 
 // How many of the checked cards break a rule, for the live region.
 function checkedNotice(message: ChatMessage, ids: string[]) {
-  const flagged = changesOf(message).filter((proposal) => ids.includes(proposal.id) && proposal.flags?.length).length
+  const flagged = changesOf(message).filter((proposal) => ids.includes(proposal.id) && counted(proposal.flags).length).length
   if (flagged === 0) return 'Checked against your writing rules. Nothing breaks a rule.'
   return `Checked against your writing rules. ${flagged === 1 ? '1 change breaks' : `${flagged} changes break`} a rule, marked Flagged.`
 }
@@ -262,6 +268,7 @@ export default function ProposalCards({
   onApply,
   onState,
   onCheck,
+  onFlag,
   onUpdate,
   announce,
   onReply,
@@ -281,6 +288,8 @@ export default function ProposalCards({
   onState: (messageId: number, proposalId: string, state: 'pending' | 'dismissed') => Promise<ChatMessage>
   // Checks the reply's cards against the writing rules again, and returns the message.
   onCheck: (messageId: number) => Promise<ChatMessage>
+  // Dismisses or restores one of a card's writing flags, and returns the message.
+  onFlag?: (messageId: number, proposalId: string, choice: FlagChoice) => Promise<ChatMessage>
   // Shows the message's new state in the conversation.
   onUpdate: (message: ChatMessage) => void
   // Says something in the panel's live region.
@@ -353,6 +362,11 @@ export default function ProposalCards({
               onState={changed}
               replies={repliesTo(proposal.id)}
               onReply={reply}
+              onFlag={
+                onFlag &&
+                (async (flag, dismissed) => onUpdate(await onFlag(message.message_id, proposal.id, flagChoice(flag, dismissed))))
+              }
+              say={announce}
             />
           </li>
         )

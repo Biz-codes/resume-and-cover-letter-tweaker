@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useId, useState } from 'react'
 import { Link } from 'react-router'
 import { toApiError, type ApiError } from '../shared/api/client'
-import { capitalize, docsApi, KINDS, type TreeSection } from '../shared/api/documents'
+import { capitalize, docsApi, flagChoice, KINDS, type TreeSection } from '../shared/api/documents'
 import Disclosure from '../shared/components/Disclosure/Disclosure'
 import { useFocusLater } from '../shared/hooks/useFocusLater'
 import type { ListState } from '../documents/DocumentsPage'
@@ -246,6 +246,10 @@ export default function FinalReview({
                                       state === 'dismissed' ? `Dismissed: ${title}.` : `Restored: ${title}.`,
                                     )
                                   }
+                                  onFlag={async (flag, dismissed) =>
+                                    onChanged(await postingsApi.setFixFlag(id, fix.proposal.id, flagChoice(flag, dismissed)))
+                                  }
+                                  say={setSaid}
                                 />
                               </li>
                             )

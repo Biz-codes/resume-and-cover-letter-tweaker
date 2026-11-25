@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import AppError, ErrorCode
+from app.flag_dismissal import carry_dismissed, counted
 from app.models import BulletPoint, NarrativeContent
 from app.usage import Link, uses
 from app.writing_check import CheckText, Flag, check
@@ -63,7 +64,9 @@ def check_own(db: Session, client: anthropic.Anthropic | Callable[[], anthropic.
         return
     for key, row in enumerate(rows, start=1):
         result = checked.get(key)
-        row.flags = [flag.model_dump() for flag in result.flags] if result else []
+        # Flags the user dismissed stay dismissed while the same words break the same rule.
+        row.flags = carry_dismissed(row.flags,
+                                    [flag.model_dump() for flag in result.flags] if result else [])
     db.flush()
 
 
@@ -86,7 +89,7 @@ def check_unchecked(db: Session, client: anthropic.Anthropic, account_id: int,
             if not (used_by[_id(row)] and all(use.locked for use in used_by[_id(row)]))]
     for start in range(0, len(rows), BATCH):
         check_own(db, client, account_id, rows[start:start + BATCH], keep_unchecked=False)
-    return CheckedAll(checked=len(rows), flagged=sum(1 for row in rows if row.flags))
+    return CheckedAll(checked=len(rows), flagged=sum(1 for row in rows if counted(row.flags)))
 
 
 def _id(row: Row) -> int:

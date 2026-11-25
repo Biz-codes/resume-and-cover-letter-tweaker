@@ -1,7 +1,7 @@
 // Narrative content: excerpts of text, from one sentence to a full paragraph, that summaries and
 // cover letter paragraphs are built from. See backend/app/routers/narrative_content.py.
 import { api } from './client'
-import type { CheckedAll, WritingFlag } from './documents'
+import type { CheckedAll, FlagChoice, WritingFlag } from './documents'
 import { refs, type Use } from './usage'
 
 export interface NarrativeContent {
@@ -33,6 +33,8 @@ export const narrativeApi = {
     }),
   // "Check writing rules": the check alone, on its text as it is. AI_UNAVAILABLE changes nothing.
   check: (id: number) => api.post<NarrativeContent>(`/narrative-content/${id}/check`, {}),
+  // Dismisses one of its writing flags, or restores it. Only the flag changes.
+  setFlag: (id: number, choice: FlagChoice) => api.put<NarrativeContent>(`/narrative-content/${id}/flags`, choice),
   // "Check writing rules" on the page: every unchecked excerpt not only in sent versions.
   checkUnchecked: () => api.post<CheckedAll>('/narrative-content/check-unchecked', {}),
   setHidden: (id: number, hidden: boolean) => api.put<NarrativeContent>(`/narrative-content/${id}/hidden`, { hidden }),

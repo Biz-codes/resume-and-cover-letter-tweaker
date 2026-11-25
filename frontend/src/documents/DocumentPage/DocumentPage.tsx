@@ -23,6 +23,9 @@ import { toApiError, type ApiError } from '../../shared/api/client'
 import {
   capitalize,
   copyName,
+  counted,
+  type FlagChoice,
+  type FlagTarget,
   docsApi,
   fieldsOf,
   KINDS,
@@ -332,11 +335,25 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
       () => docsApi(kind).checkDraft(id),
       () => {
         const draft = latest.current?.draft
-        const flagged = (draft?.texts.filter((text) => text.flags?.length).length ?? 0) + (draft?.item_flags?.length ?? 0)
+        const flagged =
+          (draft?.texts.filter((text) => counted(text.flags).length).length ?? 0) +
+          (draft?.item_flags?.filter((row) => counted(row.flags).length).length ?? 0)
         return flagged
           ? `Checked the draft against your writing rules. ${flagged === 1 ? '1 text breaks' : `${flagged} texts break`} a rule, marked Flagged.`
           : 'Checked the draft against your writing rules. Nothing in it breaks them.'
       },
+      (next) => {
+        latest.current = next
+        setDoc(next)
+      },
+    )
+
+  // Dismissing a flag changes only the flag (and a library item's own), so it's not a step to undo;
+  // the flags say it themselves (WritingFlags).
+  const setDraftFlag = (on: FlagTarget, choice: FlagChoice) =>
+    inTurn(
+      () => docsApi(kind).setDraftFlag(id, on, choice),
+      '',
       (next) => {
         latest.current = next
         setDoc(next)
@@ -498,6 +515,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                       onApply={applyProposal}
                       onState={proposalState}
                       onCheck={(messageId) => chatApi(kind).check(id, messageId)}
+                      onFlag={(messageId, proposalId, choice) => chatApi(kind).setFlag(id, messageId, proposalId, choice)}
                       onUpdate={update}
                       announce={announce}
                       onReply={reply}
@@ -733,6 +751,7 @@ export function DocumentPage({ kind, id }: { kind: DocKind; id: number }) {
                     toneName={toneSet ? toneLabel(toneSet) : null}
                     onChange={saveDraft}
                     onCheck={checkDraft}
+                    onFlag={setDraftFlag}
                     onFinish={finishReview}
                   />
                 ) : (

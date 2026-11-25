@@ -27,9 +27,11 @@ from app.final_review import (
     apply_fix,
     review,
     review_out,
+    set_fix_flag,
     set_fix_state,
     undo_fix,
 )
+from app.flag_dismissal import FlagChoice
 from app.hiding import HiddenIn, set_hidden
 from app.models import CoverLetter, Header, Interview, JobPosting, JobPostingInterview, Resume
 from app.posting_reader import PostingDraft, read_posting
@@ -313,6 +315,15 @@ def set_review_fix_state(posting_id: int, fix_id: str, body: FixStateIn, db: DbS
     """Dismiss one of the review's fixes, or take that back (set_fix_state)."""
     posting = get_owned(db, JobPosting, posting_id, account_id)
     set_fix_state(posting, fix_id, body.state)
+    return refreshed(db, posting)
+
+
+@router.put("/{posting_id}/review/fixes/{fix_id}/flags")
+def set_review_fix_flag(posting_id: int, fix_id: str, body: FlagChoice, db: DbSession,
+                        account_id: AccountId) -> PostingDetail:
+    """Dismiss one of a fix's writing flags, or restore it (set_fix_flag)."""
+    posting = get_owned(db, JobPosting, posting_id, account_id)
+    set_fix_flag(posting, fix_id, body)
     return refreshed(db, posting)
 
 

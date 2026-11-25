@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe as group, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import type { TreeSection } from '../../shared/api/documents'
+import type { FlagChoice, TreeSection } from '../../shared/api/documents'
 import { expectNoA11yViolations } from '../../test/axe'
 import type { AnyProposal, ChatMessage, Proposal } from '../../shared/api/chat'
 import { describe } from './describe'
@@ -52,6 +52,15 @@ function renderCards(
   const onUpdate = vi.fn()
   const announce = vi.fn()
   const onReply = vi.fn()
+  const onFlag = vi.fn((_m: number, id: string, choice: FlagChoice) =>
+    Promise.resolve(
+      message(
+        ...(shown.proposals ?? []).map((p) =>
+          p.id === id && p.kind !== 'rule' ? { ...p, flags: p.flags?.map((flag) => (flag.rule === choice.rule ? { ...flag, dismissed: choice.dismissed } : flag)) } : p,
+        ),
+      ),
+    ),
+  )
   const view = render(
     <ProposalCards singular="resume"
       message={shown}
@@ -63,9 +72,10 @@ function renderCards(
       onUpdate={onUpdate}
       announce={announce}
       onReply={onReply}
+      onFlag={onFlag}
     />,
   )
-  return { onApply, onState, onUpdate, announce, onReply, view }
+  return { onApply, onState, onUpdate, announce, onReply, onFlag, view }
 }
 
 const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
@@ -566,5 +576,23 @@ group('ProposalCards with a rule', () => {
       />,
     )
     expect(screen.queryByRole('button', { name: 'Apply: Ban "streamlined"' })).not.toBeInTheDocument()
+  })
+})
+
+group('ProposalCards flags', () => {
+  it("dismisses a card's writing flag, saying so in the panel", async () => {
+    const { onFlag, onUpdate, announce } = renderCards(message({ ...base, flags: [drama], checked: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss flag "em dashes used for drama" on Reword the bullet "Shipped it" in Experience' }))
+    await vi.waitFor(() =>
+      expect(announce).toHaveBeenCalledWith('Dismissed the flag "em dashes used for drama" on Reword the bullet "Shipped it" in Experience.'),
+    )
+    expect(onFlag).toHaveBeenCalledWith(4, 'toolu_1', { kind: 'pattern', rule: 'em dashes used for drama', quote: '—', dismissed: true })
+    expect(onUpdate.mock.calls.at(-1)![0].proposals[0].flags[0].dismissed).toBe(true)
+  })
+
+  it("leaves a sent document's flags as they are", () => {
+    renderCards(message({ ...base, flags: [drama], checked: true }), true)
+    expect(screen.getByRole('list', { name: 'Writing rules Reword the bullet "Shipped it" in Experience breaks' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Dismiss flag/ })).not.toBeInTheDocument()
   })
 })

@@ -34,6 +34,7 @@ from app.claude import Claude
 from app.db import DbSession, get_db
 from app.documents import Kind
 from app.errors import AppError, ErrorCode
+from app.flag_dismissal import FlagChoice, set_dismissed
 from app.models import ChatMessage, ChatRole
 from app.proposals import (
     apply,
@@ -150,5 +151,22 @@ def add_chat_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
             raise AppError(ErrorCode.VALIDATION_FAILED,
                            f"That change was already {proposal.state}.")
         set_state(message, index, body.state)
+        db.flush()
+        return message_out(message, page_marks(db, kind, account_id, doc))
+
+    @router.put("/{doc_id}/chat/{message_id}/proposals/{proposal_id}/flags")
+    def set_proposal_flag_dismissed(doc_id: int, message_id: int, proposal_id: str,
+                                    body: FlagChoice, db: DbSession,
+                                    account_id: AccountId) -> ChatMessageOut:
+        """Dismiss one of a proposal's writing flags, or restore it (app/flag_dismissal.py).
+        Only the flag changes; a kept proposal's text takes its flags as they are then."""
+        doc = get_owned(db, kind.doc, doc_id, account_id)
+        check_open(db, kind, doc)
+        message = own_message(db, doc_id, message_id)
+        index, _ = find_proposal(message, proposal_id)
+        # A new list, so the JSONB column sees the change.
+        proposals = [dict(stored) for stored in message.proposals]
+        proposals[index]["flags"] = set_dismissed(proposals[index].get("flags"), body)
+        message.proposals = proposals
         db.flush()
         return message_out(message, page_marks(db, kind, account_id, doc))

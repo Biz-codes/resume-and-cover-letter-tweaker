@@ -437,3 +437,31 @@ def test_a_sent_documents_chat_is_never_marked(client: TestClient, db: Session,
                                          parent_id=ids["job"]))
     [_, message] = client.get(f"/api/resumes/{doc.resume_id}/chat").json()
     assert message["proposals"][0]["page"] is None
+
+
+def test_a_proposals_writing_flag_is_dismissed_and_restored(client: TestClient, db: Session,
+                                                            account_id: int):
+    doc, ids = setup_resume(db, account_id)
+    flag = {"kind": "term", "rule": "leverage", "quote": "leveraged", "why": "Filler."}
+    message = proposed(db, account_id, doc, change(
+        "reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"], parent_kind="experience",
+        parent_id=ids["job"], new_text="Leveraged it.") | {"flags": [flag], "checked": True})
+    choice = {"kind": "term", "rule": "leverage", "quote": "leveraged"}
+    dismissed = client.put(f"{url(doc, message)}/flags", json=choice | {"dismissed": True})
+    assert dismissed.status_code == 200, dismissed.json()
+    assert dismissed.json()["proposals"][0]["flags"] == [flag | {"dismissed": True}]
+    # Applying keeps its flags as they are: the new bullet's flag is dismissed too.
+    assert apply(client, doc, message).status_code == 200
+    db.expire_all()
+    assert db.scalar(select(BulletPoint.flags).where(BulletPoint.content == "Leveraged it.")) == [
+        flag | {"dismissed": True}]
+    restored = client.put(f"{url(doc, message)}/flags", json=choice | {"dismissed": False})
+    assert restored.json()["proposals"][0]["flags"] == [flag]
+    # A sent resume's chat doesn't change.
+    sent, sent_ids = setup_resume(db, account_id, sent=True)
+    old = proposed(db, account_id, sent, change(
+        "reword", "bullet", EXPERIENCE_SECTION_ID, sent_ids["Shipped it"],
+        parent_kind="experience", parent_id=sent_ids["job"], new_text="Leveraged it.")
+        | {"flags": [flag], "checked": True})
+    assert error(client.put(f"{url(sent, old)}/flags", json=choice | {"dismissed": True}))[:2] \
+        == (409, "VERSION_LOCKED")

@@ -199,6 +199,27 @@ describe('DialogChat', () => {
     await expectNoA11yViolations()
   })
 
+  it("dismisses a flag on Claude's wording, in the dialog's notice, dropping Flagged", async () => {
+    const flagged = { ...REWORD, new_text: 'Shipped it — weekly.', flags: [DRAMA] }
+    const fetchMock = stubSend(
+      streamed({ type: 'done', messages: turns([flagged]) }),
+      json({ ...turns([flagged])[1], proposals: [{ ...flagged, flags: [{ ...DRAMA, dismissed: true }] }] }),
+    )
+    const onSent = vi.fn()
+    const host = await renderItem(<Field />, placed(onSent))
+    fireEvent.click(screen.getByText('Ask Claude'))
+    fireEvent.change(screen.getByLabelText('Message to Claude'), { target: { value: 'Shorter?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss flag "em dashes used for drama" on "Shipped it — weekly."' }))
+    await vi.waitFor(() => expect(host.say).toHaveBeenLastCalledWith('Dismissed the flag "em dashes used for drama" on "Shipped it — weekly.".'))
+    const [url, init] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/resumes/5/chat/2/proposals/toolu_1/flags')
+    expect(JSON.parse(init!.body as string)).toEqual({ kind: 'pattern', rule: 'em dashes used for drama', quote: '—', dismissed: true })
+    expect(within(screen.getByRole('list', { name: 'Asked here' })).queryByText('Flagged')).not.toBeInTheDocument()
+    expect(onSent).toHaveBeenCalledTimes(2)
+    await expectNoA11yViolations()
+  })
+
   it('says when it checks the wording against the writing rules, and flags what it still breaks', async () => {
     const flagged = { ...REWORD, new_text: 'Shipped it — weekly.', flags: [DRAMA] }
     stubSend(streamed({ type: 'text', text: 'Try this.' }, { type: 'checking' }, { type: 'done', messages: turns([flagged]) }))

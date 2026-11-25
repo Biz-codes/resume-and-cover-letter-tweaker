@@ -1,6 +1,6 @@
 // Bullet points. See backend/app/routers/bullet_points.py.
 import { api } from './client'
-import type { CheckedAll, WritingFlag } from './documents'
+import type { CheckedAll, FlagChoice, WritingFlag } from './documents'
 import { refs, type Use } from './usage'
 
 export interface Bullet {
@@ -36,6 +36,8 @@ export const bulletsApi = {
     api.put<Bullet>(`/bullet-points/${id}`, { content, apply_to: refs(applyTo) }),
   // "Check writing rules": the check alone, on its text as it is. AI_UNAVAILABLE changes nothing.
   check: (id: number) => api.post<Bullet>(`/bullet-points/${id}/check`, {}),
+  // Dismisses one of its writing flags, or restores it. Only the flag changes.
+  setFlag: (id: number, choice: FlagChoice) => api.put<Bullet>(`/bullet-points/${id}/flags`, choice),
   // "Check writing rules" on the page: every unchecked bullet not only in sent versions.
   checkUnchecked: () => api.post<CheckedAll>('/bullet-points/check-unchecked', {}),
   setHidden: (id: number, hidden: boolean) => api.put<Bullet>(`/bullet-points/${id}/hidden`, { hidden }),

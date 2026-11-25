@@ -14,7 +14,7 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
-import { docsApi, KINDS, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection, type WritingFlag } from '../../shared/api/documents'
+import { counted, docsApi, KINDS, type DocDetail, type DocKind, type EntryKind, type TreeEntry, type TreeSection, type WritingFlag } from '../../shared/api/documents'
 import { flagsNote } from '../../shared/flagsNote'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
 import AddContent from '../AddContent'
@@ -729,5 +729,5 @@ function WrapNote({ text, bullet = false }: { text: string; bullet?: boolean }) 
 
 // A row whose text breaks a writing rule; its View and Edit says which.
 function FlaggedBadge({ flags }: { flags?: WritingFlag[] | null }) {
-  return flags?.length ? <span className="badge badge-flagged">Flagged</span> : null
+  return counted(flags).length ? <span className="badge badge-flagged">Flagged</span> : null
 }

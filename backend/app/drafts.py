@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.documents import LIBRARY, Child, Entry, EntryKind, Kind, SectionTree, load_tree
 from app.errors import AppError, ErrorCode
+from app.flag_dismissal import FlagChoice, carry_dismissed, set_dismissed
 from app.library import append
 from app.models import (
     BulletPoint,
@@ -373,7 +374,53 @@ def check_writing(db: Session, client: anthropic.Anthropic, account_id: int, dra
         ItemFlags(kind=kind, item_id=item_id, flags=checked[first + index].flags)
         for index, (kind, item_id) in enumerate(items)
         if first + index in checked and checked[first + index].flags]
+    # An item's flags the user dismissed in the library stay dismissed in the draft.
+    for entry in draft.item_flags:
+        row = db.get(NarrativeContent if entry.kind == "narrative" else BulletPoint, entry.item_id)
+        if row is not None:
+            entry.flags = [Flag.model_validate(flag) for flag in carry_dismissed(
+                row.flags, [flag.model_dump() for flag in entry.flags])]
     draft.checked = True
+
+
+class DraftFlagChoice(FlagChoice):
+    """A flag in the draft: on Claude's text (`text_key`), or on a library item it uses
+    (`item_kind` and `item_id`)."""
+
+    text_key: int | None = None
+    item_kind: Literal["narrative", "bullet"] | None = None
+    item_id: int | None = None
+
+
+def _dismissed(flags: list[Flag], choice: FlagChoice) -> list[Flag]:
+    return [Flag.model_validate(flag)
+            for flag in set_dismissed([flag.model_dump() for flag in flags], choice)]
+
+
+def set_draft_flag(db: Session, doc: Any, choice: DraftFlagChoice) -> None:
+    """Dismiss a flag in the draft, or restore it (app/flag_dismissal.py). A library item's flag
+    is the item's own, so it changes on the item too, wherever it's shown."""
+    draft = current_draft(doc)
+    if choice.text_key is not None:
+        text = next((text for text in draft.texts if text.key == choice.text_key), None)
+        if text is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        text.flags = _dismissed(text.flags, choice)
+    elif choice.item_kind is not None and choice.item_id is not None:
+        entry = next((entry for entry in draft.item_flags if entry.kind == choice.item_kind
+                      and entry.item_id == choice.item_id), None)
+        if entry is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        entry.flags = _dismissed(entry.flags, choice)
+        row = db.get(NarrativeContent if entry.kind == "narrative" else BulletPoint, entry.item_id)
+        if row is not None and row.flags:
+            try:
+                row.flags = set_dismissed(row.flags, choice)
+            except AppError:
+                pass  # The item was checked again since and no longer has it.
+    else:
+        raise AppError(ErrorCode.VALIDATION_FAILED, "Name the draft's text or item the flag is on.")
+    doc.draft = draft.model_dump()
 
 
 def current_draft(doc: Any) -> Draft:

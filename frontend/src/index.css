@@ -429,17 +429,20 @@ h2[tabindex='-1']:focus {
   border-radius: var(--radius);
 }
 
-/* One checkbox per line, wherever a group of them appears. */
-.choice label {
+/* One checkbox per line, beside its label, wherever a group of them appears. `fieldset.choice`
+   outranks `form.card label` and `form.card input` (block, full width) above, for a group inside
+   a form card (ApplyChoice's in an item's dialog). */
+fieldset.choice label {
   display: flex;
   gap: 6px;
   align-items: baseline;
   margin: 4px 0 0;
 }
 
-.choice input {
+fieldset.choice input {
   display: inline;
-  width: auto;
+  flex: none;
+  width: 20px;
 }
 
 .card > label {

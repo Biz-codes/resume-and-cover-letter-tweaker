@@ -316,3 +316,31 @@ def test_a_waiting_fix_that_wouldnt_fit_is_marked(client: TestClient, db: Sessio
     assert fixes["finding_1_fix_1"]["proposal"]["page"] == {
         "limit": 1, "pages": 1.2, "over_lines": 1, "too_long": ["Experience"]}
     assert fixes["finding_1_fix_2"]["proposal"]["page"] is None
+
+
+def test_a_fixs_writing_flag_is_dismissed_and_restored(client: TestClient, db: Session,
+                                                       account_id: int, claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    doc, ids = setup_resume(db, account_id)
+    job = {"parent_kind": "experience", "parent_id": ids["job"]}
+    claude.reply = Review(keywords=[], findings=[Finding(
+        kind="writing", documents=["resume"], where="Experience", why="Too plain.", fixes=[
+            fix("resume", "reword", "bullet", EXPERIENCE_SECTION_ID, ids["Shipped it"],
+                new_text="Shipped it — weekly.", **job)])])
+    claude.replies[WritingReview] = WritingReview(texts=[
+        Reviewed(key=1, issues=[drama("Drama.")], fixed_text="")])
+    client.post(review_url(doc))
+    choice = {"kind": "pattern", "rule": DRAMA, "quote": "—"}
+    dismissed = client.put(f"{fix_url(doc, 'finding_1_fix_1')}/flags",
+                           json=choice | {"dismissed": True})
+    assert dismissed.status_code == 200, dismissed.json()
+    [flag] = fixes_of(dismissed.json())["finding_1_fix_1"]["proposal"]["flags"]
+    assert flag["dismissed"] is True
+    restored = client.put(f"{fix_url(doc, 'finding_1_fix_1')}/flags",
+                          json=choice | {"dismissed": False}).json()
+    assert "dismissed" not in fixes_of(restored)["finding_1_fix_1"]["proposal"]["flags"][0]
+    # A posting applied to keeps its review as it was.
+    db.get(JobPosting, doc.job_posting_id).applied_on = date(2026, 11, 18)
+    db.flush()
+    assert error(client.put(f"{fix_url(doc, 'finding_1_fix_1')}/flags",
+                            json=choice | {"dismissed": True}))[:2] == (409, "VERSION_LOCKED")

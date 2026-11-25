@@ -1,7 +1,37 @@
 /* The writing rules some text breaks, under it. */
-.flags {
+.writing-flags {
   margin: 4px 0 0;
+}
+
+.flags,
+.dismissed {
+  margin: 0;
   padding-left: 12px;
-  border-left: 3px solid var(--flag);
   list-style: none;
+}
+
+.flags {
+  border-left: 3px solid var(--flag);
+}
+
+/* Dismissed ones no longer count, so they're muted and without the red edge. */
+.dismissed {
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+/* Each flag, with its Dismiss or Restore at the end of the line (under it on a narrow screen). */
+.flags li,
+.dismissed li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 2px 0;
+}
+
+.flags li > span,
+.dismissed li > span {
+  flex: 1 1 16em;
 }

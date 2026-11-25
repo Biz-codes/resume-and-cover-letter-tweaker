@@ -5,6 +5,7 @@ import type { Field } from '../shared/components/FieldsForm'
 import { api } from '../shared/api/client'
 import type { HeaderFields } from '../shared/api/headers'
 import type { Proposal } from '../shared/api/chat'
+import type { FlagChoice } from '../shared/api/documents'
 import type { Use } from '../shared/api/usage'
 
 export interface PostingFields {
@@ -173,6 +174,9 @@ export const postingsApi = {
   undoFix: (id: number, fixId: string) => api.post<PostingDetail>(`/job-postings/${id}/review/fixes/${fixId}/undo`),
   setFixState: (id: number, fixId: string, state: 'pending' | 'dismissed') =>
     api.put<PostingDetail>(`/job-postings/${id}/review/fixes/${fixId}`, { state }),
+  // Dismisses one of a fix's writing flags, or restores it. Only the flag changes.
+  setFixFlag: (id: number, fixId: string, choice: FlagChoice) =>
+    api.put<PostingDetail>(`/job-postings/${id}/review/fixes/${fixId}/flags`, choice),
   setHeader: (id: number, fields: HeaderFields) => api.put<PostingDetail>(`/job-postings/${id}/header`, fields),
   // Replaces the dates and contacts, at any time. An applied date locks the posting's versions,
   // and clearing it unlocks them.

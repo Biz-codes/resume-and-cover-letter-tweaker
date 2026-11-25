@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { bulletsApi, shortBullet, type Bullet } from '../shared/api/bullets'
 import { toApiError, type ApiError } from '../shared/api/client'
+import { counted } from '../shared/api/documents'
 import { isUnchecked, onlySent } from '../shared/api/usage'
 import { PAGE_HEADING_ID, useFocusLater } from '../shared/hooks/useFocusLater'
 import { usePageTitle } from '../shared/hooks/usePageTitle'
@@ -54,7 +55,7 @@ export default function BulletsPage() {
         title={bullet.content}
         titleClassName="bullet-text"
         // Its text breaks a writing rule; its dialog says which. Not for text only in sent versions.
-        tags={bullet.flags?.length && !onlySent(bullet.used_by) ? <span className="tag">flagged</span> : undefined}
+        tags={counted(bullet.flags).length && !onlySent(bullet.used_by) ? <span className="tag">flagged</span> : undefined}
         editId={editId('bullet', bullet.bullet_id)}
         editLabel={`View and Edit "${title}"`}
         actions={hidden && <UnhideButton name={title} onUnhide={() => unhide('bullet', bullet.bullet_id, title, () => bulletsApi.setHidden(bullet.bullet_id, false))} />}

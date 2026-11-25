@@ -24,7 +24,7 @@ from functools import lru_cache
 from typing import Literal
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -92,6 +92,9 @@ class Flag(BaseModel):
     rule: str
     quote: str
     why: str
+    # The user decided it doesn't apply (app/flag_dismissal.py). Never set by the check, and left
+    # out when false, so a flag is kept and sent as it was before dismissing existed.
+    dismissed: bool = Field(default=False, exclude_if=lambda dismissed: not dismissed)
 
 
 class Checked(BaseModel):

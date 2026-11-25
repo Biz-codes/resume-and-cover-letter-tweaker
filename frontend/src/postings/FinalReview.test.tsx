@@ -267,6 +267,20 @@ describe('FinalReview', () => {
       await expectNoA11yViolations()
     })
 
+    it("dismisses a fix's writing flag, saying so", async () => {
+      const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'Drama.' }
+      stubApi({
+        ...docs,
+        'PUT /api/job-postings/9/review/fixes/finding_1_fix_1/flags': [
+          { status: 200, body: withFix({ proposal: { flags: [{ ...drama, dismissed: true }] } }) },
+        ],
+      })
+      const onChanged = renderFixes(withFix({ proposal: { flags: [drama] } }))
+      fireEvent.click(await screen.findByRole('button', { name: `Dismiss flag "em dashes used for drama" on ${TITLE}` }))
+      await vi.waitFor(() => expect(announced()).toBe(`Dismissed the flag "em dashes used for drama" on ${TITLE}.`))
+      expect(onChanged.mock.calls.at(-1)![0].final_review.findings[0].fixes[0].proposal.flags[0].dismissed).toBe(true)
+    })
+
     it("shows a posting applied to its fixes with no buttons", async () => {
       stubApi(docs)
       renderFixes({ ...withFix(), locked: true })

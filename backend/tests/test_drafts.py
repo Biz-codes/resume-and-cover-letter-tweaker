@@ -495,3 +495,51 @@ def test_check_again_checks_only_the_writing(client: TestClient, db: Session, ac
 
     # A checked draft isn't checked again.
     assert error(client.post(f"{_url(doc)}/draft/check"))[:2] == (422, "VALIDATION_FAILED")
+
+
+def test_a_drafts_writing_flags_are_dismissed_where_they_are(client: TestClient, db: Session,
+                                                             account_id: int,
+                                                             claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    claude.replies[Review] = Review(texts=[
+        Reviewed(key=4, issues=[issue("Drama.")], fixed_text=""),
+        Reviewed(key=7, issues=[issue("Drama too.")], fixed_text="")])
+    doc, ids, keys = started(client, db, account_id, claude)
+    db.get(BulletPoint, ids["tested"]).flags = [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama too."}]
+    db.commit()
+    choice = {"kind": "pattern", "rule": DRAMA, "quote": "—", "dismissed": True}
+    url = f"{_url(doc)}/draft/flags"
+    # Claude's text: only the draft changes, and approving keeps it dismissed.
+    body = client.put(url, json=choice | {"text_key": keys["Led a team."]}).json()
+    [led] = [text for text in body["draft"]["texts"] if text["text"] == "Led a team."]
+    assert led["flags"][0]["dismissed"] is True
+    # A library item's flag is the item's own, so it changes on the item too.
+    body = client.put(url, json=choice | {"item_kind": "bullet", "item_id": ids["tested"]}).json()
+    assert body["draft"]["item_flags"][0]["flags"][0]["dismissed"] is True
+    db.expire_all()
+    assert db.get(BulletPoint, ids["tested"]).flags[0]["dismissed"] is True
+    # Naming neither, or what isn't there.
+    assert error(client.put(url, json=choice))[:2] == (422, "VALIDATION_FAILED")
+    assert error(client.put(url, json=choice | {"text_key": 99}))[:2] == (404, "NOT_FOUND")
+    assert finish(client, doc).status_code == 200
+    db.expire_all()
+    assert db.scalar(select(BulletPoint.flags).where(BulletPoint.content == "Led a team.")) == [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama.", "dismissed": True}]
+
+
+def test_an_items_dismissed_flag_stays_dismissed_when_the_draft_is_checked(
+        client: TestClient, db: Session, account_id: int, claude: FakeMessages):
+    add(db, WritingRule(account_id=account_id, kind=WritingRuleKind.pattern, rule_text=DRAMA))
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    claude.replies[Review] = anthropic.APIConnectionError(request=request)
+    doc, ids, _ = started(client, db, account_id, claude)
+    # The user dismissed "Tested it"'s flag in the library while the draft was unchecked.
+    db.get(BulletPoint, ids["tested"]).flags = [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Old.", "dismissed": True}]
+    db.commit()
+    claude.replies[Review] = Review(texts=[Reviewed(key=7, issues=[issue("Drama too.")],
+                                                    fixed_text="")])
+    body = client.post(f"{_url(doc)}/draft/check").json()
+    assert body["draft"]["item_flags"] == [{"kind": "bullet", "item_id": ids["tested"], "flags": [
+        {"kind": "pattern", "rule": DRAMA, "quote": "—", "why": "Drama too.", "dismissed": True}]}]

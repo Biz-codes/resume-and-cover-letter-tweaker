@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { flagsNote } from '../../shared/flagsNote'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
+import { flagChoice } from '../../shared/api/documents'
 import { narrativeApi, type NarrativeContent } from '../../shared/api/narrativeContent'
 import { sectionsApi } from '../../shared/api/sections'
 import { anyLocked, onlySent, type Use } from '../../shared/api/usage'
@@ -110,6 +111,10 @@ export default function NarrativeItem({ id }: { id: number }) {
             const checked = await narrativeApi.check(excerpt.content_id)
             await load()
             return checked.flags
+          }}
+          onDismiss={async (flag, dismissed) => {
+            await narrativeApi.setFlag(excerpt.content_id, flagChoice(flag, dismissed))
+            await load()
           }}
         />}
         <DialogChat field="content" value={typed ?? excerpt.content} />

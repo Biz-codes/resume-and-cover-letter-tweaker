@@ -48,12 +48,14 @@ from app.documents import (
     standalone_bullets,
 )
 from app.drafts import (
+    DraftFlagChoice,
     DraftSections,
     FinishIn,
     check_sections,
     current_draft,
     finish,
     recheck,
+    set_draft_flag,
     snapshot,
 )
 from app.errors import AppError, ErrorCode
@@ -445,6 +447,15 @@ def add_tree_routes(router: APIRouter, kind: Kind, detail: Callable[[Session, An
         when it was made (app/drafts.py, recheck). Only the draft changes."""
         doc = editable(db, doc_id, account_id)
         recheck(db, client, account_id, doc)
+        return changed(db, doc)
+
+    @router.put("/{doc_id}/draft/flags")
+    def set_draft_flag_dismissed(doc_id: int, body: DraftFlagChoice, db: DbSession,
+                                 account_id: AccountId):
+        """Dismiss one of the draft's writing flags, or restore it (app/drafts.py,
+        set_draft_flag). Only the flag changes."""
+        doc = editable(db, doc_id, account_id)
+        set_draft_flag(db, doc, body)
         return changed(db, doc)
 
     @router.post("/{doc_id}/draft/finish")

@@ -15,6 +15,7 @@ import { useId, useState } from 'react'
 import { shortBullet } from '../../shared/api/bullets'
 import { changesOf, chatApi, staleNote, type ChatAbout, type ChatMessage, type Proposal } from '../../shared/api/chat'
 import { toApiError, type ApiError } from '../../shared/api/client'
+import { counted, flagChoice } from '../../shared/api/documents'
 import WritingFlags from '../../shared/components/WritingFlags/WritingFlags'
 import { flagCount } from '../../shared/components/WritingFlags/flagCount'
 import { useFocusLater } from '../../shared/hooks/useFocusLater'
@@ -27,7 +28,7 @@ const CHECKING = "Checking Claude's wording against your writing rules…"
 
 // After the reply: whether Claude's wording breaks a writing rule, or couldn't be checked.
 function wordingNote(wordings: Proposal[]) {
-  const flags = wordings.flatMap((proposal) => proposal.flags ?? [])
+  const flags = counted(wordings.flatMap((proposal) => proposal.flags ?? []))
   if (wordings.some((proposal) => !proposal.checked)) return " It couldn't be checked against your writing rules."
   return flags.length ? `${flagCount(flags)} It's marked Flagged.` : ''
 }
@@ -117,7 +118,7 @@ export default function DialogChat({
       const checked = await chatApi(where.kind).check(where.id, message.message_id)
       setExchange((current) => current.map((turn) => (turn.message_id === checked.message_id ? checked : turn)))
       chat.onSent()
-      const flagged = ownWordings(checked).flatMap((proposal) => proposal.flags ?? [])
+      const flagged = counted(ownWordings(checked).flatMap((proposal) => proposal.flags ?? []))
       // The button is gone, so focus moves to the "Use this" of Claude's first wording still
       // waiting, or to the dialog's heading when none is.
       const first = ownWordings(checked).find((proposal) => proposal.state === 'pending')
@@ -176,7 +177,7 @@ export default function DialogChat({
                     <div key={proposal.id} className={styles.wording}>
                       <p className={styles.who}>
                         Claude&apos;s wording
-                        {proposal.flags?.length ? (
+                        {counted(proposal.flags).length ? (
                           <>
                             {' '}
                             <span className="badge badge-flagged">Flagged</span>
@@ -190,7 +191,16 @@ export default function DialogChat({
                         )}
                       </p>
                       <p>{proposal.new_text}</p>
-                      <WritingFlags flags={proposal.flags} name={name} />
+                      <WritingFlags
+                        flags={proposal.flags}
+                        name={name}
+                        onDismiss={async (flag, dismissed) => {
+                          const changed = await chatApi(where.kind).setFlag(where.id, message.message_id, proposal.id, flagChoice(flag, dismissed))
+                          setExchange((current) => current.map((turn) => (turn.message_id === changed.message_id ? changed : turn)))
+                          chat.onSent()
+                        }}
+                        say={host.say}
+                      />
                       {applyError?.buttonId === buttonId && <p role="alert">{applyError.error.message}</p>}
                       {proposal.state === 'pending' && (
                         // aria-disabled, not disabled, so the focused button keeps focus while it applies.

@@ -26,6 +26,10 @@ import { Link } from 'react-router'
 import { shortBullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
 import {
+  counted,
+  flagChoice,
+  type FlagChoice,
+  type FlagTarget,
   docsApi,
   KINDS,
   textsInUse,
@@ -170,6 +174,8 @@ export function Row({
   label,
   source,
   flags,
+  onFlag,
+  say,
   note,
   onReject,
   rejectText = 'Reject',
@@ -181,6 +187,11 @@ export function Row({
   // Absent for what's neither Claude's nor the library's (a letter's usual greeting).
   source?: Source
   flags?: WritingFlag[]
+  // Saves one of its flags dismissed or restored; without it (Claude's first draft as it was
+  // approved), they're only shown.
+  onFlag?: (flag: WritingFlag, dismissed: boolean) => Promise<void>
+  // Says a flag was dismissed or restored (the draft's live region).
+  say?: (text: string) => void
   // How many printed lines it takes, for a bullet or skill category that wraps (lineNote).
   note?: string | null
   // Absent for what was already in the starting document, and for a rewording, which goes back
@@ -196,14 +207,14 @@ export function Row({
         <span>{name}</span>
         {note && <span className="muted">{note}</span>}
         {source && <Badge source={source} />}
-        {flags && flags.length > 0 && <span className="badge badge-flagged">Flagged</span>}
+        {counted(flags).length > 0 && <span className="badge badge-flagged">Flagged</span>}
         {onReject && (
           <button type="button" aria-label={`${rejectText} ${label}`} onClick={onReject}>
             {rejectText}
           </button>
         )}
       </div>
-      <Flags flags={flags} name={label} />
+      <Flags flags={flags} name={label} onDismiss={onFlag} say={say} />
       {children}
     </li>
   )
@@ -216,6 +227,7 @@ export default function DraftTree({
   toneName = null,
   onChange,
   onCheck,
+  onFlag,
   onFinish,
 }: {
   kind: DocKind
@@ -229,6 +241,8 @@ export default function DraftTree({
   onChange: (sections: DraftSection[]) => Promise<void>
   // Checks the draft against the writing rules again (only offered when that failed).
   onCheck: () => Promise<void>
+  // Dismisses or restores a flag on Claude's text or a library item in the draft.
+  onFlag: (on: FlagTarget, choice: FlagChoice) => Promise<void>
   // `keep`: the keys of Claude's unused texts to keep in the library.
   onFinish: (keep: number[]) => Promise<void>
 }) {
@@ -301,6 +315,17 @@ export default function DraftTree({
   const flagsOf = (itemKind: string, row: { item_id?: number | null; text_key?: number | null; use_original?: boolean }, itemId: number | null) => {
     const claude = claudeText(texts, row)
     return claude && !row.use_original ? claude.flags : itemFlags(itemKind, itemId)
+  }
+  // Saves a row's flag where it is: on Claude's wording in use, or on the saved item.
+  const flagSaver = (itemKind: string, row: { item_id?: number | null; text_key?: number | null; use_original?: boolean }, itemId: number | null) => {
+    const claude = claudeText(texts, row)
+    const on: FlagTarget | null =
+      claude && !row.use_original
+        ? { text_key: claude.key }
+        : itemId !== null && (itemKind === 'narrative' || itemKind === 'bullet')
+          ? { item_kind: itemKind, item_id: itemId }
+          : null
+    return on ? (flag: WritingFlag, dismissed: boolean) => onFlag(on, flagChoice(flag, dismissed)) : undefined
   }
   // What switching wording says: which is in use, the rules it breaks, and for a bullet that
   // wraps, how many lines it takes.
@@ -411,6 +436,8 @@ export default function DraftTree({
               label={label}
               source={source}
               flags={flagsOf('bullet', bullet, bullet.bullet_id)}
+              onFlag={flagSaver('bullet', bullet, bullet.bullet_id)}
+              say={setAnnouncement}
               note={lineNote(text, true)}
               onReject={
                 canReject
@@ -483,6 +510,8 @@ export default function DraftTree({
               label={label}
               source={source}
               flags={isText(entry.kind) ? flagsOf(entry.kind, entry, entry.item_id) : undefined}
+              onFlag={isText(entry.kind) ? flagSaver(entry.kind, entry, entry.item_id) : undefined}
+              say={setAnnouncement}
               note={note}
               onReject={
                 canReject

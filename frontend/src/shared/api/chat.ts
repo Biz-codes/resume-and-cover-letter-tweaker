@@ -4,7 +4,7 @@
 // rules, then "done" with the two saved turns, or "error" (in the
 // shape in docs/API_ERRORS.md), after which nothing is saved.
 import { api, ApiError, errorOf, type ErrorBody } from './client'
-import { KINDS, withId, type DocDetail, type DocKind, type EntryKind, type Raw, type WritingFlag } from './documents'
+import { KINDS, withId, type DocDetail, type DocKind, type EntryKind, type FlagChoice, type Raw, type WritingFlag } from './documents'
 
 // What a message is about: the whole document, a section in it, or an item in it (an entry in a
 // section, or a skill or bullet under one), with how the panel names it.
@@ -190,6 +190,9 @@ export function chatApi(kind: DocKind) {
     // Dismisses a proposal, or takes that back.
     setState: (id: number, messageId: number, proposalId: string, state: 'pending' | 'dismissed') =>
       api.put<ChatMessage>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}`, { state }),
+    // Dismisses one of a proposal's writing flags, or restores it. Only the flag changes.
+    setFlag: (id: number, messageId: number, proposalId: string, choice: FlagChoice) =>
+      api.put<ChatMessage>(`${path}/${id}/chat/${messageId}/proposals/${proposalId}/flags`, choice),
     // Checks a reply's proposals against the writing rules again, after the check failed.
     check: (id: number, messageId: number) => api.post<ChatMessage>(`${path}/${id}/chat/${messageId}/check`),
     // Sends a message, calling `onText` with each piece of Claude's reply as it's written and

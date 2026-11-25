@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.account import AccountId, get_owned
 from app.claude import Claude, ClaudeLater
 from app.db import DbSession
+from app.flag_dismissal import FlagChoice, set_dismissed
 from app.hiding import HiddenIn, refuse_delete_if_sent, set_hidden
 from app.library import append, list_beside
 from app.models import (
@@ -191,6 +192,17 @@ def check_bullet(bullet_id: int, db: DbSession, account_id: AccountId,
     and nothing changes."""
     bullet = get_owned(db, BulletPoint, bullet_id, account_id)
     check_own(db, client, account_id, [bullet], keep_unchecked=False)
+    return one_out(db, bullet, account_id)
+
+
+@router.put("/{bullet_id}/flags")
+def set_bullet_flag_dismissed(bullet_id: int, body: FlagChoice, db: DbSession,
+                              account_id: AccountId) -> BulletOut:
+    """Dismiss one of its writing flags, or restore it (app/flag_dismissal.py). Only the flag
+    changes, so a sent version's text can have its flags dismissed too."""
+    bullet = get_owned(db, BulletPoint, bullet_id, account_id)
+    bullet.flags = set_dismissed(bullet.flags, body)
+    db.flush()
     return one_out(db, bullet, account_id)
 
 

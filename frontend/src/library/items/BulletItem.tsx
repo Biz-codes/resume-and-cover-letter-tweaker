@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { flagsNote } from '../../shared/flagsNote'
 import { bulletsApi, shortBullet, type Bullet } from '../../shared/api/bullets'
 import { toApiError, type ApiError } from '../../shared/api/client'
+import { flagChoice } from '../../shared/api/documents'
 import { experienceLabel } from '../../shared/api/experience'
 import { projectLabel } from '../../shared/api/projects'
 import { anyLocked, onlySent, type Use } from '../../shared/api/usage'
@@ -97,6 +98,10 @@ export default function BulletItem({ id }: { id: number }) {
             const checked = await bulletsApi.check(bullet.bullet_id)
             await load()
             return checked.flags
+          }}
+          onDismiss={async (flag, dismissed) => {
+            await bulletsApi.setFlag(bullet.bullet_id, flagChoice(flag, dismissed))
+            await load()
           }}
         />}
         <DialogChat field="content" value={typed ?? bullet.content} />

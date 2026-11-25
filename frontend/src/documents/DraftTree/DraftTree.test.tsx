@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/client'
-import type { Draft, DraftGreeting as Greeting, DraftSection, TreeSection } from '../../shared/api/documents'
+import type { Draft, DraftGreeting as Greeting, DraftSection, FlagChoice, FlagTarget, TreeSection } from '../../shared/api/documents'
 import { expectNoA11yViolations } from '../../test/axe'
 import { errorBody, stubApi } from '../../test/stubApi'
 import DraftTree, { DraftGreeting } from './DraftTree'
@@ -136,6 +136,7 @@ function renderDraft(
   ownSections: TreeSection[] = [],
   onCheck = vi.fn(() => Promise.resolve()),
   toneName: string | null = null,
+  onFlag = vi.fn((_on: FlagTarget, _choice: FlagChoice) => Promise.resolve()),
 ) {
   const onChange = vi.fn((_sections: DraftSection[]) => Promise.resolve())
   const tree = (one: Draft) => (
@@ -147,6 +148,7 @@ function renderDraft(
         toneName={toneName}
         onChange={onChange}
         onCheck={onCheck}
+        onFlag={onFlag}
         onFinish={onFinish}
       />
     </MemoryRouter>
@@ -273,6 +275,41 @@ describe('DraftTree', () => {
       'Text: Teaches web basics.Source: ClaudeFlaggedReject',
     ])
     within(screen.getByRole('list', { name: 'Writing rules Text: "Builds accessible apps." in Summary breaks' })).getByText('leverage')
+    await expectNoA11yViolations()
+  })
+
+  it("dismisses a flag where it is: on Claude's wording, or on the library item", async () => {
+    stubLibrary()
+    const drama = { kind: 'pattern' as const, rule: 'em dashes used for drama', quote: '—', why: 'It adds drama.' }
+    const filler = { kind: 'term' as const, rule: 'leverage', quote: 'leveraged', why: 'It means "used".' }
+    const draft: Draft = {
+      ...DRAFT,
+      checked: true,
+      texts: DRAFT.texts.map((text) => (text.key === 2 ? { ...text, flags: [drama] } : text)),
+      item_flags: [{ kind: 'bullet', item_id: 9, flags: [filler] }],
+    }
+    const onFlag = vi.fn((_on: FlagTarget, _choice: FlagChoice) => Promise.resolve())
+    const { rerender } = renderDraft(draft, undefined, [], undefined, null, onFlag)
+    await rows('Items in Summary')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss flag "em dashes used for drama" on Text: "Teaches web basics." in Summary' }))
+    await vi.waitFor(() => expect(announced()).toBe('Dismissed the flag "em dashes used for drama" on Text: "Teaches web basics." in Summary.'))
+    expect(onFlag).toHaveBeenLastCalledWith({ text_key: 2 }, { kind: 'pattern', rule: 'em dashes used for drama', quote: '—', dismissed: true })
+    fireEvent.click(screen.getByRole('button', { name: /^Dismiss flag "leverage" on "Cut load time in half\."/ }))
+    await vi.waitFor(() => expect(onFlag).toHaveBeenCalledTimes(2))
+    expect(onFlag).toHaveBeenLastCalledWith({ item_kind: 'bullet', item_id: 9 }, { kind: 'term', rule: 'leverage', quote: 'leveraged', dismissed: true })
+
+    // Dismissed, they no longer mark their rows Flagged, and wait under "Dismissed flags".
+    rerender({
+      ...draft,
+      texts: draft.texts.map((text) => (text.key === 2 ? { ...text, flags: [{ ...drama, dismissed: true }] } : text)),
+      item_flags: [{ kind: 'bullet', item_id: 9, flags: [{ ...filler, dismissed: true }] }],
+    })
+    expect(await rows('Items in Summary')).toEqual(['Text: Builds accessible React apps.Source: Claude', 'Text: Teaches web basics.Source: ClaudeReject'])
+    expect(await rows('Bullets under Engineer, Acme in Experience')).toEqual([
+      'Led the React redesign.Source: Claude',
+      'Cut load time in half.Source: LibraryReject',
+    ])
+    expect(screen.getByRole('button', { name: 'Dismissed flags (1) on Text: "Teaches web basics." in Summary' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 

@@ -23,6 +23,7 @@
 // `moreChildren` adds other ways to add inside that level.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { toApiError, type ApiError } from '../../api/client'
+import { useKeepInPlace } from '../../keepInPlace'
 import Icon from '../Icon/Icon'
 import MoreOptions from '../MoreOptions'
 import styles from './OrderedList.module.css'
@@ -116,6 +117,8 @@ export default function OrderedList<K extends ListKey = number>({
   const bodyIdBase = useId()
   // The rows opened to show what's under them. All start closed.
   const [open, setOpen] = useState<Set<K>>(new Set())
+  // The row's button stays where it was on the screen as it opens or closes.
+  const hold = useKeepInPlace()
 
   function toggle(id: K) {
     const next = new Set(open)
@@ -361,7 +364,10 @@ export default function OrderedList<K extends ListKey = number>({
                     aria-label={where && placed(item.name, where)}
                     aria-expanded={opened}
                     aria-controls={bodyId}
-                    onClick={() => toggle(item.id)}
+                    onClick={(event) => {
+                      hold(event.currentTarget)
+                      toggle(item.id)
+                    }}
                   >
                     <Icon name="chevron" size={16} className="disclosure-mark" />
                     <span>{item.name}</span>

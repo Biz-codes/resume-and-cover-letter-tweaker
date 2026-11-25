@@ -8,11 +8,15 @@ import OwnTextFlags from './OwnTextFlags'
 
 const FLAG: WritingFlag = { kind: 'term', rule: 'leverage', quote: 'leveraged', why: 'Filler.' }
 
-function renderFlags(flags: WritingFlag[] | null, onCheck: () => Promise<WritingFlag[] | null>) {
+function renderFlags(
+  flags: WritingFlag[] | null,
+  onCheck: () => Promise<WritingFlag[] | null>,
+  onDismiss = vi.fn((_flag: WritingFlag, _dismissed: boolean) => Promise.resolve()),
+) {
   const host = { say: vi.fn() } as unknown as ItemHost
   render(
     <ItemHostContext.Provider value={host}>
-      <OwnTextFlags name='"Leveraged React."' flags={flags} onCheck={onCheck} />
+      <OwnTextFlags name='"Leveraged React."' flags={flags} onCheck={onCheck} onDismiss={onDismiss} />
     </ItemHostContext.Provider>,
   )
   return host
@@ -22,7 +26,7 @@ describe('OwnTextFlags', () => {
   it('shows nothing for text that breaks no rule', () => {
     const { container } = render(
       <ItemHostContext.Provider value={{ say: vi.fn() } as unknown as ItemHost}>
-        <OwnTextFlags name='"Shipped it"' flags={[]} onCheck={vi.fn()} />
+        <OwnTextFlags name='"Shipped it"' flags={[]} onCheck={vi.fn()} onDismiss={vi.fn()} />
       </ItemHostContext.Provider>,
     )
     expect(container).toBeEmptyDOMElement()
@@ -64,6 +68,22 @@ describe('OwnTextFlags', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("Claude isn't available.")
     expect(host.say).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Check writing rules for "Leveraged React."' })).toHaveAttribute('aria-disabled', 'false')
+    await expectNoA11yViolations()
+  })
+
+  it('dismisses a flag through the dialog, and drops "Flagged" once none is left', async () => {
+    const onDismiss = vi.fn((_flag: WritingFlag, _dismissed: boolean) => Promise.resolve())
+    const host = renderFlags([FLAG], vi.fn(), onDismiss)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss flag "leverage" on "Leveraged React."' }))
+    await vi.waitFor(() => expect(host.say).toHaveBeenCalledWith('Dismissed the flag "leverage" on "Leveraged React.".'))
+    expect(onDismiss).toHaveBeenCalledWith(FLAG, true)
+  })
+
+  it('keeps a dismissed flag to restore, without "Flagged"', async () => {
+    renderFlags([{ ...FLAG, dismissed: true }], vi.fn())
+    expect(screen.queryByText('Flagged')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Dismissed flags (1) on "Leveraged React."' }))
+    expect(screen.getByRole('button', { name: 'Restore flag "leverage" on "Leveraged React."' })).toBeInTheDocument()
     await expectNoA11yViolations()
   })
 })
